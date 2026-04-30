@@ -7,7 +7,6 @@ Analysis of [OpenClaw](https://github.com/openclaw/openclaw) for PyClaw reimplem
 - TypeScript monorepo, 17,200+ files, 133 extensions
 - Multi-channel AI assistant gateway (25+ messaging platforms)
 - Built on `@mariozechner/pi-coding-agent` (proprietary library)
-- local fork has Redis-native session storage
 - MIT license, 357K+ stars
 
 ## Core Architecture
