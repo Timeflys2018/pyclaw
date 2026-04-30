@@ -2,14 +2,9 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from pyclaw.storage.session.base import SessionStore
 
-@runtime_checkable
-class SessionStore(Protocol):
-    async def get(self, session_id: str) -> dict | None: ...
-    async def save(self, session_id: str, data: dict) -> None: ...
-    async def append_entry(self, session_id: str, entry: dict) -> None: ...
-    async def list_sessions(self, agent_id: str) -> list[str]: ...
-    async def delete(self, session_id: str) -> None: ...
+__all__ = ["ConfigStore", "LockManager", "MemoryStore", "SessionStore"]
 
 
 @runtime_checkable

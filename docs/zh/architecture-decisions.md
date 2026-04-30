@@ -90,3 +90,25 @@ JSON 作为主配置格式以兼容 OpenClaw。加载顺序：`pyclaw.json` → 
 ## D17: Session DAG 树（非扁平列表）
 
 Session 是 append-only DAG 树。每个 entry 有 id 和 parent_id。Leaf 指针跟踪当前对话头。Compaction 创建新分支携带摘要。`build_session_context()` 从 leaf 走到 root 生成 LLM 需要的扁平消息列表。
+
+## D18: 单一权威 `SessionStore` Protocol
+
+`SessionStore` Protocol 在整个仓库中仅有一处定义：`src/pyclaw/storage/session/base.py`。它基于类型化的 `SessionTree` 与 `SessionEntry` 操作（而非原始 dict）。
+
+**背景**：早期实现中存在两个冲突的 Protocol —— `storage/protocols.py` 中基于 dict 的变体与 `storage/session/base.py` 中的类型化变体。后端实现者必须二选一；Runner 始终使用类型化版本。dict 变体属于死代码，形成迁移风险。
+
+**整合成果**（harden-agent-core Group 2）：
+- `storage/protocols.py` 现在从 `session/base.py` re-export 类型化 `SessionStore`，不再并行定义。
+- `storage/__init__.py` 从同一路径导出 `SessionStore`。
+- 以下三种 import 路径均解析到同一个类：
+  - `from pyclaw.storage import SessionStore`
+  - `from pyclaw.storage.protocols import SessionStore`
+  - `from pyclaw.storage.session.base import SessionStore`
+
+**Protocol 接口**：
+```python
+class SessionStore(Protocol):
+    async def load(self, session_id: str) -> SessionTree | None: ...
+    async def save_header(self, tree: SessionTree) -> None: ...
+    async def append_entry(self, session_id: str, entry: SessionEntry, leaf_id: str) -> None: ...
+```

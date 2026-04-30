@@ -90,3 +90,25 @@ One explicit loop: `assemble_prompt → call_llm → process_response → (tool_
 ## D17: Session DAG tree (not flat list)
 
 Sessions are append-only DAG trees. Each entry has id + parent_id. Leaf pointer tracks current head. Compaction creates new branch with summary. `build_session_context()` walks leaf→root to produce flat message list for LLM.
+
+## D18: Single canonical `SessionStore` Protocol
+
+The `SessionStore` Protocol has exactly one definition at `src/pyclaw/storage/session/base.py`. It operates on typed `SessionTree` and `SessionEntry` objects (not raw dicts).
+
+**Why**: An early iteration exposed two conflicting Protocols — a dict-based variant in `storage/protocols.py` and the typed variant in `storage/session/base.py`. Backend implementers had to choose; the runner always used the typed one. The dict variant was dead code that created migration risk.
+
+**Consolidation** (harden-agent-core Group 2):
+- `storage/protocols.py` now re-exports the typed `SessionStore` from `session/base.py` — no parallel definition.
+- `storage/__init__.py` exports `SessionStore` from the same path.
+- All three import paths resolve to the same class:
+  - `from pyclaw.storage import SessionStore`
+  - `from pyclaw.storage.protocols import SessionStore`
+  - `from pyclaw.storage.session.base import SessionStore`
+
+**Protocol surface**:
+```python
+class SessionStore(Protocol):
+    async def load(self, session_id: str) -> SessionTree | None: ...
+    async def save_header(self, tree: SessionTree) -> None: ...
+    async def append_entry(self, session_id: str, entry: SessionEntry, leaf_id: str) -> None: ...
+```
