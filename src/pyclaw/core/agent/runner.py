@@ -15,6 +15,10 @@ from pyclaw.core.agent.llm import (
     finalize_tool_calls,
     merge_tool_call_deltas,
 )
+from pyclaw.core.agent.tool_result_truncation import (
+    resolve_max_output_chars,
+    truncate_tool_result,
+)
 from pyclaw.core.agent.runtime_util import (
     AgentAbortedError,
     AgentTimeoutError,
@@ -432,6 +436,18 @@ async def run_agent_stream(
             tool_ctx,
             default_tool_timeout_s=deps.config.timeouts.tool_seconds,
         )
+
+        truncated_results: list[ToolResult] = []
+        for call, result in zip(response.tool_calls, results, strict=False):
+            tool_name = ((call or {}).get("function") or {}).get("name") or ""
+            tool_obj = deps.tools.get(tool_name) if tool_name else None
+            cap = (
+                resolve_max_output_chars(tool_obj, deps.config.tools.max_output_chars)
+                if tool_obj is not None
+                else deps.config.tools.max_output_chars
+            )
+            truncated_results.append(truncate_tool_result(result, cap))
+        results = truncated_results
 
         for call, result in zip(response.tool_calls, results, strict=False):
             tool_entry = MessageEntry(
