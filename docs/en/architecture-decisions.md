@@ -10,7 +10,9 @@ Python 3.12+ with FastAPI (ASGI) + uvicorn as the runtime stack.
 
 Redis (Hash + List + Sorted Set) for sessions in production; file backend for development.
 
-**Key schema** (compatible with OpenClaw's local fork):
+> **Note on provenance**: Upstream `openclaw/openclaw` uses **filesystem-based** session storage (JSONL files + fs.FileHandle locks). The Redis-based distributed session layer is a PyClaw-specific design, conceptually inspired by internal forks that adopted Redis but with our own key schema and write-through protocol. Moving sessions to Redis is required for PyClaw's compute-storage separation goal.
+
+**PyClaw Redis key schema** (our own design):
 ```
 session:{id}:header   → String (JSON)
 session:{id}:entries  → Hash<entryId, JSON>

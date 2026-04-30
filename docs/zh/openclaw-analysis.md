@@ -2,29 +2,33 @@
 
 针对 [OpenClaw](https://github.com/openclaw/openclaw) 的分析，作为 PyClaw 重写的参考。
 
+> **来源**：本文描述**上游 `openclaw/openclaw`**（HEAD: `388019f5b6`）。
+> 明确标注「**本地 fork 观察**」的小节指代内部 fork `git.n.local.com:mit/ai_center/openclaw`（它额外添加了 Redis 原生 session 存储），不代表上游行为。
+
 ## 项目概况
 
 - TypeScript monorepo，17,200+ 文件，133 个 extension
 - 多 channel AI 助手网关（25+ 消息平台）
-- 基于 `@mariozechner/pi-coding-agent`（专有库）构建
+- 基于 `@mariozechner/pi-coding-agent` + `@mariozechner/pi-agent-core`（专有库）
 - MIT 许可，357K+ stars
 
-## 核心架构
+## 核心架构（上游）
 
 ```
 Gateway (HTTP/WS, 端口 18789)
 ├── Channels（25+ 消息平台，通过 plugin registry）
-├── Agent Runtime (pi-embedded-runner)
-│   ├── 外层循环: 重试、failover、压缩协调
-│   └── 内层循环: session.prompt() → LLM → tools → 循环
-├── Session 存储 (Redis 原生，DAG 树模型)
+├── Agent Runtime (pi-embedded-runner + run/)
+│   ├── 外层循环 (run.ts): 重试、failover、压缩协调
+│   └── 内层循环 (run/attempt.ts): session.prompt() → LLM → tools → 循环
+├── Session 存储（**文件系统** — JSONL 文件 + fs.FileHandle 文件锁）
+├── Context Engine (src/context-engine/ — 可插拔的 assemble/ingest/compact/maintain)
 ├── Memory 系统 (SQLite + embeddings，作为 extension/plugin)
 ├── Dreaming (3 阶段记忆整理: light/deep/REM)
 ├── Skills (ClawHub 生态，SKILL.md 格式)
 └── 配置 (~/.openclaw/openclaw.json)
 ```
 
-## Session 管理
+## Session 管理（上游）
 
 ### 数据模型（DAG 树）
 - SessionHeader: version=3, id (UUID), cwd (文件系统路径), timestamp
@@ -33,7 +37,22 @@ Gateway (HTTP/WS, 端口 18789)
 - Leaf 指针跟踪当前对话头
 - Entry 永不修改或删除 — 树只增长
 
-### Redis Key Schema
+### 存储（上游 = 文件系统）
+- Session 以 **JSONL 文件**形式存在磁盘
+- 路径由 `cwd` + agent workspace 约定推导
+- 写锁：`src/agents/session-write-lock.ts` 使用 **fs.FileHandle** + **`/proc/pid/stat` 的 PID 检测**来识别 stale lock — 纯本地
+
+### cwd 耦合（PyClaw 必须重新设计）
+- SessionHeader 里的 `cwd` = agent 工作空间目录（不是 process.cwd）
+- pi-coding-agent 的 SessionManager 与文件系统 JSONL 路径紧耦合
+- PyClaw 替换为 `workspace_id`（逻辑标识符） + 自有的内存 DAG + 可插拔存储后端
+
+---
+
+### 本地 fork 观察：Redis 原生 session 存储
+
+本地内部 fork (`git.n.local.com:mit/ai_center/openclaw`) 添加了一套**上游不存在**的 Redis 持久化层：
+
 ```
 session:{id}:header   → String (JSON)
 session:{id}:entries  → Hash<entryId, JSON>
@@ -42,16 +61,15 @@ session:{id}:leaf     → String (leaf entryId)
 session-lock:{id}     → String (分布式锁)
 ```
 
-### 写锁
-- Redis SET NX PX（30 分钟 TTL）
-- Lua CAS 释放脚本
-- TTL/3（10 分钟）续期
-- 通过 instance_id 前缀检测重入
+关键文件（本地 fork 独有，上游没有）：
+- `redis-session-adapter.ts` — 将 pi-coding-agent 的 SessionManager 包装成 Redis 读写
+- `redis-session-keys.ts` — key schema 辅助
+- `open-redis-session.ts` — session 打开入口
+- `session-write-lock-redis.ts` — Redis `SET NX PX` + Lua CAS 释放、TTL/3 续期、通过 instance_id 前缀检测重入
 
-### cwd 耦合（PyClaw 必须重新设计）
-- SessionHeader 里的 `cwd` = agent 工作空间目录（不是 process.cwd）
-- RedisSessionAdapter 仍然为 pi-coding-agent 水合创建临时文件
-- PyClaw 替换为 `workspace_id`（逻辑标识符）
+该 adapter 仍然需要创建 tmpfile 来喂给 pi-coding-agent 的文件系统 SessionManager。
+
+**对 PyClaw 的意义**：PyClaw 借鉴"Redis 后端 session 实现存算分离"的*思路*，但自己设计 key schema、避开 tmpfile hack、拥有完整技术栈（不依赖 pi-coding-agent）。
 
 ## Agent Loop (pi-embedded-runner)
 

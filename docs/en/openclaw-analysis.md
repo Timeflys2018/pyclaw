@@ -2,29 +2,33 @@
 
 Analysis of [OpenClaw](https://github.com/openclaw/openclaw) for PyClaw reimplementation reference.
 
+> **Source of truth**: This document describes **upstream `openclaw/openclaw`** (HEAD: `388019f5b6`).
+> Sections explicitly marked *"local-fork observation"* refer to the internal fork at `git.n.local.com:mit/ai_center/openclaw` which adds Redis-native session storage; these are *not* upstream behavior.
+
 ## Project Overview
 
 - TypeScript monorepo, 17,200+ files, 133 extensions
 - Multi-channel AI assistant gateway (25+ messaging platforms)
-- Built on `@mariozechner/pi-coding-agent` (proprietary library)
+- Built on `@mariozechner/pi-coding-agent` + `@mariozechner/pi-agent-core` (proprietary libraries)
 - MIT license, 357K+ stars
 
-## Core Architecture
+## Core Architecture (upstream)
 
 ```
 Gateway (HTTP/WS, port 18789)
 ├── Channels (25+ messaging platforms via plugin registry)
-├── Agent Runtime (pi-embedded-runner)
-│   ├── Outer loop: retry, failover, compaction orchestration
-│   └── Inner loop: session.prompt() → LLM → tools → loop
-├── Session Storage (Redis-native with DAG tree model)
+├── Agent Runtime (pi-embedded-runner + run/)
+│   ├── Outer loop (run.ts): retry, failover, compaction orchestration
+│   └── Inner loop (run/attempt.ts): session.prompt() → LLM → tools → loop
+├── Session Storage (FILE-SYSTEM — JSONL files + fs.FileHandle locks)
+├── Context Engine (src/context-engine/ — pluggable assemble/ingest/compact/maintain)
 ├── Memory System (SQLite + embeddings, as extension/plugin)
 ├── Dreaming (3-phase memory consolidation: light/deep/REM)
 ├── Skills (ClawHub ecosystem, SKILL.md format)
 └── Config (~/.openclaw/openclaw.json)
 ```
 
-## Session Management
+## Session Management (upstream)
 
 ### Data Model (DAG Tree)
 - SessionHeader: version=3, id (UUID), cwd (filesystem path), timestamp
@@ -33,7 +37,22 @@ Gateway (HTTP/WS, port 18789)
 - Leaf pointer tracks current conversation head
 - Entries are NEVER modified or deleted — tree only grows
 
-### Redis Key Schema
+### Storage (upstream = filesystem)
+- Sessions stored as **JSONL files** on disk
+- Session path derived from `cwd` + agent workspace convention
+- Write lock: `src/agents/session-write-lock.ts` uses **fs.FileHandle** + **PID detection via `/proc/pid/stat`** for stale locks — purely local
+
+### cwd Coupling (must redesign for PyClaw)
+- `cwd` in SessionHeader = agent workspace directory (NOT process.cwd)
+- pi-coding-agent's SessionManager is tightly coupled to a filesystem JSONL path
+- PyClaw replaces with `workspace_id` (logical identifier) + its own in-memory DAG + pluggable storage backend
+
+---
+
+### local-fork observation: Redis-native session storage
+
+The local internal fork (`git.n.local.com:mit/ai_center/openclaw`) adds a parallel Redis-backed session layer **not present upstream**:
+
 ```
 session:{id}:header   → String (JSON)
 session:{id}:entries  → Hash<entryId, JSON>
@@ -42,16 +61,15 @@ session:{id}:leaf     → String (leaf entryId)
 session-lock:{id}     → String (distributed lock)
 ```
 
-### Write Lock
-- Redis SET NX PX (30 min TTL)
-- Lua CAS release script
-- Renewal at TTL/3 (10 min)
-- Reentrant detection by instance_id prefix
+Key files (local-fork only, not upstream):
+- `redis-session-adapter.ts` — adapter wrapping pi-coding-agent with Redis reads/writes
+- `redis-session-keys.ts` — key schema helpers
+- `open-redis-session.ts` — session open entry point
+- `session-write-lock-redis.ts` — Redis `SET NX PX` + Lua CAS release, TTL/3 renewal, reentrant detection by instance_id prefix
 
-### cwd Coupling (must redesign for PyClaw)
-- `cwd` in SessionHeader = agent workspace directory (NOT process.cwd)
-- RedisSessionAdapter still creates tmpfile for pi-coding-agent hydration
-- PyClaw replaces with `workspace_id` (logical identifier)
+The adapter still creates a tmpfile to feed pi-coding-agent's filesystem-bound SessionManager.
+
+**Relevance to PyClaw**: PyClaw takes the *idea* (Redis-backed sessions for compute-storage separation) but designs its own key schema, avoids the tmpfile hack, and owns the full stack (no pi-coding-agent dependency).
 
 ## Agent Loop (pi-embedded-runner)
 

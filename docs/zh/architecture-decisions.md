@@ -10,7 +10,9 @@ Python 3.12+ 配合 FastAPI (ASGI) + uvicorn 作为运行时栈。
 
 生产环境用 Redis（Hash + List + Sorted Set），开发环境用文件后端。
 
-**Key schema**（与 OpenClaw 本地分支兼容）：
+> **来源说明**：上游 `openclaw/openclaw` 使用**基于文件系统**的 session 存储（JSONL 文件 + fs.FileHandle 文件锁）。Redis 分布式 session 层是 **PyClaw 自主设计**，借鉴了内部 fork 采用 Redis 的思路，但 key schema 与写入协议由 PyClaw 自行决定。存算分离的目标要求 session 移出文件系统。
+
+**PyClaw Redis key schema**（PyClaw 自己的设计）：
 ```
 session:{id}:header   → String (JSON)
 session:{id}:entries  → Hash<entryId, JSON>
