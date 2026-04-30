@@ -4,8 +4,8 @@ import asyncio
 
 import pytest
 
-from pyclaw.core.agent.compaction_checkpoint import take_checkpoint
-from pyclaw.core.agent.compaction_hardening import (
+from pyclaw.core.agent.compaction.checkpoint import take_checkpoint
+from pyclaw.core.agent.compaction.hardening import (
     HARDENED_SUMMARIZER_SYSTEM_PROMPT,
     IDENTIFIER_PRESERVATION_INSTRUCTIONS,
     filter_oversized_messages,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pyclaw.core.agent.compaction_reasons import (
+from pyclaw.core.agent.compaction.reasons import (
     ALL_REASON_CODES,
     classify_compaction_reason,
 )

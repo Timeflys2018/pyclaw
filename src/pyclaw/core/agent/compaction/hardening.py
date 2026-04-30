@@ -104,7 +104,7 @@ def filter_oversized_messages(
 
 
 def _estimate_tokens(msg: dict[str, Any]) -> int:
-    from pyclaw.core.agent.compaction import estimate_message_tokens
+    from pyclaw.core.agent.compaction.planning import estimate_message_tokens
 
     return estimate_message_tokens(msg)
 

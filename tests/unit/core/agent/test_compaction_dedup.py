@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pyclaw.core.agent.compaction_dedup import (
+from pyclaw.core.agent.compaction.dedup import (
     dedupe_duplicate_user_messages,
     normalize_for_dedup,
 )

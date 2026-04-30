@@ -7,15 +7,13 @@ from pyclaw.core.agent.compaction import (
     DEFAULT_COMPACTION_SAFETY_TIMEOUT_S,
     DEFAULT_KEEP_RECENT_TOKENS,
     DEFAULT_THRESHOLD,
-    build_summarizer_payload,
-    estimate_messages_tokens,
-    plan_compaction,
-)
-from pyclaw.core.agent.compaction_dedup import dedupe_duplicate_user_messages
-from pyclaw.core.agent.compaction_hardening import (
     HARDENED_SUMMARIZER_SYSTEM_PROMPT,
+    build_summarizer_payload,
+    dedupe_duplicate_user_messages,
+    estimate_messages_tokens,
     filter_oversized_messages,
     has_real_conversation,
+    plan_compaction,
     sanity_check_token_estimate,
     split_into_chunks,
     strip_tool_result_details,

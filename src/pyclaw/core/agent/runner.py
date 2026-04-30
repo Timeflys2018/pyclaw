@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from pyclaw.core.agent.compaction_checkpoint import take_checkpoint
+from pyclaw.core.agent.compaction import take_checkpoint
 from pyclaw.core.agent.incomplete_turn import classify_turn, retry_message_for
 from pyclaw.core.agent.llm import (
     LLMClient,
