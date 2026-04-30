@@ -308,3 +308,78 @@ async def test_retry_counts_independent_per_category(tmp_path: Path) -> None:
     assert llm.call_count == 5
     done = next(e for e in events if isinstance(e, Done))
     assert done.final_message == "Final answer."
+
+
+@pytest.mark.asyncio
+async def test_done_final_message_excludes_planning_text(tmp_path: Path) -> None:
+    planning_text = "I'll read the config and update it."
+    final_answer = "Result: 42"
+
+    registry = ToolRegistry()
+    registry.register(_EchoTool())
+    llm = _ScriptedLLM(
+        [
+            _text_turn(planning_text),
+            _tool_call_turn("c3"),
+            _text_turn(final_answer),
+        ]
+    )
+    deps = AgentRunnerDeps(
+        llm=llm,
+        tools=registry,
+        config=AgentRunConfig(
+            retry=RetryConfig(
+                planning_only_limit=1,
+                reasoning_only_limit=0,
+                empty_response_limit=0,
+                unknown_tool_threshold=0,
+            ),
+            max_iterations=10,
+        ),
+    )
+
+    events: list[Any] = []
+    async for event in run_agent_stream(
+        RunRequest(session_id="fm1", workspace_id="default", agent_id="main", user_message="hi"),
+        deps,
+        tool_workspace_path=tmp_path,
+    ):
+        events.append(event)
+
+    done = next(e for e in events if isinstance(e, Done))
+    assert done.final_message == final_answer, (
+        f"expected {final_answer!r}, got {done.final_message!r}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_done_final_message_after_reasoning_retry(tmp_path: Path) -> None:
+    llm = _ScriptedLLM(
+        [
+            _text_turn("<thinking>computing...</thinking>"),
+            _text_turn("The answer is foo."),
+        ]
+    )
+    deps = AgentRunnerDeps(
+        llm=llm,
+        tools=ToolRegistry(),
+        config=AgentRunConfig(
+            retry=RetryConfig(
+                planning_only_limit=0,
+                reasoning_only_limit=2,
+                empty_response_limit=0,
+                unknown_tool_threshold=0,
+            ),
+        ),
+    )
+
+    events: list[Any] = []
+    async for event in run_agent_stream(
+        RunRequest(session_id="fm2", workspace_id="default", agent_id="main", user_message="hi"),
+        deps,
+        tool_workspace_path=tmp_path,
+    ):
+        events.append(event)
+
+    done = next(e for e in events if isinstance(e, Done))
+    assert done.final_message == "The answer is foo."

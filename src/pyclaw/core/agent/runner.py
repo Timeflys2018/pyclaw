@@ -343,9 +343,6 @@ async def run_agent_stream(
         total_input_tokens += response.usage.input_tokens
         total_output_tokens += response.usage.output_tokens
 
-        if response.text:
-            final_text = response.text
-
         if not response.tool_calls:
             classification = classify_turn(
                 text=response.text,
@@ -397,6 +394,7 @@ async def run_agent_stream(
             await deps.context_engine.after_turn(
                 request.session_id, tree.build_session_context()
             )
+            final_text = response.text
             yield Done(
                 final_message=final_text,
                 usage={"input": total_input_tokens, "output": total_output_tokens},
