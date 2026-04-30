@@ -143,13 +143,13 @@ class LLMClient:
             if chunk.text_delta:
                 text_parts.append(chunk.text_delta)
             if chunk.tool_call_deltas:
-                _merge_tool_call_deltas(tool_calls_buffer, chunk.tool_call_deltas)
+                merge_tool_call_deltas(tool_calls_buffer, chunk.tool_call_deltas)
             if chunk.finish_reason:
                 finish_reason = chunk.finish_reason
             if chunk.usage:
                 usage = chunk.usage
 
-        tool_calls = _finalize_tool_calls(tool_calls_buffer)
+        tool_calls = finalize_tool_calls(tool_calls_buffer)
         return LLMResponse(
             text="".join(text_parts),
             tool_calls=tool_calls,
@@ -220,7 +220,7 @@ def _normalize_tool_call_delta(delta: Any) -> dict[str, Any]:
     }
 
 
-def _merge_tool_call_deltas(
+def merge_tool_call_deltas(
     buffer: dict[int, dict[str, Any]],
     deltas: list[dict[str, Any]],
 ) -> None:
@@ -241,7 +241,7 @@ def _merge_tool_call_deltas(
             slot["function"]["arguments"] += fn["arguments"]
 
 
-def _finalize_tool_calls(buffer: dict[int, dict[str, Any]]) -> list[dict[str, Any]]:
+def finalize_tool_calls(buffer: dict[int, dict[str, Any]]) -> list[dict[str, Any]]:
     import json
 
     result = []

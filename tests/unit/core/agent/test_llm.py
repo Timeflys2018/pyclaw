@@ -4,8 +4,8 @@ from pyclaw.core.agent.llm import (
     LLMErrorCode,
     classify_error,
     session_entries_to_llm_messages,
-    _finalize_tool_calls,
-    _merge_tool_call_deltas,
+    finalize_tool_calls,
+    merge_tool_call_deltas,
 )
 
 
@@ -51,25 +51,25 @@ class TestMessageConversion:
 class TestToolCallStreamMerging:
     def test_merge_chunked_arguments(self) -> None:
         buffer: dict[int, dict] = {}
-        _merge_tool_call_deltas(
+        merge_tool_call_deltas(
             buffer,
             [{"index": 0, "id": "call_abc", "type": "function",
               "function": {"name": "read", "arguments": '{"pa'}}],
         )
-        _merge_tool_call_deltas(
+        merge_tool_call_deltas(
             buffer,
             [{"index": 0, "id": None, "type": None,
               "function": {"name": None, "arguments": 'th": "x"}'}}],
         )
 
-        finalized = _finalize_tool_calls(buffer)
+        finalized = finalize_tool_calls(buffer)
         assert finalized[0]["id"] == "call_abc"
         assert finalized[0]["function"]["name"] == "read"
         assert finalized[0]["function"]["arguments"] == {"path": "x"}
 
     def test_multiple_parallel_tool_calls(self) -> None:
         buffer: dict[int, dict] = {}
-        _merge_tool_call_deltas(
+        merge_tool_call_deltas(
             buffer,
             [
                 {"index": 0, "id": "c1", "type": "function",
@@ -78,7 +78,7 @@ class TestToolCallStreamMerging:
                  "function": {"name": "write", "arguments": "{}"}},
             ],
         )
-        finalized = _finalize_tool_calls(buffer)
+        finalized = finalize_tool_calls(buffer)
         assert len(finalized) == 2
         assert finalized[0]["id"] == "c1"
         assert finalized[1]["id"] == "c2"

@@ -32,6 +32,55 @@ class _FakeLLM(LLMClient):
             raise AssertionError("FakeLLM exhausted")
         return self._responses.pop(0)
 
+    async def stream(  # type: ignore[override]
+        self,
+        *,
+        messages,
+        model=None,
+        tools=None,
+        system=None,
+        idle_seconds: float = 0.0,
+        abort_event=None,
+    ):
+        from pyclaw.core.agent.llm import LLMStreamChunk
+
+        response = await self.complete(
+            messages=messages,
+            model=model,
+            tools=tools,
+            system=system,
+            idle_seconds=idle_seconds,
+            abort_event=abort_event,
+        )
+        if response.text:
+            yield LLMStreamChunk(text_delta=response.text)
+        for i, call in enumerate(response.tool_calls):
+            fn = call.get("function") or {}
+            args = fn.get("arguments")
+            if isinstance(args, dict):
+                import json
+
+                args_str = json.dumps(args)
+            else:
+                args_str = args or ""
+            yield LLMStreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": i,
+                        "id": call.get("id"),
+                        "type": call.get("type", "function"),
+                        "function": {
+                            "name": fn.get("name", ""),
+                            "arguments": args_str,
+                        },
+                    }
+                ]
+            )
+        yield LLMStreamChunk(
+            finish_reason=response.finish_reason,
+            usage=response.usage,
+        )
+
 
 class _EchoTool:
     name = "echo"

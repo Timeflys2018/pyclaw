@@ -13,6 +13,20 @@ from pyclaw.models import AgentRunConfig, ErrorEvent, TimeoutConfig
 
 
 class _SlowLLM(LLMClient):
+    async def stream(  # type: ignore[override]
+        self,
+        *,
+        messages,
+        model=None,
+        tools=None,
+        system=None,
+        idle_seconds: float = 0.0,
+        abort_event=None,
+    ):
+        await asyncio.sleep(5)
+        for chunk in ():
+            yield chunk
+
     async def complete(  # type: ignore[override]
         self,
         *,
