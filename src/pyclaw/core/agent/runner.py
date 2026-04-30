@@ -25,7 +25,7 @@ from pyclaw.core.agent.runtime_util import (
     AgentAbortedError,
     AgentTimeoutError,
     is_abort_set,
-    iterate_with_idle_timeout,
+    iterate_with_deadline,
 )
 from pyclaw.core.agent.system_prompt import PromptInputs, build_system_prompt
 from pyclaw.core.agent.tools.registry import (
@@ -240,10 +240,9 @@ async def run_agent_stream(
                 idle_seconds=deps.config.timeouts.idle_seconds,
                 abort_event=abort_event,
             )
-            stream_deadline = remaining_run if remaining_run is not None and remaining_run > 0 else 0.0
-            guarded_iter = iterate_with_idle_timeout(
+            guarded_iter = iterate_with_deadline(
                 stream_iter,
-                idle_seconds=stream_deadline,
+                deadline_s=remaining_run if remaining_run is not None and remaining_run > 0 else 0.0,
                 abort_event=abort_event,
                 kind="run",
             )
