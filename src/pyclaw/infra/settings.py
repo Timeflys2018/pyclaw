@@ -1,7 +1,16 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+CONFIG_SEARCH_PATHS = [
+    "pyclaw.json",
+    "configs/pyclaw.json",
+    "~/.openclaw/pyclaw.json",
+]
 
 
 class RedisSettings(BaseSettings):
@@ -48,3 +57,19 @@ class Settings(BaseSettings):
     agent: AgentSettings = Field(default_factory=AgentSettings)
 
     model_config = SettingsConfigDict(env_prefix="PYCLAW_")
+
+
+def find_config_file() -> Path | None:
+    for candidate in CONFIG_SEARCH_PATHS:
+        path = Path(candidate).expanduser()
+        if path.is_file():
+            return path
+    return None
+
+
+def load_settings() -> Settings:
+    config_file = find_config_file()
+    if config_file is None:
+        return Settings()
+    data = json.loads(config_file.read_text(encoding="utf-8"))
+    return Settings.model_validate(data)

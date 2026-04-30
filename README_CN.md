@@ -91,20 +91,26 @@ pyclaw
 ## 部署模式
 
 ### 个人使用（单机）
-```yaml
-storage:
-  session_backend: file
-  memory_backend: sqlite
-  lock_backend: file
+```json
+{
+  "storage": {
+    "session_backend": "file",
+    "memory_backend": "sqlite",
+    "lock_backend": "file"
+  }
+}
 ```
 零外部依赖。只要有 Python 就能跑。
 
 ### 企业部署（多实例）
-```yaml
-storage:
-  session_backend: redis
-  memory_backend: postgres
-  lock_backend: redis
+```json
+{
+  "storage": {
+    "session_backend": "redis",
+    "memory_backend": "postgres",
+    "lock_backend": "redis"
+  }
+}
 ```
 N 个 Worker 放在负载均衡后面。Redis 处理热数据。PostgreSQL 持久化记忆。
 

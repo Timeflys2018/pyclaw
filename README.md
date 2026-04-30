@@ -93,20 +93,26 @@ pyclaw
 ## Deployment Modes
 
 ### Personal (Single Machine)
-```yaml
-storage:
-  session_backend: file
-  memory_backend: sqlite
-  lock_backend: file
+```json
+{
+  "storage": {
+    "session_backend": "file",
+    "memory_backend": "sqlite",
+    "lock_backend": "file"
+  }
+}
 ```
 Zero external dependencies. Just Python.
 
 ### Enterprise (Multi-Instance)
-```yaml
-storage:
-  session_backend: redis
-  memory_backend: postgres
-  lock_backend: redis
+```json
+{
+  "storage": {
+    "session_backend": "redis",
+    "memory_backend": "postgres",
+    "lock_backend": "redis"
+  }
+}
 ```
 N workers behind a load balancer. Redis for hot state. PostgreSQL for durable memory.
 
