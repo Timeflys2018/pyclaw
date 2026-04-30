@@ -17,7 +17,16 @@ class _FakeLLM(LLMClient):
         self._responses = list(responses)
         self.calls: list[dict[str, Any]] = []
 
-    async def complete(self, *, messages, model=None, tools=None, system=None) -> LLMResponse:
+    async def complete(  # type: ignore[override]
+        self,
+        *,
+        messages,
+        model=None,
+        tools=None,
+        system=None,
+        idle_seconds: float = 0.0,
+        abort_event=None,
+    ) -> LLMResponse:
         self.calls.append({"messages": messages, "tools": tools, "system": system})
         if not self._responses:
             raise AssertionError("FakeLLM exhausted")

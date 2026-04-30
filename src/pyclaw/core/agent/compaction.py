@@ -1,10 +1,33 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 
 DEFAULT_KEEP_RECENT_TOKENS = 20_000
 DEFAULT_THRESHOLD = 0.8
+DEFAULT_COMPACTION_SAFETY_TIMEOUT_S = 900.0
+
+_T = TypeVar("_T")
+
+
+async def compact_with_safety_timeout(
+    fn: Callable[[], Awaitable[_T]],
+    *,
+    timeout_s: float = DEFAULT_COMPACTION_SAFETY_TIMEOUT_S,
+    abort_event: asyncio.Event | None = None,
+    on_cancel: Callable[[], None] | None = None,
+) -> _T:
+    from pyclaw.core.agent.runtime_util import with_safety_timeout
+
+    return await with_safety_timeout(
+        fn,
+        timeout_s=timeout_s,
+        abort_event=abort_event,
+        on_cancel=on_cancel,
+        kind="compaction",
+    )
 
 
 def estimate_tokens(text: str) -> int:

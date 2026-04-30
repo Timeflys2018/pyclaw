@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
 from pyclaw.core.agent.llm import LLMClient, LLMError, LLMResponse
+from pyclaw.core.agent.runtime_util import (
+    AgentAbortedError,
+    AgentTimeoutError,
+    is_abort_set,
+)
 from pyclaw.core.agent.system_prompt import PromptInputs, build_system_prompt
 from pyclaw.core.agent.tools.registry import (
     ToolContext,
@@ -121,8 +127,15 @@ async def run_agent_stream(
     deps: AgentRunnerDeps,
     *,
     tool_workspace_path,
+    abort: asyncio.Event | None = None,
 ) -> AsyncIterator[Any]:
-    abort = asyncio.Event()
+    abort_event = abort if abort is not None else asyncio.Event()
+    run_deadline_s = deps.config.timeouts.run_seconds
+    run_started = time.monotonic()
+
+    def _run_timed_out() -> bool:
+        return run_deadline_s > 0 and (time.monotonic() - run_started) > run_deadline_s
+
     tree = await ensure_session(
         deps,
         session_id=request.session_id,
@@ -143,7 +156,7 @@ async def run_agent_stream(
         workspace_id=request.workspace_id,
         workspace_path=tool_workspace_path,
         session_id=request.session_id,
-        abort=abort,
+        abort=abort_event,
         extras=request.tool_context_extras,
     )
 
@@ -167,6 +180,15 @@ async def run_agent_stream(
     final_text = ""
 
     while iteration < deps.config.max_iterations:
+        if _run_timed_out():
+            yield ErrorEvent(
+                error_code="timeout",
+                message=f"run exceeded {run_deadline_s}s run_seconds",
+            )
+            return
+        if is_abort_set(abort_event):
+            yield ErrorEvent(error_code="aborted", message="run aborted")
+            return
         iteration += 1
 
         base_messages = tree.build_session_context()
@@ -180,13 +202,27 @@ async def run_agent_stream(
         if assembled.system_prompt_addition:
             effective_system = f"{system_prompt}\n\n{assembled.system_prompt_addition}"
 
+        remaining_run = _remaining_run_seconds(run_deadline_s, run_started)
+        if remaining_run is not None and remaining_run <= 0:
+            yield ErrorEvent(error_code="timeout", message="run exceeded run_seconds")
+            return
+
         try:
-            response: LLMResponse = await deps.llm.complete(
+            response: LLMResponse = await _call_llm_with_limits(
+                deps,
                 messages=assembled.messages,
                 model=request.model,
                 tools=deps.tools.list_for_llm() or None,
                 system=effective_system,
+                abort_event=abort_event,
+                remaining_run_s=remaining_run,
             )
+        except AgentTimeoutError as te:
+            yield ErrorEvent(error_code="timeout", message=str(te))
+            return
+        except AgentAbortedError:
+            yield ErrorEvent(error_code="aborted", message="run aborted during llm call")
+            return
         except LLMError as exc:
             if exc.code == "context_overflow":
                 compact_result = await deps.context_engine.compact(
@@ -272,7 +308,12 @@ async def run_agent_stream(
                 arguments=fn.get("arguments") or {},
             )
 
-        results: list[ToolResult] = await execute_tool_calls(deps.tools, response.tool_calls, tool_ctx)
+        results: list[ToolResult] = await execute_tool_calls(
+            deps.tools,
+            response.tool_calls,
+            tool_ctx,
+            default_tool_timeout_s=deps.config.timeouts.tool_seconds,
+        )
 
         for call, result in zip(response.tool_calls, results, strict=False):
             tool_entry = MessageEntry(
@@ -289,4 +330,46 @@ async def run_agent_stream(
     yield ErrorEvent(
         error_code="max_iterations",
         message=f"reached max_iterations={deps.config.max_iterations}",
+    )
+
+
+def _remaining_run_seconds(run_deadline_s: float, run_started: float) -> float | None:
+    if run_deadline_s <= 0:
+        return None
+    remaining = run_deadline_s - (time.monotonic() - run_started)
+    return remaining
+
+
+async def _call_llm_with_limits(
+    deps: AgentRunnerDeps,
+    *,
+    messages: list[dict[str, Any]],
+    model: str | None,
+    tools: list[dict[str, Any]] | None,
+    system: str | None,
+    abort_event: asyncio.Event,
+    remaining_run_s: float | None,
+) -> LLMResponse:
+    from pyclaw.core.agent.runtime_util import run_with_timeout
+
+    idle_s = deps.config.timeouts.idle_seconds
+
+    async def _call() -> LLMResponse:
+        return await deps.llm.complete(
+            messages=messages,
+            model=model,
+            tools=tools,
+            system=system,
+            idle_seconds=idle_s,
+            abort_event=abort_event,
+        )
+
+    timeout_for_wait = remaining_run_s if remaining_run_s is not None else 0.0
+    if timeout_for_wait < 0:
+        timeout_for_wait = 0.0
+    return await run_with_timeout(
+        _call(),
+        timeout_s=timeout_for_wait,
+        abort_event=abort_event,
+        kind="run",
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -67,8 +68,16 @@ class LLMClient:
         model: str | None = None,
         tools: list[dict[str, Any]] | None = None,
         system: str | None = None,
+        idle_seconds: float = 0.0,
+        abort_event: asyncio.Event | None = None,
     ) -> AsyncIterator[LLMStreamChunk]:
         from litellm import acompletion
+
+        from pyclaw.core.agent.runtime_util import (
+            AgentAbortedError,
+            AgentTimeoutError,
+            iterate_with_idle_timeout,
+        )
 
         effective_model = model or self.default_model
         payload_messages = _prepend_system(messages, system)
@@ -84,10 +93,29 @@ class LLMClient:
         except Exception as exc:
             raise LLMError(classify_error(exc), str(exc), original=exc) from exc
 
-        async for raw_chunk in stream:
-            chunk = _convert_chunk(raw_chunk)
-            if chunk is not None:
+        async def _raw_iter() -> AsyncIterator[LLMStreamChunk]:
+            async for raw_chunk in stream:
+                chunk = _convert_chunk(raw_chunk)
+                if chunk is not None:
+                    yield chunk
+
+        if idle_seconds <= 0 and abort_event is None:
+            async for chunk in _raw_iter():
                 yield chunk
+            return
+
+        try:
+            async for chunk in iterate_with_idle_timeout(
+                _raw_iter(),
+                idle_seconds=idle_seconds,
+                abort_event=abort_event,
+                kind="idle",
+            ):
+                yield chunk
+        except AgentTimeoutError as te:
+            raise LLMError(LLMErrorCode.TIMEOUT, f"idle timeout after {te.limit_seconds}s") from te
+        except AgentAbortedError as ae:
+            raise LLMError("aborted", "llm stream aborted") from ae
 
     async def complete(
         self,
@@ -96,13 +124,22 @@ class LLMClient:
         model: str | None = None,
         tools: list[dict[str, Any]] | None = None,
         system: str | None = None,
+        idle_seconds: float = 0.0,
+        abort_event: asyncio.Event | None = None,
     ) -> LLMResponse:
         text_parts: list[str] = []
         tool_calls_buffer: dict[int, dict[str, Any]] = {}
         finish_reason: str | None = None
         usage = LLMUsage()
 
-        async for chunk in self.stream(messages=messages, model=model, tools=tools, system=system):
+        async for chunk in self.stream(
+            messages=messages,
+            model=model,
+            tools=tools,
+            system=system,
+            idle_seconds=idle_seconds,
+            abort_event=abort_event,
+        ):
             if chunk.text_delta:
                 text_parts.append(chunk.text_delta)
             if chunk.tool_call_deltas:

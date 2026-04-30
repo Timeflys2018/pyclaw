@@ -27,6 +27,17 @@ class Tool(Protocol):
     async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult: ...
 
 
+def _tool_timeout_seconds(tool: Tool, default_s: float) -> float:
+    override = getattr(tool, "timeout_seconds", None)
+    if override is None:
+        return default_s
+    try:
+        value = float(override)
+    except (TypeError, ValueError):
+        return default_s
+    return value if value > 0 else 0.0
+
+
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
@@ -67,6 +78,8 @@ async def execute_tool_calls(
     registry: ToolRegistry,
     tool_calls: list[dict[str, Any]],
     context: ToolContext,
+    *,
+    default_tool_timeout_s: float = 120.0,
 ) -> list[ToolResult]:
     parallel: list[tuple[int, dict[str, Any]]] = []
     sequential: list[tuple[int, dict[str, Any]]] = []
@@ -82,7 +95,9 @@ async def execute_tool_calls(
     results: list[ToolResult | None] = [None] * len(tool_calls)
 
     async def run_one(i: int, call: dict[str, Any]) -> None:
-        results[i] = await _dispatch_single(registry, call, context)
+        results[i] = await _dispatch_single(
+            registry, call, context, default_timeout_s=default_tool_timeout_s
+        )
 
     if parallel:
         await asyncio.gather(*(run_one(i, c) for i, c in parallel))
@@ -100,7 +115,15 @@ async def _dispatch_single(
     registry: ToolRegistry,
     call: dict[str, Any],
     context: ToolContext,
+    *,
+    default_timeout_s: float = 120.0,
 ) -> ToolResult:
+    from pyclaw.core.agent.runtime_util import (
+        AgentAbortedError,
+        AgentTimeoutError,
+        run_with_timeout,
+    )
+
     call_id = call.get("id", "")
     name = _function_name(call)
     args = _function_args(call)
@@ -112,8 +135,19 @@ async def _dispatch_single(
     if tool is None:
         return _error(call_id, f"tool {name!r} not registered")
 
+    tool_timeout_s = _tool_timeout_seconds(tool, default_timeout_s)
+
     try:
-        return await tool.execute(args, context)
+        return await run_with_timeout(
+            tool.execute(args, context),
+            timeout_s=tool_timeout_s,
+            abort_event=context.abort,
+            kind="tool",
+        )
+    except AgentTimeoutError as te:
+        return _error(call_id, f"{name} timed out after {te.limit_seconds}s")
+    except AgentAbortedError:
+        return _error(call_id, f"{name} aborted")
     except Exception as exc:
         return _error(call_id, f"{name} raised {type(exc).__name__}: {exc}")
 
