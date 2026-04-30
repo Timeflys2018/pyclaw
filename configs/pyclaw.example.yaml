@@ -1,0 +1,43 @@
+server:
+  host: "0.0.0.0"
+  port: 8000
+
+redis:
+  url: "redis://localhost:6379"
+  key_prefix: "pyclaw:"
+
+database:
+  url: "postgresql://pyclaw:pyclaw@localhost:5432/pyclaw"
+
+storage:
+  session_backend: "redis"  # redis | file
+  memory_backend: "sqlite"  # sqlite | postgres
+  lock_backend: "redis"     # redis | file
+
+agent:
+  default_model: "gpt-4o"
+  max_context_tokens: 128000
+  compaction_threshold: 0.8
+
+skills:
+  directories:
+    - "~/.openclaw/skills"
+    - "./skills"
+  clawhub:
+    base_url: "https://clawhub.ai"
+
+channels:
+  feishu:
+    enabled: false
+    app_id: ""
+    app_secret: ""
+    verification_token: ""
+  web:
+    enabled: true
+    auth_token: ""
+
+dreaming:
+  enabled: false
+  light_cron: "0 */6 * * *"
+  deep_cron: "0 3 * * *"
+  rem_cron: "0 5 * * 0"
