@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from pyclaw.core.agent.compaction_checkpoint import take_checkpoint
 from pyclaw.core.agent.incomplete_turn import classify_turn, retry_message_for
 from pyclaw.core.agent.llm import (
     LLMClient,
@@ -19,6 +20,7 @@ from pyclaw.core.agent.tool_result_truncation import (
     resolve_max_output_chars,
     truncate_tool_result,
 )
+from pyclaw.core.hooks import CompactionContext
 from pyclaw.core.agent.runtime_util import (
     AgentAbortedError,
     AgentTimeoutError,
@@ -274,12 +276,42 @@ async def run_agent_stream(
             return
         except LLMError as exc:
             if exc.code == "context_overflow":
-                compact_result = await deps.context_engine.compact(
+                compaction_ctx = CompactionContext(
                     session_id=request.session_id,
-                    messages=base_messages,
-                    token_budget=deps.config.context_window,
-                    force=True,
+                    workspace_id=request.workspace_id,
+                    agent_id=request.agent_id,
+                    message_count=len(base_messages),
                 )
+                checkpoint = take_checkpoint(tree)
+                await deps.hooks.notify_before_compaction(compaction_ctx)
+                try:
+                    compact_result = await deps.context_engine.compact(
+                        session_id=request.session_id,
+                        messages=base_messages,
+                        token_budget=deps.config.context_window,
+                        force=True,
+                        abort_event=abort_event,
+                        model=deps.config.compaction.model,
+                    )
+                except Exception as compact_exc:
+                    checkpoint.restore_into(tree)
+                    yield ErrorEvent(
+                        error_code="compaction_failed",
+                        message=f"compaction raised {type(compact_exc).__name__}: {compact_exc}",
+                    )
+                    return
+
+                compaction_ctx.tokens_before = compact_result.tokens_before
+                await deps.hooks.notify_after_compaction(compaction_ctx, compact_result)
+
+                if not compact_result.ok:
+                    checkpoint.restore_into(tree)
+                    yield ErrorEvent(
+                        error_code=compact_result.reason_code or "compaction_failed",
+                        message=compact_result.reason or "compaction failed",
+                    )
+                    return
+
                 if compact_result.compacted and compact_result.summary:
                     from pyclaw.models import CompactionEntry
 

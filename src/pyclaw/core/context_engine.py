@@ -4,10 +4,22 @@ import asyncio
 from typing import Any, Protocol, runtime_checkable
 
 from pyclaw.core.agent.compaction import (
+    DEFAULT_COMPACTION_SAFETY_TIMEOUT_S,
     DEFAULT_KEEP_RECENT_TOKENS,
     DEFAULT_THRESHOLD,
     build_summarizer_payload,
+    estimate_messages_tokens,
     plan_compaction,
+)
+from pyclaw.core.agent.compaction_dedup import dedupe_duplicate_user_messages
+from pyclaw.core.agent.compaction_hardening import (
+    HARDENED_SUMMARIZER_SYSTEM_PROMPT,
+    filter_oversized_messages,
+    has_real_conversation,
+    sanity_check_token_estimate,
+    split_into_chunks,
+    strip_tool_result_details,
+    summarize_in_stages,
 )
 from pyclaw.models import AssembleResult, CompactResult
 
@@ -33,9 +45,19 @@ class ContextEngine(Protocol):
         token_budget: int,
         force: bool = False,
         abort_event: asyncio.Event | None = None,
+        model: str | None = None,
     ) -> CompactResult: ...
 
     async def after_turn(self, session_id: str, messages: list[dict[str, Any]]) -> None: ...
+
+
+class _SummarizerCallable(Protocol):
+    async def __call__(
+        self,
+        payload: list[dict[str, Any]],
+        *,
+        model: str | None = None,
+    ) -> str: ...
 
 
 class DefaultContextEngine:
@@ -45,10 +67,14 @@ class DefaultContextEngine:
         threshold: float = DEFAULT_THRESHOLD,
         keep_recent_tokens: int = DEFAULT_KEEP_RECENT_TOKENS,
         summarize: _SummarizerCallable | None = None,
+        compaction_timeout_s: float = DEFAULT_COMPACTION_SAFETY_TIMEOUT_S,
+        chunk_token_budget: int = 8_000,
     ) -> None:
         self._threshold = threshold
         self._keep_recent_tokens = keep_recent_tokens
         self._summarize = summarize
+        self._compaction_timeout_s = compaction_timeout_s
+        self._chunk_token_budget = chunk_token_budget
 
     async def assemble(
         self,
@@ -71,6 +97,7 @@ class DefaultContextEngine:
         token_budget: int,
         force: bool = False,
         abort_event: asyncio.Event | None = None,
+        model: str | None = None,
     ) -> CompactResult:
         if abort_event is not None and abort_event.is_set():
             return CompactResult(
@@ -80,8 +107,18 @@ class DefaultContextEngine:
                 reason_code="aborted",
             )
 
+        if not has_real_conversation(messages):
+            return CompactResult(
+                ok=True,
+                compacted=False,
+                reason="no real conversation",
+                reason_code="no_compactable_entries",
+            )
+
+        deduped = dedupe_duplicate_user_messages(messages)
+
         plan = plan_compaction(
-            messages,
+            deduped,
             context_window=token_budget,
             threshold=1.0 if force else self._threshold,
             keep_recent_tokens=self._keep_recent_tokens,
@@ -91,42 +128,58 @@ class DefaultContextEngine:
                 ok=True,
                 compacted=False,
                 reason=plan.reason,
-                reason_code="below_threshold"
-                if plan.reason == "within-budget"
-                else "no_compactable_entries",
+                reason_code=(
+                    "below_threshold"
+                    if plan.reason == "within-budget"
+                    else "no_compactable_entries"
+                ),
                 tokens_before=plan.estimated_tokens,
             )
 
-        to_summarize = messages[: plan.cut_index]
-        _kept = messages[plan.cut_index :]
+        to_summarize_raw = deduped[: plan.cut_index]
+        to_summarize = strip_tool_result_details(to_summarize_raw)
+        to_summarize = filter_oversized_messages(
+            to_summarize, context_window=token_budget
+        )
 
         if self._summarize is None:
             summary = _fallback_summary(to_summarize)
         else:
-            summarize_coro = self._summarize(build_summarizer_payload(to_summarize))
-            if abort_event is None:
-                summary = await summarize_coro
-            else:
-                from pyclaw.core.agent.runtime_util import (
-                    AgentAbortedError,
-                    run_with_timeout,
+            try:
+                summary = await self._run_summarizer_guarded(
+                    to_summarize,
+                    abort_event=abort_event,
+                    model=model,
+                )
+            except _CompactionTimeout:
+                return CompactResult(
+                    ok=False,
+                    compacted=False,
+                    reason="summarizer timeout",
+                    reason_code="timeout",
+                    tokens_before=plan.estimated_tokens,
+                )
+            except _CompactionAborted:
+                return CompactResult(
+                    ok=False,
+                    compacted=False,
+                    reason="aborted",
+                    reason_code="aborted",
+                    tokens_before=plan.estimated_tokens,
+                )
+            except Exception as exc:
+                return CompactResult(
+                    ok=False,
+                    compacted=False,
+                    reason=f"summary failed: {exc}",
+                    reason_code="summary_failed",
+                    tokens_before=plan.estimated_tokens,
                 )
 
-                try:
-                    summary = await run_with_timeout(
-                        summarize_coro,
-                        timeout_s=0.0,
-                        abort_event=abort_event,
-                        kind="compaction",
-                    )
-                except AgentAbortedError:
-                    return CompactResult(
-                        ok=False,
-                        compacted=False,
-                        reason="aborted",
-                        reason_code="aborted",
-                        tokens_before=plan.estimated_tokens,
-                    )
+        tokens_after_raw = plan.kept_tokens + estimate_messages_tokens(
+            [{"role": "assistant", "content": summary}]
+        )
+        tokens_after = sanity_check_token_estimate(plan.estimated_tokens, tokens_after_raw)
 
         return CompactResult(
             ok=True,
@@ -134,17 +187,73 @@ class DefaultContextEngine:
             summary=summary,
             first_kept_entry_id=None,
             tokens_before=plan.estimated_tokens,
-            tokens_after=plan.kept_tokens,
+            tokens_after=tokens_after,
             reason=f"compacted-at-{plan.cut_index}",
             reason_code="compacted",
         )
+
+    async def _run_summarizer_guarded(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        abort_event: asyncio.Event | None,
+        model: str | None,
+    ) -> str:
+        from pyclaw.core.agent.runtime_util import (
+            AgentAbortedError,
+            AgentTimeoutError,
+            with_safety_timeout,
+        )
+
+        summarize_fn = self._summarize
+
+        async def _one_stage(payload: list[dict[str, Any]]) -> str:
+            assert summarize_fn is not None
+            effective_payload = build_summarizer_payload(payload)
+            effective_payload[0] = {
+                "role": "system",
+                "content": HARDENED_SUMMARIZER_SYSTEM_PROMPT,
+            }
+            try:
+                return await summarize_fn(effective_payload, model=model)
+            except TypeError:
+                return await summarize_fn(effective_payload)  # type: ignore[call-arg]
+
+        chunks = split_into_chunks(
+            messages, chunk_token_budget=self._chunk_token_budget
+        )
+
+        async def _run() -> str:
+            if len(chunks) <= 1:
+                return await _one_stage(messages)
+            return await summarize_in_stages(
+                messages,
+                summarizer=_one_stage,
+                chunk_token_budget=self._chunk_token_budget,
+            )
+
+        try:
+            return await with_safety_timeout(
+                _run,
+                timeout_s=self._compaction_timeout_s,
+                abort_event=abort_event,
+                kind="compaction",
+            )
+        except AgentTimeoutError as te:
+            raise _CompactionTimeout() from te
+        except AgentAbortedError as ae:
+            raise _CompactionAborted() from ae
 
     async def after_turn(self, session_id: str, messages: list[dict[str, Any]]) -> None:
         return None
 
 
-class _SummarizerCallable(Protocol):
-    async def __call__(self, payload: list[dict[str, Any]]) -> str: ...
+class _CompactionTimeout(Exception):
+    pass
+
+
+class _CompactionAborted(Exception):
+    pass
 
 
 def _fallback_summary(messages: list[dict[str, Any]]) -> str:
