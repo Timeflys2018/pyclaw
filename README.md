@@ -2,6 +2,10 @@
 
 [中文文档](./README_CN.md)
 
+[![License](https://img.shields.io/badge/license-AGPL--3.0%20%2B%20Commercial-blue.svg)](./LICENSE)
+[![Python](https://img.shields.io/badge/python-3.12%2B-green.svg)](https://www.python.org/)
+[![CLA Required](https://img.shields.io/badge/CLA-required-orange.svg)](./CLA.md)
+
 A Python reimplementation of [OpenClaw](https://github.com/openclaw/openclaw), built from the ground up for **compute-storage separation**, **horizontal scaling**, and **modular architecture**.
 
 ## Why PyClaw?
@@ -132,6 +136,8 @@ PyClaw is inspired by [OpenClaw](https://github.com/openclaw/openclaw) and desig
 ## Contributing
 
 PRs welcome. See the `openspec/` directory for architectural specs and task breakdown.
+
+**Before submitting a PR**: Please read and agree to the [Contributor License Agreement (CLA)](./CLA.md). This is required so the project can maintain its dual-license model.
 
 ## License
 
