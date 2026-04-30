@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import os
+import signal
 from pathlib import Path
 from typing import Any
 
-from pyclaw.core.agent.tools.registry import Tool, ToolContext, error_result, text_result
+from pyclaw.core.agent.tools.registry import ToolContext, error_result, text_result
 from pyclaw.core.agent.tools.workspace import WorkspaceBoundaryError, WorkspaceResolver
-from pyclaw.models import ToolResult, WorkspaceConfig
+from pyclaw.models import ToolResult
 
 BASH_DEFAULT_TIMEOUT_SECONDS = 120.0
 READ_WRITE_DEFAULT_TIMEOUT_SECONDS = 30.0
+BASH_ABORT_GRACE_SECONDS = 2.0
 
 
 class BashTool:
@@ -32,6 +33,9 @@ class BashTool:
         if not isinstance(command, str) or not command.strip():
             return error_result(call_id, "bash: 'command' is required")
 
+        if context.abort.is_set():
+            return error_result(call_id, "bash: aborted before spawn")
+
         timeout = float(args.get("timeout_seconds") or BASH_DEFAULT_TIMEOUT_SECONDS)
 
         try:
@@ -44,11 +48,32 @@ class BashTool:
         except OSError as exc:
             return error_result(call_id, f"bash: failed to spawn: {exc}")
 
+        comm_task = asyncio.ensure_future(proc.communicate())
+        abort_task = asyncio.ensure_future(context.abort.wait())
+
         try:
-            stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
+            done, _pending = await asyncio.wait(
+                [comm_task, abort_task],
+                timeout=timeout,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+        except asyncio.CancelledError:
+            _terminate_proc(proc)
+            comm_task.cancel()
+            abort_task.cancel()
+            raise
+
+        if comm_task in done:
+            abort_task.cancel()
+            stdout_b, stderr_b = comm_task.result()
+        elif abort_task in done:
+            comm_task.cancel()
+            await _abort_proc(proc, BASH_ABORT_GRACE_SECONDS)
+            return error_result(call_id, "bash: aborted")
+        else:
+            abort_task.cancel()
+            comm_task.cancel()
+            await _abort_proc(proc, BASH_ABORT_GRACE_SECONDS)
             return error_result(call_id, f"bash: command timed out after {timeout}s")
 
         stdout = stdout_b.decode("utf-8", errors="replace")
@@ -66,6 +91,33 @@ class BashTool:
         if exit_code != 0:
             return error_result(call_id, body)
         return text_result(call_id, body)
+
+
+def _terminate_proc(proc: asyncio.subprocess.Process) -> None:
+    try:
+        proc.kill()
+    except ProcessLookupError:
+        pass
+
+
+async def _abort_proc(proc: asyncio.subprocess.Process, grace_s: float) -> None:
+    if proc.returncode is not None:
+        return
+    try:
+        proc.send_signal(signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=grace_s)
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            return
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=grace_s)
+        except asyncio.TimeoutError:
+            pass
 
 
 class ReadTool:
@@ -90,6 +142,9 @@ class ReadTool:
         raw_path = args.get("path")
         if not isinstance(raw_path, str) or not raw_path:
             return error_result(call_id, "read: 'path' is required")
+
+        if context.abort.is_set():
+            return error_result(call_id, "read: aborted")
 
         try:
             full_path = self._resolver.resolve_within(context.workspace_path, raw_path)
@@ -142,6 +197,9 @@ class WriteTool:
         if not isinstance(content, str):
             return error_result(call_id, "write: 'content' must be a string")
 
+        if context.abort.is_set():
+            return error_result(call_id, "write: aborted")
+
         try:
             full_path = self._resolver.resolve_within(context.workspace_path, raw_path)
         except WorkspaceBoundaryError as exc:
@@ -189,6 +247,9 @@ class EditTool:
             return error_result(call_id, "edit: 'path' is required")
         if not isinstance(old, str) or not isinstance(new, str):
             return error_result(call_id, "edit: 'old_string' and 'new_string' must be strings")
+
+        if context.abort.is_set():
+            return error_result(call_id, "edit: aborted")
 
         try:
             full_path = self._resolver.resolve_within(context.workspace_path, raw_path)

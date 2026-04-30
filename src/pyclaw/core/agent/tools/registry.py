@@ -27,6 +27,32 @@ class Tool(Protocol):
     async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult: ...
 
 
+async def check_abort_or_run(
+    tool: Tool,
+    args: dict[str, Any],
+    context: ToolContext,
+) -> ToolResult:
+    call_id = args.get("_call_id", "")
+    if context.abort.is_set():
+        return _error(call_id, f"{tool.name}: aborted before execution")
+    return await tool.execute(args, context)
+
+
+def wrap_tool_with_abort(tool: Tool) -> Tool:
+    class _AbortWrapped:
+        name = tool.name
+        description = tool.description
+        parameters = tool.parameters
+        side_effect = tool.side_effect
+        timeout_seconds = getattr(tool, "timeout_seconds", None)
+        max_output_chars = getattr(tool, "max_output_chars", None)
+
+        async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
+            return await check_abort_or_run(tool, args, context)
+
+    return _AbortWrapped()  # type: ignore[return-value]
+
+
 def _tool_timeout_seconds(tool: Tool, default_s: float) -> float:
     override = getattr(tool, "timeout_seconds", None)
     if override is None:

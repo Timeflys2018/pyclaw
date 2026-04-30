@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Protocol, runtime_checkable
 
 from pyclaw.core.agent.compaction import (
@@ -31,6 +32,7 @@ class ContextEngine(Protocol):
         messages: list[dict[str, Any]],
         token_budget: int,
         force: bool = False,
+        abort_event: asyncio.Event | None = None,
     ) -> CompactResult: ...
 
     async def after_turn(self, session_id: str, messages: list[dict[str, Any]]) -> None: ...
@@ -68,7 +70,16 @@ class DefaultContextEngine:
         messages: list[dict[str, Any]],
         token_budget: int,
         force: bool = False,
+        abort_event: asyncio.Event | None = None,
     ) -> CompactResult:
+        if abort_event is not None and abort_event.is_set():
+            return CompactResult(
+                ok=False,
+                compacted=False,
+                reason="aborted",
+                reason_code="aborted",
+            )
+
         plan = plan_compaction(
             messages,
             context_window=token_budget,
@@ -80,16 +91,42 @@ class DefaultContextEngine:
                 ok=True,
                 compacted=False,
                 reason=plan.reason,
+                reason_code="below_threshold"
+                if plan.reason == "within-budget"
+                else "no_compactable_entries",
                 tokens_before=plan.estimated_tokens,
             )
 
         to_summarize = messages[: plan.cut_index]
-        kept = messages[plan.cut_index :]
+        _kept = messages[plan.cut_index :]
 
         if self._summarize is None:
             summary = _fallback_summary(to_summarize)
         else:
-            summary = await self._summarize(build_summarizer_payload(to_summarize))
+            summarize_coro = self._summarize(build_summarizer_payload(to_summarize))
+            if abort_event is None:
+                summary = await summarize_coro
+            else:
+                from pyclaw.core.agent.runtime_util import (
+                    AgentAbortedError,
+                    run_with_timeout,
+                )
+
+                try:
+                    summary = await run_with_timeout(
+                        summarize_coro,
+                        timeout_s=0.0,
+                        abort_event=abort_event,
+                        kind="compaction",
+                    )
+                except AgentAbortedError:
+                    return CompactResult(
+                        ok=False,
+                        compacted=False,
+                        reason="aborted",
+                        reason_code="aborted",
+                        tokens_before=plan.estimated_tokens,
+                    )
 
         return CompactResult(
             ok=True,
@@ -99,6 +136,7 @@ class DefaultContextEngine:
             tokens_before=plan.estimated_tokens,
             tokens_after=plan.kept_tokens,
             reason=f"compacted-at-{plan.cut_index}",
+            reason_code="compacted",
         )
 
     async def after_turn(self, session_id: str, messages: list[dict[str, Any]]) -> None:
