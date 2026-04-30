@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from pyclaw.core.agent.compaction import take_checkpoint
+from pyclaw.core.agent.compaction import estimate_messages_tokens, take_checkpoint
 from pyclaw.core.agent.incomplete_turn import classify_turn, retry_message_for
 from pyclaw.core.agent.llm import (
     LLMClient,
@@ -280,6 +280,7 @@ async def run_agent_stream(
                     workspace_id=request.workspace_id,
                     agent_id=request.agent_id,
                     message_count=len(base_messages),
+                    tokens_before=estimate_messages_tokens(base_messages),
                 )
                 checkpoint = take_checkpoint(tree)
                 await deps.hooks.notify_before_compaction(compaction_ctx)

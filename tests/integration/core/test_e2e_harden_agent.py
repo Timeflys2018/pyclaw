@@ -248,3 +248,92 @@ async def test_e2e_compaction_triggered_on_context_overflow_with_hooks(tmp_path:
     assert len(hook.before_compactions) == 1
     assert len(hook.after_compactions) == 1
     assert hook.after_compactions[0][1].ok is True
+
+
+@pytest.mark.asyncio
+async def test_before_compaction_receives_real_tokens_before(tmp_path: Path) -> None:
+    class _OverflowOnFirstLLM(LLMClient):
+        def __init__(self) -> None:
+            super().__init__(default_model="fake")
+            self.call_count = 0
+
+        async def stream(  # type: ignore[override]
+            self,
+            *,
+            messages,
+            model=None,
+            tools=None,
+            system=None,
+            idle_seconds: float = 0.0,
+            abort_event=None,
+        ):
+            self.call_count += 1
+            if self.call_count == 1:
+                raise LLMError("context_overflow", "context too large")
+            yield LLMStreamChunk(text_delta="ok after compaction")
+            yield LLMStreamChunk(finish_reason="stop", usage=LLMUsage())
+
+    before_tokens: list[int] = []
+
+    class _ObservingHook:
+        async def before_prompt_build(self, ctx: PromptBuildContext) -> PromptBuildResult | None:
+            return None
+
+        async def after_response(self, obs: ResponseObservation) -> None:
+            return None
+
+        async def before_compaction(self, ctx: CompactionContext) -> None:
+            before_tokens.append(ctx.tokens_before)
+
+    hooks = HookRegistry()
+    hooks.register(_ObservingHook())
+
+    async def _summarizer(payload, *, model=None):
+        return "compact summary"
+
+    store = InMemorySessionStore()
+    header = SessionHeader(id="tok-test", workspace_id="default", agent_id="main")
+    tree = SessionTree(header=header)
+    prior_parent = None
+    for i in range(10):
+        role = "user" if i % 2 == 0 else "assistant"
+        entry = MessageEntry(
+            id=generate_entry_id(set(tree.entries.keys())),
+            parent_id=prior_parent,
+            role=role,
+            content=("word " * 80) + f"msg {i}",
+        )
+        tree.append(entry)
+        prior_parent = entry.id
+    await store.save_header(tree)
+
+    deps = AgentRunnerDeps(
+        llm=_OverflowOnFirstLLM(),
+        tools=ToolRegistry(),
+        hooks=hooks,
+        session_store=store,
+        context_engine=DefaultContextEngine(
+            summarize=_summarizer,
+            keep_recent_tokens=50,
+            compaction_timeout_s=5.0,
+        ),
+        config=AgentRunConfig(context_window=500),
+    )
+
+    events: list[Any] = []
+    async for event in run_agent_stream(
+        RunRequest(
+            session_id="tok-test",
+            workspace_id="default",
+            agent_id="main",
+            user_message="hi",
+        ),
+        deps,
+        tool_workspace_path=tmp_path,
+    ):
+        events.append(event)
+
+    assert len(before_tokens) == 1, f"expected 1 before_compaction call, got {len(before_tokens)}"
+    assert before_tokens[0] > 0, (
+        f"before_compaction hook received tokens_before={before_tokens[0]}, expected >0"
+    )
