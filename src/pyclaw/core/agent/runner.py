@@ -492,6 +492,8 @@ async def run_agent_stream(
             await _append(deps, tree, tool_entry)
             yield ToolCallEnd(tool_call_id=call.get("id", ""), result=result)
 
+        retry_counts = {"planning": 0, "reasoning": 0, "empty": 0}
+
     yield ErrorEvent(
         error_code="max_iterations",
         message=f"reached max_iterations={deps.config.max_iterations}",

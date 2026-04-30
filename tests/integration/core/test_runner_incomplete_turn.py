@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -7,13 +8,14 @@ import pytest
 
 from pyclaw.core.agent.llm import LLMClient, LLMStreamChunk, LLMUsage
 from pyclaw.core.agent.runner import AgentRunnerDeps, RunRequest, run_agent_stream
-from pyclaw.core.agent.tools.registry import ToolRegistry
+from pyclaw.core.agent.tools.registry import ToolContext, ToolRegistry, text_result
 from pyclaw.models import (
     AgentRunConfig,
     Done,
     MessageEntry,
     RetryConfig,
     TextChunk,
+    ToolResult,
 )
 
 
@@ -198,3 +200,111 @@ async def test_reasoning_only_triggers_retry(tmp_path: Path) -> None:
     assert llm.call_count == 2
     done = next(e for e in events if isinstance(e, Done))
     assert done.final_message == "The answer is 42."
+
+
+class _EchoTool:
+    name = "echo"
+    description = "echo"
+    parameters: dict = {"type": "object", "properties": {}}
+    side_effect = False
+
+    async def execute(self, args: dict, context: ToolContext) -> ToolResult:
+        return text_result(args.get("_call_id", ""), "ok")
+
+
+def _tool_call_turn(call_id: str = "c1") -> list[LLMStreamChunk]:
+    return [
+        LLMStreamChunk(
+            tool_call_deltas=[
+                {
+                    "index": 0,
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": "echo",
+                        "arguments": json.dumps({"_call_id": call_id}),
+                    },
+                }
+            ]
+        ),
+        LLMStreamChunk(finish_reason="tool_calls", usage=LLMUsage()),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_retry_counts_reset_after_tool_round(tmp_path: Path) -> None:
+    llm = _ScriptedLLM(
+        [
+            _text_turn("I'll handle it."),
+            _tool_call_turn("c1"),
+            _text_turn("I'll check one more thing."),
+            _text_turn("Done."),
+        ]
+    )
+    registry = ToolRegistry()
+    registry.register(_EchoTool())
+    deps = AgentRunnerDeps(
+        llm=llm,
+        tools=registry,
+        config=AgentRunConfig(
+            retry=RetryConfig(
+                planning_only_limit=1,
+                reasoning_only_limit=0,
+                empty_response_limit=0,
+                unknown_tool_threshold=0,
+            ),
+            max_iterations=10,
+        ),
+    )
+
+    events: list[Any] = []
+    async for event in run_agent_stream(
+        RunRequest(session_id="r1", workspace_id="default", agent_id="main", user_message="go"),
+        deps,
+        tool_workspace_path=tmp_path,
+    ):
+        events.append(event)
+
+    assert llm.call_count == 4
+    done = next(e for e in events if isinstance(e, Done))
+    assert done.final_message == "Done."
+
+
+@pytest.mark.asyncio
+async def test_retry_counts_independent_per_category(tmp_path: Path) -> None:
+    llm = _ScriptedLLM(
+        [
+            _text_turn("I'll do that."),
+            _tool_call_turn("c2"),
+            _text_turn("<thinking>computing</thinking>"),
+            _text_turn("<thinking>still computing</thinking>"),
+            _text_turn("Final answer."),
+        ]
+    )
+    registry = ToolRegistry()
+    registry.register(_EchoTool())
+    deps = AgentRunnerDeps(
+        llm=llm,
+        tools=registry,
+        config=AgentRunConfig(
+            retry=RetryConfig(
+                planning_only_limit=1,
+                reasoning_only_limit=2,
+                empty_response_limit=0,
+                unknown_tool_threshold=0,
+            ),
+            max_iterations=10,
+        ),
+    )
+
+    events: list[Any] = []
+    async for event in run_agent_stream(
+        RunRequest(session_id="r2", workspace_id="default", agent_id="main", user_message="go"),
+        deps,
+        tool_workspace_path=tmp_path,
+    ):
+        events.append(event)
+
+    assert llm.call_count == 5
+    done = next(e for e in events if isinstance(e, Done))
+    assert done.final_message == "Final answer."
