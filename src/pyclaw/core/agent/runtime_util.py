@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TypeVar
 
@@ -122,6 +123,70 @@ async def iterate_with_idle_timeout(
             raise AgentAbortedError(kind=kind)
 
         raise AgentTimeoutError(kind=kind, limit_seconds=idle_seconds)
+
+
+async def iterate_with_deadline(
+    source: AsyncIterator[T],
+    *,
+    deadline_s: float,
+    abort_event: asyncio.Event | None = None,
+    kind: str = "run",
+) -> AsyncIterator[T]:
+    if deadline_s <= 0 and abort_event is None:
+        async for item in source:
+            yield item
+        return
+
+    aiter = source.__aiter__()
+    end_time = time.monotonic() + deadline_s if deadline_s > 0 else None
+
+    while True:
+        next_task: asyncio.Task[T] = asyncio.ensure_future(aiter.__anext__())
+        waiters: list[asyncio.Task[object]] = [next_task]
+        abort_task: asyncio.Task[bool] | None = None
+        if abort_event is not None:
+            abort_task = asyncio.ensure_future(abort_event.wait())
+            waiters.append(abort_task)
+
+        if end_time is not None:
+            remaining = end_time - time.monotonic()
+            timeout_value: float | None = max(remaining, 0.0)
+        else:
+            timeout_value = None
+
+        try:
+            done, _pending = await asyncio.wait(
+                waiters,
+                timeout=timeout_value,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+        except asyncio.CancelledError:
+            next_task.cancel()
+            if abort_task is not None:
+                abort_task.cancel()
+            raise
+
+        if next_task in done:
+            if abort_task is not None:
+                abort_task.cancel()
+            try:
+                value = next_task.result()
+            except StopAsyncIteration:
+                return
+            yield value
+            continue
+
+        next_task.cancel()
+        try:
+            await next_task
+        except (asyncio.CancelledError, BaseException):
+            pass
+
+        if abort_task is not None and abort_task in done:
+            raise AgentAbortedError(kind=kind)
+
+        elapsed = time.monotonic() - (end_time - deadline_s) if end_time is not None else deadline_s
+        raise AgentTimeoutError(kind=kind, limit_seconds=elapsed)
 
 
 async def race_abort(coro: Awaitable[T], abort_event: asyncio.Event, *, kind: str = "aborted") -> T:

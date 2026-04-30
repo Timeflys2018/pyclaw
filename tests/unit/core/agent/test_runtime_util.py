@@ -8,6 +8,7 @@ from pyclaw.core.agent.compaction import compact_with_safety_timeout
 from pyclaw.core.agent.runtime_util import (
     AgentAbortedError,
     AgentTimeoutError,
+    iterate_with_deadline,
     iterate_with_idle_timeout,
     run_with_timeout,
 )
@@ -141,4 +142,61 @@ async def test_compact_with_safety_timeout_aborts() -> None:
         await compact_with_safety_timeout(
             _slow, timeout_s=5.0, abort_event=abort, on_cancel=_on_cancel
         )
-    assert cancelled == [True]
+
+
+@pytest.mark.asyncio
+async def test_iterate_with_deadline_yields_items_before_deadline() -> None:
+    async def _source():
+        for i in range(3):
+            await asyncio.sleep(0)
+            yield i
+
+    collected: list[int] = []
+    async for v in iterate_with_deadline(_source(), deadline_s=1.0):
+        collected.append(v)
+    assert collected == [0, 1, 2]
+
+
+@pytest.mark.asyncio
+async def test_iterate_with_deadline_raises_on_elapsed() -> None:
+    async def _source():
+        yield 1
+        await asyncio.sleep(5)
+        yield 2
+
+    with pytest.raises(AgentTimeoutError) as info:
+        async for _v in iterate_with_deadline(_source(), deadline_s=0.05, kind="run"):
+            pass
+    assert info.value.kind == "run"
+
+
+@pytest.mark.asyncio
+async def test_iterate_with_deadline_zero_disables() -> None:
+    async def _source():
+        for i in range(3):
+            yield i
+
+    collected: list[int] = []
+    async for v in iterate_with_deadline(_source(), deadline_s=0.0):
+        collected.append(v)
+    assert collected == [0, 1, 2]
+
+
+@pytest.mark.asyncio
+async def test_iterate_with_deadline_aborts_on_event() -> None:
+    abort = asyncio.Event()
+
+    async def _source():
+        yield 1
+        await asyncio.sleep(10)
+        yield 2
+
+    async def _signal() -> None:
+        await asyncio.sleep(0.02)
+        abort.set()
+
+    asyncio.create_task(_signal())
+    with pytest.raises(AgentAbortedError):
+        async for _v in iterate_with_deadline(_source(), deadline_s=5.0, abort_event=abort):
+            pass
+    assert abort.is_set()
