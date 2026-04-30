@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from pyclaw.core.agent.incomplete_turn import classify_turn, retry_message_for
 from pyclaw.core.agent.llm import (
     LLMClient,
     LLMError,
@@ -186,6 +187,7 @@ async def run_agent_stream(
     total_input_tokens = 0
     total_output_tokens = 0
     final_text = ""
+    retry_counts: dict[str, int] = {"planning": 0, "reasoning": 0, "empty": 0}
 
     while iteration < deps.config.max_iterations:
         if _run_timed_out():
@@ -307,6 +309,38 @@ async def run_agent_stream(
             final_text = response.text
 
         if not response.tool_calls:
+            classification = classify_turn(
+                text=response.text,
+                tool_calls=response.tool_calls,
+            )
+            retry_limit = _retry_limit_for(classification, deps.config)
+            if (
+                classification in ("planning", "reasoning", "empty")
+                and retry_limit > 0
+                and retry_counts[classification] < retry_limit
+            ):
+                retry_counts[classification] += 1
+                assistant_entry = MessageEntry(
+                    id=generate_entry_id(set(tree.entries.keys())),
+                    parent_id=tree.leaf_id,
+                    timestamp=now_iso(),
+                    role="assistant",
+                    content=response.text,
+                )
+                await _append(deps, tree, assistant_entry)
+
+                retry_prompt = retry_message_for(classification)
+                if retry_prompt is not None:
+                    retry_entry = MessageEntry(
+                        id=generate_entry_id(set(tree.entries.keys())),
+                        parent_id=tree.leaf_id,
+                        timestamp=now_iso(),
+                        role="user",
+                        content=retry_prompt,
+                    )
+                    await _append(deps, tree, retry_entry)
+                continue
+
             assistant_entry = MessageEntry(
                 id=generate_entry_id(set(tree.entries.keys())),
                 parent_id=tree.leaf_id,
@@ -386,3 +420,13 @@ def _remaining_run_seconds(run_deadline_s: float, run_started: float) -> float |
         return None
     remaining = run_deadline_s - (time.monotonic() - run_started)
     return remaining
+
+
+def _retry_limit_for(classification: str, config: AgentRunConfig) -> int:
+    if classification == "planning":
+        return config.retry.planning_only_limit
+    if classification == "reasoning":
+        return config.retry.reasoning_only_limit
+    if classification == "empty":
+        return config.retry.empty_response_limit
+    return 0
