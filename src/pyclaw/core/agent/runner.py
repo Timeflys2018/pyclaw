@@ -188,6 +188,9 @@ async def run_agent_stream(
     total_output_tokens = 0
     final_text = ""
     retry_counts: dict[str, int] = {"planning": 0, "reasoning": 0, "empty": 0}
+    unknown_tool_name: str | None = None
+    unknown_tool_count = 0
+    unknown_tool_warned = False
 
     while iteration < deps.config.max_iterations:
         if _run_timed_out():
@@ -382,6 +385,39 @@ async def run_agent_stream(
             )
         )
 
+        (
+            unknown_tool_name,
+            unknown_tool_count,
+            unknown_tool_warned,
+            loop_action,
+            loop_guidance,
+        ) = _update_tool_loop_state(
+            response.tool_calls,
+            deps.tools,
+            unknown_tool_name,
+            unknown_tool_count,
+            unknown_tool_warned,
+            deps.config.retry.unknown_tool_threshold,
+        )
+
+        if loop_action == "terminate":
+            yield ErrorEvent(
+                error_code="tool_loop",
+                message=f"tool {unknown_tool_name!r} called after unknown-tool guidance",
+            )
+            return
+
+        if loop_action == "warn" and loop_guidance is not None:
+            guidance_entry = MessageEntry(
+                id=generate_entry_id(set(tree.entries.keys())),
+                parent_id=tree.leaf_id,
+                timestamp=now_iso(),
+                role="user",
+                content=loop_guidance,
+            )
+            await _append(deps, tree, guidance_entry)
+            continue
+
         for call in response.tool_calls:
             fn = (call or {}).get("function") or {}
             yield ToolCallStart(
@@ -430,3 +466,51 @@ def _retry_limit_for(classification: str, config: AgentRunConfig) -> int:
     if classification == "empty":
         return config.retry.empty_response_limit
     return 0
+
+
+def _update_tool_loop_state(
+    tool_calls: list[dict[str, Any]],
+    registry: ToolRegistry,
+    current_unknown: str | None,
+    count: int,
+    warned: bool,
+    threshold: int,
+) -> tuple[str | None, int, bool, str, str | None]:
+    if threshold <= 0 or not tool_calls:
+        return None, 0, False, "proceed", None
+
+    names = []
+    for call in tool_calls:
+        fn = (call or {}).get("function") or {}
+        name = fn.get("name", "") or ""
+        names.append(name)
+
+    unknown_names_in_turn = [n for n in names if n and n not in registry]
+
+    if not unknown_names_in_turn:
+        return None, 0, False, "proceed", None
+
+    if any(n in registry for n in names):
+        pass
+
+    first_unknown = unknown_names_in_turn[0]
+
+    if current_unknown is not None and first_unknown != current_unknown:
+        count = 0
+        warned = False
+
+    current_unknown = first_unknown
+    count += 1
+
+    if warned:
+        return current_unknown, count, warned, "terminate", None
+
+    if count >= threshold:
+        available = ", ".join(sorted(registry.names())) or "(none)"
+        guidance = (
+            f"You called `{current_unknown}` which does not exist. "
+            f"Available tools: [{available}]. Stop calling `{current_unknown}`."
+        )
+        return current_unknown, count, True, "warn", guidance
+
+    return current_unknown, count, warned, "proceed", None
