@@ -3,7 +3,7 @@
 Analysis of [OpenClaw](https://github.com/openclaw/openclaw) for PyClaw reimplementation reference.
 
 > **Source of truth**: This document describes **upstream `openclaw/openclaw`** (HEAD: `388019f5b6`).
-> Sections explicitly marked *"local-fork observation"* refer to the internal fork at `git.n.local.com:mit/ai_center/openclaw` which adds Redis-native session storage; these are *not* upstream behavior.
+> Sections explicitly marked *"Local-fork observation"* refer to an internal local fork (not public) that adds Redis-native session storage on top of upstream; these are *not* upstream behavior.
 
 ## Project Overview
 
@@ -49,9 +49,9 @@ Gateway (HTTP/WS, port 18789)
 
 ---
 
-### local-fork observation: Redis-native session storage
+### Local-fork observation: Redis-native session storage
 
-The local internal fork (`git.n.local.com:mit/ai_center/openclaw`) adds a parallel Redis-backed session layer **not present upstream**:
+An internal local fork of upstream adds a parallel Redis-backed session layer **not present upstream**:
 
 ```
 session:{id}:header   → String (JSON)

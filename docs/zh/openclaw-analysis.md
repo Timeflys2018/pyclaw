@@ -3,7 +3,7 @@
 针对 [OpenClaw](https://github.com/openclaw/openclaw) 的分析，作为 PyClaw 重写的参考。
 
 > **来源**：本文描述**上游 `openclaw/openclaw`**（HEAD: `388019f5b6`）。
-> 明确标注「**本地 fork 观察**」的小节指代内部 fork `git.n.local.com:mit/ai_center/openclaw`（它额外添加了 Redis 原生 session 存储），不代表上游行为。
+> 明确标注「**本地 fork 观察**」的小节指代一个基于上游的内部本地 fork（非公开），它额外添加了 Redis 原生 session 存储，不代表上游行为。
 
 ## 项目概况
 
@@ -51,7 +51,7 @@ Gateway (HTTP/WS, 端口 18789)
 
 ### 本地 fork 观察：Redis 原生 session 存储
 
-本地内部 fork (`git.n.local.com:mit/ai_center/openclaw`) 添加了一套**上游不存在**的 Redis 持久化层：
+一个基于上游的内部本地 fork 添加了一套**上游不存在**的 Redis 持久化层：
 
 ```
 session:{id}:header   → String (JSON)
