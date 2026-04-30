@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
+from pyclaw.models import CompactResult
+
 
 @dataclass
 class PromptBuildContext:
@@ -25,6 +27,16 @@ class ResponseObservation:
     session_id: str
     assistant_text: str
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class CompactionContext:
+    session_id: str
+    workspace_id: str
+    agent_id: str
+    tokens_before: int = 0
+    message_count: int = 0
+    extras: dict[str, Any] = field(default_factory=dict)
 
 
 @runtime_checkable
@@ -62,3 +74,31 @@ class HookRegistry:
     async def notify_response(self, observation: ResponseObservation) -> None:
         for hook in self._hooks:
             await hook.after_response(observation)
+
+    async def notify_before_compaction(self, context: CompactionContext) -> None:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        for hook in self._hooks:
+            before = getattr(hook, "before_compaction", None)
+            if before is None:
+                continue
+            try:
+                await before(context)
+            except Exception:
+                logger.exception("before_compaction hook failed: %r", hook)
+
+    async def notify_after_compaction(
+        self, context: CompactionContext, result: CompactResult
+    ) -> None:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        for hook in self._hooks:
+            after = getattr(hook, "after_compaction", None)
+            if after is None:
+                continue
+            try:
+                await after(context, result)
+            except Exception:
+                logger.exception("after_compaction hook failed: %r", hook)

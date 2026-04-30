@@ -78,10 +78,27 @@ class AssembleResult(BaseModel):
     estimated_tokens: int = 0
 
 
+CompactionReasonCode = Literal[
+    "compacted",
+    "no_compactable_entries",
+    "below_threshold",
+    "already_compacted_recently",
+    "live_context_still_exceeds_target",
+    "guard_blocked",
+    "summary_failed",
+    "timeout",
+    "aborted",
+    "provider_error_4xx",
+    "provider_error_5xx",
+    "unknown",
+]
+
+
 class CompactResult(BaseModel):
     ok: bool
     compacted: bool
     reason: str | None = None
+    reason_code: CompactionReasonCode | None = None
     summary: str | None = None
     first_kept_entry_id: str | None = None
     tokens_before: int = 0

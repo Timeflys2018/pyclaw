@@ -18,7 +18,31 @@
   "agent": {
     "default_model": "gpt-4o",
     "max_context_tokens": 128000,
-    "compaction_threshold": 0.8
+    "compaction_threshold": 0.8,
+    "max_iterations": 50,
+    "context_window": 128000,
+    "timeouts": {
+      "run_seconds": 300.0,
+      "idle_seconds": 60.0,
+      "tool_seconds": 120.0,
+      "compaction_seconds": 900.0
+    },
+    "retry": {
+      "planning_only_limit": 1,
+      "reasoning_only_limit": 2,
+      "empty_response_limit": 1,
+      "unknown_tool_threshold": 3
+    },
+    "compaction": {
+      "model": null,
+      "threshold": 0.8,
+      "keep_recent_tokens": 20000,
+      "timeout_seconds": 900.0,
+      "truncate_after_compaction": false
+    },
+    "tools": {
+      "max_output_chars": 25000
+    }
   },
   "skills": {
     "directories": [
