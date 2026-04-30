@@ -3,7 +3,7 @@ name = "pyclaw"
 version = "0.1.0"
 description = "Python rewrite of OpenClaw - a multi-channel AI assistant gateway with compute-storage separation"
 readme = "README.md"
-license = "MIT"
+license = "AGPL-3.0-or-later"
 requires-python = ">=3.12"
 authors = [
     { name = "PyClaw Contributors" },

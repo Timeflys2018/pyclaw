@@ -135,4 +135,9 @@ PRs welcome. See the `openspec/` directory for architectural specs and task brea
 
 ## License
 
-MIT
+PyClaw is dual-licensed:
+
+- **[AGPL-3.0](./LICENSE)** — free for open-source projects, personal use, and internal use
+- **[Commercial License](./COMMERCIAL-LICENSE.md)** — required for proprietary/SaaS deployments that cannot comply with AGPL-3.0
+
+Contact `timeflying2018@gmail.com` for commercial licensing inquiries.
