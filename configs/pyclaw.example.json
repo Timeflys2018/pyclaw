@@ -4,8 +4,11 @@
     "port": 8000
   },
   "redis": {
-    "url": "redis://localhost:6379",
-    "key_prefix": "pyclaw:"
+    "host": "localhost",
+    "port": 6379,
+    "password": null,
+    "keyPrefix": "pyclaw:",
+    "transcriptRetentionDays": 7
   },
   "database": {
     "url": "postgresql://pyclaw:pyclaw@localhost:5432/pyclaw"

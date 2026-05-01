@@ -18,3 +18,6 @@ htmlcov/
 .vscode/
 .opencode/
 openspec/
+
+configs/pyclaw.json
+pyclaw.json
