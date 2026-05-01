@@ -1,1 +1,5 @@
-"""Feishu/Lark channel - webhook inbound, API outbound."""
+from __future__ import annotations
+
+from pyclaw.channels.feishu.webhook import FeishuChannelPlugin
+
+__all__ = ["FeishuChannelPlugin"]
