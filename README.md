@@ -123,14 +123,27 @@ git clone https://github.com/Timeflys2018/pyclaw.git
 cd pyclaw
 
 # Install (Python 3.12+)
-pip install -e ".[dev]"
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
 
-# Run (development mode — InMemory sessions, no Redis needed)
-pyclaw
+# Start (one command — auto-builds frontend, detects Redis)
+./scripts/start.sh
 
-# Run with Redis (production sessions)
-# Edit configs/pyclaw.json with your Redis + LLM credentials
-python -m pyclaw.app
+# Or manually:
+.venv/bin/uvicorn pyclaw.app:create_app --factory --host 0.0.0.0 --port 8000 --reload
+```
+
+### Development with Frontend HMR
+
+```bash
+./scripts/start.sh           # Terminal 1: backend (port 8000)
+./scripts/dev-frontend.sh    # Terminal 2: Vite HMR (port 5173, proxies API to 8000)
+```
+
+### Build Frontend Only
+
+```bash
+./scripts/build-frontend.sh  # Builds web/dist/ (served by backend)
 ```
 
 ## Configuration

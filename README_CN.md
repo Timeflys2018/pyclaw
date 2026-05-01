@@ -93,12 +93,24 @@ cd pyclaw
 # 安装（需要 Python 3.12+）
 pip install -e ".[dev]"
 
-# 启动（开发模式 — 无需 Redis）
-pyclaw
+# 启动（一键 — 自动构建前端、检测 Redis）
+./scripts/start.sh
 
-# 带 Redis 启动（生产模式会话持久化）
-# 编辑 configs/pyclaw.json
-python -m pyclaw.app
+# 或手动：
+.venv/bin/uvicorn pyclaw.app:create_app --factory --host 0.0.0.0 --port 8000 --reload
+```
+
+### 前端热更新开发
+
+```bash
+./scripts/start.sh           # 终端 1: 后端 (port 8000)
+./scripts/dev-frontend.sh    # 终端 2: Vite HMR (port 5173, API 代理到 8000)
+```
+
+### 仅构建前端
+
+```bash
+./scripts/build-frontend.sh  # 构建 web/dist/（由后端静态托管）
 ```
 
 ## 配置
@@ -128,10 +140,10 @@ python -m pyclaw.app
 }
 ```
 
-## Docker 部署
+## Docker 部署（可选）
 
 ```bash
-# 一键启动（PyClaw + Redis）
+# 适用于需要容器化部署的场景
 docker compose up
 
 # 访问 http://localhost:8000
