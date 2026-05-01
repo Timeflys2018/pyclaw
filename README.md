@@ -4,6 +4,7 @@
 
 [![License](https://img.shields.io/badge/license-AGPL--3.0%20%2B%20Commercial-blue.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-green.svg)](https://www.python.org/)
+[![Tests](https://img.shields.io/badge/tests-366%20passed-brightgreen.svg)]()
 [![CLA Required](https://img.shields.io/badge/CLA-required-orange.svg)](./CLA.md)
 
 A Python reimplementation of [OpenClaw](https://github.com/openclaw/openclaw), built from the ground up for **compute-storage separation**, **horizontal scaling**, and **modular architecture**.
@@ -12,72 +13,91 @@ A Python reimplementation of [OpenClaw](https://github.com/openclaw/openclaw), b
 
 OpenClaw is a powerful multi-channel AI assistant — but its TypeScript monolith (17,000+ files) tightly couples compute and storage, making it hard to scale beyond a single machine. PyClaw takes the best ideas from OpenClaw and rebuilds them with a production-first architecture:
 
-**Compute-Storage Separation** — The core layer is stateless. Sessions, memory, dreaming state — all live in shared storage (Redis, PostgreSQL). Spin up N instances behind a load balancer and they just work.
+**Compute-Storage Separation** — The core layer is stateless. Sessions live in Redis, workspace config in Redis or files. Spin up N instances behind a load balancer and they just work.
 
-**Horizontal Scaling** — Session affinity routing, distributed write locks (Redis), leader election for background tasks. No single point of compute failure.
+**Horizontal Scaling** — Feishu's native WebSocket cluster mode (up to 50 connections per app), distributed write locks (Redis), session affinity gateway (planned).
 
-**Modular by Design** — Every layer is a Python Protocol. Swap Redis for files in development. Swap SQLite for PostgreSQL+pgvector in production. Add a new channel without touching core.
+**Modular by Design** — Every layer is a Python Protocol. Swap Redis for files in development. Add a new channel without touching core.
 
-**Enterprise & Personal** — Same codebase scales from a single-process dev setup (zero dependencies beyond Python) to multi-instance production with Redis Cluster and PostgreSQL HA.
+**Enterprise & Personal** — Same codebase scales from a single-process dev setup (zero dependencies beyond Python) to multi-instance production with Redis.
+
+## Current Status
+
+| Layer | Status |
+|-------|--------|
+| **Agent Core** | ✅ LLM loop, tools (bash/read/write/edit), compaction, timeouts, retry |
+| **Session Store** | ✅ Redis (production) + InMemory (dev), SessionKey/SessionId rotation |
+| **Feishu Channel** | ✅ WebSocket, streaming CardKit reply, commands (/new /status /history) |
+| **Workspace** | ✅ FileWorkspaceStore + RedisWorkspaceStore, bootstrap context injection |
+| **Context Engine** | ✅ Phase 1 (compaction + bootstrap injection), Phase 2 planned (memory/RAG) |
+| **Web Channel** | 🔲 Planned (HTTP API + WebSocket) |
+| **Memory/Dreaming** | 🔲 Planned (sqlite-vec / pgvector) |
+| **Skill Hub** | 🔲 Planned (ClawHub compatible) |
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Compute Layer (Stateless)                                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐                       │
-│  │ Worker 1 │  │ Worker 2 │  │ Worker N │  ← Scale horizontally │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘                       │
-└───────┼──────────────┼─────────────┼─────────────────────────────┘
-        │              │             │
-        ▼              ▼             ▼
+│  Compute Layer (Stateless Workers)                               │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Agent Runner  │  Context Engine  │  Tool Registry        │   │
+│  │  (LLM loop)   │  (bootstrap+RAG) │  (bash,read,write,ed)│   │
+│  └──────────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Channels                                                 │   │
+│  │  ├── Feishu (WS receiver + CardKit streaming + commands) │   │
+│  │  └── Web (HTTP + WebSocket) [planned]                     │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└───────────────────────────────┬──────────────────────────────────┘
+                                │
+                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Storage Layer (Shared)                                          │
-│  ┌─────────┐  ┌──────────────┐  ┌──────────┐  ┌─────────────┐  │
-│  │  Redis  │  │  PostgreSQL  │  │  Memory  │  │   Config    │  │
-│  │Sessions │  │  + pgvector  │  │  Store   │  │   Store     │  │
-│  │ + Locks │  │  (vectors)   │  │          │  │             │  │
-│  └─────────┘  └──────────────┘  └──────────┘  └─────────────┘  │
+│  ┌─────────────┐  ┌──────────────────┐  ┌────────────────────┐ │
+│  │    Redis     │  │  WorkspaceStore  │  │  Future: PG/SQLite │ │
+│  │  Sessions    │  │  (File or Redis) │  │  Memory + Vectors  │ │
+│  │  Locks       │  │  Bootstrap files │  │                    │ │
+│  │  Affinity    │  │                  │  │                    │ │
+│  │  Dedup       │  │                  │  │                    │ │
+│  └─────────────┘  └──────────────────┘  └────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Key Features
+## Key Features (Implemented)
 
 | Feature | Description |
 |---------|-------------|
-| **Compute-Storage Separation** | Stateless workers + shared storage = true horizontal scaling |
-| **Pluggable Backends** | Redis/File for sessions, PG/SQLite for memory, Redis/flock for locks |
-| **Multi-Channel** | Feishu (Lark) + Web (HTTP/WebSocket), extensible via Protocol |
-| **ClawHub Compatible** | Uses the same [ClawHub](https://clawhub.ai) skill ecosystem (13,000+ skills) |
-| **Dreaming Engine** | Three-phase memory consolidation (light/deep/REM) with distributed scheduling |
-| **Multi-Provider LLM** | OpenAI, Anthropic, Google, Ollama, and 100+ providers via LiteLLM |
-| **Session Affinity** | Sticky routing with automatic failover on instance crash |
-| **Distributed Locking** | Redis SET NX PX + Lua CAS — battle-tested concurrency control |
+| **Agent Loop** | Single-loop design: assemble → LLM → tools → repeat. Streaming, abort, retry, compaction |
+| **Session Rotation** | `/new` creates fresh session, old archived. SessionKey (stable) / SessionId (rotatable) |
+| **Session Commands** | `/new`, `/reset`, `/status`, `/whoami`, `/history`, `/help`, `/idle` |
+| **Feishu WebSocket** | Long-connection mode, no public IP needed, auto-reconnect, native cluster (multi-instance) |
+| **CardKit Streaming** | Streaming card reply with 160ms throttle, automatic text fallback |
+| **Bootstrap Injection** | AGENTS.md (+ SOUL.md, USER.md) injected into system prompt via ContextEngine |
+| **Redis Sessions** | DAG tree session model, distributed write locks, sliding TTL |
+| **Workspace Store** | File or Redis backend, config-driven selection |
+| **Multi-Instance** | Feishu native cluster mode (up to 50 workers), distributed dedup + locks |
 
 ## Project Structure
 
 ```
 src/pyclaw/
-├── core/                 # Compute layer (stateless, minimal)
-│   ├── agent/            # LLM loop, tools, system prompt, compaction
-│   └── hooks.py          # Plugin hook Protocol (extensibility seam)
-├── plugins/              # Optional capabilities (zero core dependency)
-│   ├── memory/           # Memory plugin — embedding, chunking, hybrid search
-│   └── dreaming/         # Dreaming plugin — light/deep/REM memory consolidation
+├── core/                 # Compute layer (stateless)
+│   ├── agent/            # LLM loop, tools, system prompt, compaction, factory
+│   ├── context/          # Bootstrap context loader
+│   ├── context_engine.py # ContextEngine Protocol + DefaultContextEngine
+│   └── hooks.py          # Plugin hook Protocol
+├── channels/             # Channel layer
+│   ├── feishu/           # Feishu/Lark (WS receiver, client, commands, streaming, handler)
+│   ├── session_router.py # SessionKey → SessionId routing + lazy migration
+│   └── web/              # Web channel (planned)
 ├── storage/              # Storage layer (pluggable backends)
-│   ├── protocols.py      # Protocol interfaces (swap backends freely)
-│   ├── session/          # Redis + File backends
-│   ├── memory/           # PostgreSQL + SQLite backends
-│   └── lock/             # Redis + File backends
-├── channels/             # Channel layer (extensible)
-│   ├── feishu/           # Feishu/Lark webhook + API
-│   └── web/              # HTTP API + WebSocket
-├── skills/               # ClawHub compatibility
-│   ├── parser.py         # SKILL.md frontmatter parsing
-│   ├── discovery.py      # Local skill scanning
-│   └── clawhub_client.py # ClawHub REST API
-├── infra/                # Redis client, config, logging
-└── orchestration/        # Health checks, instance lifecycle
+│   ├── session/          # Redis + InMemory session stores
+│   ├── workspace/        # File + Redis workspace stores
+│   └── lock/             # Redis distributed lock (SET NX PX + Lua CAS)
+├── gateway/              # Multi-instance gateway (planned)
+├── infra/                # Redis client, settings, logging
+├── models/               # Shared data models (Pydantic)
+└── app.py                # FastAPI entry point + lifespan
 ```
 
 ## Quick Start
@@ -90,54 +110,95 @@ cd pyclaw
 # Install (Python 3.12+)
 pip install -e ".[dev]"
 
-# Run (development mode — no Redis/PG needed)
+# Run (development mode — InMemory sessions, no Redis needed)
 pyclaw
+
+# Run with Redis (production sessions)
+# Edit configs/pyclaw.json with your Redis + LLM credentials
+python -m pyclaw.app
 ```
+
+## Configuration
+
+```json
+{
+  "server": { "host": "0.0.0.0", "port": 8000 },
+  "storage": { "session_backend": "redis" },
+  "redis": { "host": "localhost", "port": 6379 },
+  "agent": {
+    "default_model": "anthropic/claude-sonnet-4-20250514",
+    "providers": { "anthropic": { "apiKey": "sk-...", "baseURL": "..." } }
+  },
+  "workspaces": { "default": "~/.pyclaw/workspaces", "backend": "file" },
+  "channels": {
+    "feishu": { "enabled": true, "appId": "cli_...", "appSecret": "..." }
+  }
+}
+```
+
+See `configs/pyclaw.example.json` for all options.
 
 ## Deployment Modes
 
-### Personal (Single Machine)
+### Development (Zero Dependencies)
+```json
+{ "storage": { "session_backend": "memory" } }
+```
+No Redis needed. Sessions in-memory (lost on restart).
+
+### Production (Redis)
 ```json
 {
-  "storage": {
-    "session_backend": "file",
-    "memory_backend": "sqlite",
-    "lock_backend": "file"
-  }
+  "storage": { "session_backend": "redis" },
+  "redis": { "host": "your-redis", "port": 6379, "password": "..." }
 }
 ```
-Zero external dependencies. Just Python.
+Persistent sessions, distributed locks, multi-instance ready.
 
-### Enterprise (Multi-Instance)
-```json
-{
-  "storage": {
-    "session_backend": "redis",
-    "memory_backend": "postgres",
-    "lock_backend": "redis"
-  }
-}
+## Tests
+
+```bash
+# Unit tests (no external dependencies)
+.venv/bin/pytest tests/ --ignore=tests/e2e
+
+# With real Redis
+PYCLAW_TEST_REDIS_HOST=localhost .venv/bin/pytest tests/integration/
+
+# E2E with real LLM
+PYCLAW_LLM_API_KEY=sk-... .venv/bin/pytest tests/e2e/
 ```
-N workers behind a load balancer. Redis for hot state. PostgreSQL for durable memory.
 
-## Skill Hub Compatibility
+366 unit/integration tests, 6 E2E tests with real LLM.
 
-PyClaw is fully compatible with OpenClaw's [ClawHub](https://clawhub.ai) skill ecosystem:
+## Documentation
 
-- Reads the same `SKILL.md` format (YAML frontmatter + Markdown instructions)
-- Shares skill directory with OpenClaw (`~/.openclaw/skills/`)
-- Same ClawHub REST API client (search, install, update)
-- Skills installed by either tool are available to both
+- [Architecture Decisions (D1-D25)](./docs/en/architecture-decisions.md) — all design choices and rationale
+- [Session System Design](./docs/en/session-design.md) — SessionKey/SessionId, commands, idle reset
+- [Context Engine](./docs/en/context-engine.md) — assemble/ingest/compact Protocol
+- [Compaction Guide](./docs/en/compaction-guide.md) — multi-stage context summarization
+- [Timeouts & Abort](./docs/en/timeouts-and-abort.md) — run/idle/tool timeout design
+
+Chinese docs: [docs/zh/](./docs/zh/)
+
+## Roadmap
+
+See `openspec/changes/pyclaw-architecture/tasks.md` for the full breakdown. Major remaining items:
+
+- **Web Channel** — HTTP API + WebSocket streaming (roadmap 8.x)
+- **Memory Store** — SQLite-vec (dev) + PostgreSQL+pgvector (prod) (roadmap 9.x)
+- **Dreaming Engine** — Light/Deep/REM memory consolidation (roadmap 10.x)
+- **Skill Hub** — ClawHub SKILL.md parsing, discovery, installation (roadmap 5.x)
+- **Session Affinity Gateway** — multi-instance message routing (when needed)
 
 ## Relationship to OpenClaw
 
-PyClaw is inspired by [OpenClaw](https://github.com/openclaw/openclaw) and designed to be compatible with its [ClawHub](https://clawhub.ai) skill ecosystem. PyClaw is an **independent Python reimplementation**, not a fork. It inherits the domain model (sessions, memory, dreaming, channels, skills) but redesigns the architecture for compute-storage separation and horizontal scaling.
+PyClaw is inspired by [OpenClaw](https://github.com/openclaw/openclaw) and designed to be compatible with its skill ecosystem. PyClaw is an **independent Python reimplementation**, not a fork. It inherits the domain model (sessions, memory, channels, skills) but redesigns the architecture for compute-storage separation.
 
 ## Contributing
 
 PRs welcome. See the `openspec/` directory for architectural specs and task breakdown.
 
-**Before submitting a PR**: Please read and agree to the [Contributor License Agreement (CLA)](./CLA.md). This is required so the project can maintain its dual-license model.
+**Before submitting a PR**: Please read and agree to the [Contributor License Agreement (CLA)](./CLA.md).
 
 ## License
 
