@@ -29,6 +29,17 @@ class SessionHeader(BaseModel):
     agent_id: str
     created_at: str = Field(default_factory=now_iso)
     parent_session: str | None = None
+    session_key: str = ""
+    last_interaction_at: str | None = None
+    idle_minutes_override: int | None = None
+
+
+class SessionHistorySummary(BaseModel):
+    session_id: str
+    created_at: str
+    message_count: int
+    last_message_at: str | None
+    parent_session_id: str | None
 
 
 class SessionEntryBase(BaseModel):
