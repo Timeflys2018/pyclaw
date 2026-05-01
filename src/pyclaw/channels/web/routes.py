@@ -39,6 +39,7 @@ class SessionListItem(BaseModel):
     message_count: int
     last_interaction_at: str | None
     parent_session_id: str | None
+    title: str | None = None
 
 
 class CreateSessionResponse(BaseModel):
@@ -64,16 +65,28 @@ async def list_sessions(
     store = _get_store()
     session_key = f"web:{user_id}"
     summaries = await store.list_session_history(session_key)
-    return [
-        SessionListItem(
-            id=s.session_id,
-            created_at=s.created_at,
-            message_count=s.message_count,
-            last_interaction_at=s.last_message_at,
-            parent_session_id=s.parent_session_id,
+    items: list[SessionListItem] = []
+    for s in summaries:
+        title: str | None = None
+        tree = await store.load(s.session_id)
+        if tree is not None:
+            ordered = [tree.entries[eid] for eid in tree.order if eid in tree.entries]
+            for entry in ordered:
+                if isinstance(entry, MessageEntry) and entry.role == "user":
+                    content = entry.content if isinstance(entry.content, str) else ""
+                    title = content[:50] if content else None
+                    break
+        items.append(
+            SessionListItem(
+                id=s.session_id,
+                created_at=s.created_at,
+                message_count=s.message_count,
+                last_interaction_at=s.last_message_at,
+                parent_session_id=s.parent_session_id,
+                title=title,
+            )
         )
-        for s in summaries
-    ]
+    return items
 
 
 @web_router.post("/sessions")

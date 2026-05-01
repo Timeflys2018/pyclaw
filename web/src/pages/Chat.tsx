@@ -50,12 +50,14 @@ export default function Chat() {
     if (wsState === 'ready' && token) {
       fetch('/api/sessions', { headers: { Authorization: `Bearer ${token}` } })
         .then((r) => r.ok ? r.json() : [])
-        .then((sessions: Array<{ id: string; created_at?: string; message_count?: number }>) => {
+        .then((sessions: Array<{ id: string; created_at?: string; message_count?: number; title?: string | null; last_interaction_at?: string | null }>) => {
           if (sessions.length > 0) {
             const loaded = sessions.map((s) => ({
               id: s.id,
-              title: s.id.split(':').pop()?.slice(0, 8) ?? 'Session',
-              updatedAt: s.created_at ? new Date(s.created_at).getTime() : Date.now(),
+              title: s.title || 'New chat',
+              updatedAt: s.last_interaction_at
+                ? new Date(s.last_interaction_at).getTime()
+                : s.created_at ? new Date(s.created_at).getTime() : Date.now(),
               active: true,
             }))
             setConversations(loaded)
@@ -281,8 +283,6 @@ export default function Chat() {
 
   return (
     <div className="h-screen flex flex-col bg-[var(--c-bg)] text-[var(--c-text)]">
-      {isAdmin && <ClusterPanel workers={workers} />}
-
       <header className="flex items-center justify-between h-13 px-4 border-b border-[var(--c-border)] shrink-0 bg-[var(--c-bg)]">
         <div className="flex items-center gap-2">
           <span className="text-sm font-display font-semibold tracking-tight">🐾 PyClaw</span>
@@ -326,6 +326,8 @@ export default function Chat() {
           onAbort={handleAbort}
         />
       </div>
+
+      {isAdmin && <ClusterPanel workers={workers} />}
 
       {pendingApproval && (
         <ToolApprovalModal
