@@ -5,7 +5,12 @@ from pyclaw.storage.protocols import ConfigStore, LockManager, MemoryStore, Sess
 from pyclaw.storage.session.base import InMemorySessionStore
 from pyclaw.storage.session.factory import create_session_store
 from pyclaw.storage.session.redis import RedisSessionStore, SessionLockError
-from pyclaw.storage.workspace import FileWorkspaceStore, WorkspaceStore
+from pyclaw.storage.workspace import (
+    FileWorkspaceStore,
+    RedisWorkspaceStore,
+    WorkspaceStore,
+    create_workspace_store,
+)
 
 __all__ = [
     "ConfigStore",
@@ -16,8 +21,10 @@ __all__ = [
     "MemoryStore",
     "RedisLockManager",
     "RedisSessionStore",
+    "RedisWorkspaceStore",
     "SessionLockError",
     "SessionStore",
     "WorkspaceStore",
     "create_session_store",
+    "create_workspace_store",
 ]

@@ -12,7 +12,7 @@ from pyclaw.infra.settings import load_settings
 from pyclaw.storage.lock.redis import RedisLockManager
 from pyclaw.storage.protocols import SessionStore
 from pyclaw.storage.session.factory import create_session_store
-from pyclaw.storage.workspace.file import FileWorkspaceStore
+from pyclaw.storage.workspace.factory import create_workspace_store
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     runner_deps = create_agent_runner_deps(settings, app.state.session_store)
     app.state.runner_deps = runner_deps
 
-    workspace_store = FileWorkspaceStore()
+    workspace_store = create_workspace_store(settings, redis_client=redis_client)
     app.state.workspace_store = workspace_store
 
     app.state.feishu_channel = None
