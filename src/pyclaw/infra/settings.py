@@ -109,7 +109,7 @@ class ChannelsSettings(BaseSettings):
 
 
 class WorkspaceSettings(BaseSettings):
-    default: str = "~/.pyclaw/workspace"
+    default: str = "~/.pyclaw/workspaces"
     backend: str = Field("file", alias="backend")
     bootstrap_files: list[str] = Field(
         default_factory=lambda: ["AGENTS.md"], alias="bootstrapFiles"

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
@@ -54,6 +55,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         dedup = FeishuDedup(redis_client=app.state.redis_client)
         feishu_client = FeishuClient(settings.channels.feishu)
+        workspace_base = Path(settings.workspaces.default).expanduser()
         feishu_channel = FeishuChannelPlugin(
             settings.channels.feishu,
             feishu_client,
@@ -61,6 +63,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             dedup,
             workspace_store,
             bootstrap_files=settings.workspaces.bootstrap_files,
+            workspace_base=workspace_base,
         )
         app.state.feishu_channel = feishu_channel
         asyncio.create_task(feishu_channel.start())

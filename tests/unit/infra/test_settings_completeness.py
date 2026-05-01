@@ -54,7 +54,7 @@ def test_feishu_group_context_size_default() -> None:
 
 def test_workspaces_default() -> None:
     s = _parse({})
-    assert s.workspaces.default == "~/.pyclaw/workspace"
+    assert s.workspaces.default == "~/.pyclaw/workspaces"
 
 
 def test_full_pyclaw_json_parses_without_error(tmp_path) -> None:
@@ -77,7 +77,7 @@ def test_full_pyclaw_json_parses_without_error(tmp_path) -> None:
                            "timeout_seconds": 900.0, "truncate_after_compaction": False},
             "tools": {"max_output_chars": 25000},
         },
-        "workspaces": {"default": "~/.pyclaw/workspace"},
+        "workspaces": {"default": "~/.pyclaw/workspaces"},
         "channels": {
             "feishu": {"enabled": False, "appId": "", "appSecret": "",
                        "sessionScope": "chat", "groupContext": "recent", "groupContextSize": 20},

@@ -91,15 +91,15 @@ class DefaultContextEngine:
         if self._workspace_store is None:
             return AssembleResult(messages=list(messages), system_prompt_addition=None)
 
-        if session_id in self._bootstrap_cache:
-            bootstrap_str = self._bootstrap_cache[session_id]
+        workspace_id = session_id.replace(":", "_")
+        if workspace_id in self._bootstrap_cache:
+            bootstrap_str = self._bootstrap_cache[workspace_id]
         else:
             from pyclaw.core.context.bootstrap import load_bootstrap_context
-            workspace_id = session_id.replace(":", "_")
             bootstrap_str = await load_bootstrap_context(
                 workspace_id, self._workspace_store, self._bootstrap_files
             )
-            self._bootstrap_cache[session_id] = bootstrap_str
+            self._bootstrap_cache[workspace_id] = bootstrap_str
 
         return AssembleResult(
             messages=list(messages),

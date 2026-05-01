@@ -32,6 +32,7 @@ class FeishuChannelPlugin:
         dedup: FeishuDedup,
         workspace_store: WorkspaceStore,
         bootstrap_files: list[str] | None = None,
+        workspace_base: Path | None = None,
     ) -> None:
         self._settings = settings
         self._feishu_client = feishu_client
@@ -39,6 +40,7 @@ class FeishuChannelPlugin:
         self._dedup = dedup
         self._workspace_store = workspace_store
         self._bootstrap_files: list[str] = bootstrap_files or ["AGENTS.md"]
+        self._workspace_base: Path = workspace_base or Path.home() / ".pyclaw/workspaces"
         self._ws_client: lark.ws.Client | None = None
         self._main_loop: asyncio.AbstractEventLoop | None = None
         self._ws_loop: asyncio.AbstractEventLoop | None = None
@@ -73,7 +75,7 @@ class FeishuChannelPlugin:
             workspace_store=self._workspace_store,
             bot_open_id=bot_open_id,
             session_router=session_router,
-            workspace_base=Path.home() / ".pyclaw/workspaces",
+            workspace_base=self._workspace_base,
             bootstrap_files=self._bootstrap_files,
         )
 
