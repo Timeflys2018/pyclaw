@@ -42,6 +42,9 @@ class SessionRouter:
         tree = await self.store.create_new_session(
             session_key, workspace_id, agent_id, parent_session_id=old_id
         )
+        if old_id is not None:
+            from pyclaw.channels.feishu.queue import cleanup_session
+            cleanup_session(old_id)
         return tree.header.id, tree
 
     async def update_last_interaction(self, session_id: str) -> None:

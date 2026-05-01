@@ -29,7 +29,7 @@ class SessionStore(Protocol):
 
 
 def _generate_session_id(session_key: str) -> str:
-    suffix = secrets.token_hex(4)
+    suffix = secrets.token_hex(8)
     return f"{session_key}:s:{suffix}"
 
 

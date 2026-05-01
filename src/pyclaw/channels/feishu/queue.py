@@ -18,6 +18,13 @@ async def enqueue(session_id: str, coro: Coroutine[Any, Any, None]) -> None:
     await _queues[session_id].put(coro)
 
 
+def cleanup_session(session_id: str) -> None:
+    task = _consumers.pop(session_id, None)
+    if task is not None and not task.done():
+        task.cancel()
+    _queues.pop(session_id, None)
+
+
 async def _consume(session_id: str) -> None:
     q = _queues[session_id]
     while True:
