@@ -23,6 +23,12 @@ from pyclaw.models import AssembleResult, CompactResult
 from pyclaw.storage.workspace.base import WorkspaceStore
 
 
+def _derive_workspace_id(session_id: str) -> str:
+    idx = session_id.find(":s:")
+    session_key = session_id[:idx] if idx != -1 else session_id
+    return session_key.replace(":", "_")
+
+
 @runtime_checkable
 class ContextEngine(Protocol):
     async def assemble(
@@ -77,7 +83,7 @@ class DefaultContextEngine:
         self._compaction_timeout_s = compaction_timeout_s
         self._chunk_token_budget = chunk_token_budget
         self._workspace_store = workspace_store
-        self._bootstrap_files: list[str] = bootstrap_files or ["AGENTS.md"]
+        self._bootstrap_files: list[str] = bootstrap_files if bootstrap_files is not None else ["AGENTS.md"]
         self._bootstrap_cache: dict[str, str] = {}
 
     async def assemble(
@@ -91,7 +97,7 @@ class DefaultContextEngine:
         if self._workspace_store is None:
             return AssembleResult(messages=list(messages), system_prompt_addition=None)
 
-        workspace_id = session_id.replace(":", "_")
+        workspace_id = _derive_workspace_id(session_id)
         if workspace_id in self._bootstrap_cache:
             bootstrap_str = self._bootstrap_cache[workspace_id]
         else:

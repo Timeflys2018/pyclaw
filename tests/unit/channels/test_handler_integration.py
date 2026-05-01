@@ -248,3 +248,153 @@ async def test_cmd_new_with_args_rotates_and_enqueues_followup(tmp_path: Path) -
 
     followup_enqueued = [s for s, _ in all_enqueued if s == new_sid]
     assert len(followup_enqueued) >= 1
+
+
+def _make_ctx_with_workspace_store(store: InMemorySessionStore, tmp_path: Path) -> FeishuContext:
+    from pyclaw.core.agent.llm import LLMClient, LLMStreamChunk, LLMUsage
+    from pyclaw.core.agent.runner import AgentRunnerDeps
+    from pyclaw.core.agent.tools.registry import ToolRegistry
+    from pyclaw.core.hooks import HookRegistry
+    from pyclaw.models import AgentRunConfig
+
+    class _OneShotLLM(LLMClient):
+        def __init__(self) -> None:
+            super().__init__(default_model="fake")
+
+        async def stream(self, *, messages, model=None, tools=None, system=None,
+                         idle_seconds=0.0, abort_event=None):
+            yield LLMStreamChunk(text_delta="hi")
+            yield LLMStreamChunk(finish_reason="stop", usage=LLMUsage())
+
+    ws_store = FileWorkspaceStore(base_dir=tmp_path / "workspaces")
+    deps = AgentRunnerDeps(
+        llm=_OneShotLLM(),
+        tools=ToolRegistry(),
+        hooks=HookRegistry(),
+        session_store=store,
+        config=AgentRunConfig(),
+        workspace_store=ws_store,
+    )
+
+    dedup = FeishuDedup()
+    router = SessionRouter(store=store)
+
+    return FeishuContext(
+        settings=FeishuSettings(enabled=True, app_id="cli_x", app_secret="s"),
+        feishu_client=MagicMock(reply_text=AsyncMock(return_value=None), _client=MagicMock()),
+        deps=deps,
+        dedup=dedup,
+        workspace_store=ws_store,
+        bot_open_id="bot_open_id",
+        session_router=router,
+        workspace_base=tmp_path / "workspaces",
+    )
+
+
+@pytest.mark.asyncio
+async def test_channel_skips_bootstrap_when_deps_has_workspace_store(tmp_path: Path) -> None:
+    store = InMemorySessionStore()
+    ctx = _make_ctx_with_workspace_store(store, tmp_path)
+    ws_id = "feishu_cli_x_ou_test"
+    (tmp_path / "workspaces" / ws_id).mkdir(parents=True)
+    (tmp_path / "workspaces" / ws_id / "AGENTS.md").write_text("engine handles this")
+
+    event = _make_text_event("hello", message_id="msg_guard_001")
+
+    extra_systems_seen: list[str] = []
+    original_dispatch = None
+
+    async def _capture_dispatch_and_reply(inbound, ctx, message_id, workspace_path, extra_system):
+        extra_systems_seen.append(extra_system)
+
+    async def _run_immediately(session_id: str, coro) -> None:
+        await coro
+
+    with patch("pyclaw.channels.feishu.handler.enqueue", side_effect=_run_immediately):
+        with patch("pyclaw.channels.feishu.handler._dispatch_and_reply",
+                   side_effect=_capture_dispatch_and_reply):
+            await handle_feishu_message(event, ctx)
+
+    assert len(extra_systems_seen) == 1
+    assert extra_systems_seen[0] == ""
+
+
+@pytest.mark.asyncio
+async def test_channel_injects_bootstrap_when_deps_missing_workspace_store(tmp_path: Path) -> None:
+    store = InMemorySessionStore()
+    ctx = _make_ctx(store, tmp_path)
+    ws_id = "feishu_cli_x_ou_test"
+    (tmp_path / "workspaces" / ws_id).mkdir(parents=True)
+    (tmp_path / "workspaces" / ws_id / "AGENTS.md").write_text("channel fallback content")
+
+    event = _make_text_event("hello", message_id="msg_fallback_001")
+
+    extra_systems_seen: list[str] = []
+
+    async def _capture_dispatch_and_reply(inbound, ctx, message_id, workspace_path, extra_system):
+        extra_systems_seen.append(extra_system)
+
+    async def _run_immediately(session_id: str, coro) -> None:
+        await coro
+
+    with patch("pyclaw.channels.feishu.handler.enqueue", side_effect=_run_immediately):
+        with patch("pyclaw.channels.feishu.handler._dispatch_and_reply",
+                   side_effect=_capture_dispatch_and_reply):
+            await handle_feishu_message(event, ctx)
+
+    assert len(extra_systems_seen) == 1
+    assert "channel fallback content" in extra_systems_seen[0]
+
+
+@pytest.mark.asyncio
+async def test_workspace_base_comes_from_context_not_hardcoded(tmp_path: Path) -> None:
+    store = InMemorySessionStore()
+    custom_base = tmp_path / "custom_workspace"
+    custom_base.mkdir()
+
+    from pyclaw.core.agent.llm import LLMClient, LLMStreamChunk, LLMUsage
+    from pyclaw.core.agent.runner import AgentRunnerDeps
+    from pyclaw.core.agent.tools.registry import ToolRegistry
+    from pyclaw.core.hooks import HookRegistry
+    from pyclaw.models import AgentRunConfig
+
+    class _OneShotLLM(LLMClient):
+        def __init__(self) -> None:
+            super().__init__(default_model="fake")
+        async def stream(self, *, messages, model=None, tools=None, system=None,
+                         idle_seconds=0.0, abort_event=None):
+            yield LLMStreamChunk(text_delta="hi")
+            yield LLMStreamChunk(finish_reason="stop", usage=LLMUsage())
+
+    deps = AgentRunnerDeps(
+        llm=_OneShotLLM(), tools=ToolRegistry(), hooks=HookRegistry(),
+        session_store=store, config=AgentRunConfig(),
+    )
+    dedup = FeishuDedup()
+    ws_store = FileWorkspaceStore(base_dir=custom_base)
+    router = SessionRouter(store=store)
+
+    ctx = FeishuContext(
+        settings=FeishuSettings(enabled=True, app_id="cli_x", app_secret="s"),
+        feishu_client=MagicMock(reply_text=AsyncMock(return_value=None), _client=MagicMock()),
+        deps=deps, dedup=dedup, workspace_store=ws_store,
+        bot_open_id="bot", session_router=router,
+        workspace_base=custom_base,
+    )
+
+    event = _make_text_event("test", message_id="msg_base_001")
+
+    workspace_paths_seen: list[Path] = []
+
+    async def _capture(inbound, ctx, message_id, workspace_path, extra_system):
+        workspace_paths_seen.append(workspace_path)
+
+    async def _run_immediately(session_id: str, coro) -> None:
+        await coro
+
+    with patch("pyclaw.channels.feishu.handler.enqueue", side_effect=_run_immediately):
+        with patch("pyclaw.channels.feishu.handler._dispatch_and_reply", side_effect=_capture):
+            await handle_feishu_message(event, ctx)
+
+    assert len(workspace_paths_seen) == 1
+    assert workspace_paths_seen[0].parent == custom_base
