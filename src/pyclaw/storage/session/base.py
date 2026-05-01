@@ -5,7 +5,7 @@ import time
 from typing import Protocol, runtime_checkable
 
 from pyclaw.models import SessionEntry, SessionTree
-from pyclaw.models.session import SessionHeader, SessionHistorySummary, now_iso
+from pyclaw.models.session import MessageEntry, SessionHeader, SessionHistorySummary, now_iso
 
 
 @runtime_checkable
@@ -109,13 +109,12 @@ class InMemorySessionStore:
                     parent_session_id=None,
                 ))
                 continue
-            msg_entries = [e for e in tree.entries.values() if hasattr(e, "role")]
-            last_ts = msg_entries[-1].timestamp if msg_entries else None
+            msg_count = sum(1 for e in tree.entries.values() if isinstance(e, MessageEntry))
             result.append(SessionHistorySummary(
                 session_id=sid,
                 created_at=tree.header.created_at,
-                message_count=len(msg_entries),
-                last_message_at=last_ts,
+                message_count=msg_count,
+                last_message_at=tree.header.last_interaction_at,
                 parent_session_id=tree.header.parent_session,
             ))
         return result

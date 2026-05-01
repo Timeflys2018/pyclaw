@@ -173,11 +173,19 @@ class RedisSessionStore:
                 ))
                 continue
             header = SessionHeader.model_validate_json(hdr_raw)
-            msg_count = await self._client.hlen(self._entries_key(sid))
+            all_entries = await self._client.hvals(self._entries_key(sid))
+            msg_count = 0
+            for raw in all_entries:
+                try:
+                    entry_data = json.loads(raw)
+                    if entry_data.get("type") == "message":
+                        msg_count += 1
+                except Exception:
+                    pass
             result.append(SessionHistorySummary(
                 session_id=sid,
                 created_at=header.created_at,
-                message_count=int(msg_count),
+                message_count=msg_count,
                 last_message_at=header.last_interaction_at,
                 parent_session_id=header.parent_session,
             ))
