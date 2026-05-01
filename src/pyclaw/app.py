@@ -69,7 +69,45 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         asyncio.create_task(feishu_channel.start())
         logger.info("Feishu channel starting...")
 
+    app.state.worker_registry = None
+    heartbeat_task = None
+    if settings.channels.web.enabled:
+        from pyclaw.channels.session_router import SessionRouter
+        from pyclaw.channels.web.admin import admin_router, set_admin_registry
+        from pyclaw.channels.web.auth_routes import auth_router
+        from pyclaw.channels.web.openai_compat import openai_router, set_openai_deps
+        from pyclaw.channels.web.routes import set_web_deps, web_router
+        from pyclaw.channels.web.websocket import ws_router
+        from pyclaw.gateway.worker_registry import WorkerRegistry
+
+        app.state.web_settings = settings.channels.web
+
+        session_router = SessionRouter(store=app.state.session_store)
+        set_web_deps(store=app.state.session_store, session_router=session_router)
+        set_openai_deps(runner_deps, session_router)
+
+        worker_id = f"worker-{id(app)}"
+        worker_registry = WorkerRegistry(
+            redis_client=redis_client,
+            worker_id=worker_id,
+            heartbeat_interval=settings.channels.web.heartbeat_interval,
+        )
+        app.state.worker_registry = worker_registry
+        set_admin_registry(worker_registry)
+
+        await worker_registry.register()
+        heartbeat_task = asyncio.create_task(
+            _worker_heartbeat_loop(worker_registry)
+        )
+
+        logger.info("Web channel enabled (worker=%s)", worker_id)
+
     yield
+
+    if heartbeat_task is not None:
+        heartbeat_task.cancel()
+    if app.state.worker_registry is not None:
+        await app.state.worker_registry.deregister()
 
     if app.state.feishu_channel is not None:
         await app.state.feishu_channel.stop()
@@ -78,12 +116,53 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         await close_client(redis_client)
 
 
+async def _worker_heartbeat_loop(registry) -> None:
+    try:
+        while True:
+            await asyncio.sleep(registry._heartbeat_interval)
+            try:
+                await registry.heartbeat()
+            except Exception:
+                logger.warning("Worker heartbeat failed", exc_info=True)
+    except asyncio.CancelledError:
+        return
+
+
 async def get_session_store(request: Request) -> SessionStore:
     return request.app.state.session_store
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
     app = FastAPI(title="PyClaw", version="0.1.0", lifespan=_lifespan)
+
+    if settings.channels.web.enabled:
+        from starlette.middleware.cors import CORSMiddleware
+
+        from pyclaw.channels.web.admin import admin_router
+        from pyclaw.channels.web.auth_routes import auth_router
+        from pyclaw.channels.web.openai_compat import openai_router
+        from pyclaw.channels.web.routes import web_router
+        from pyclaw.channels.web.websocket import ws_router
+
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.channels.web.cors_origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+        app.include_router(auth_router)
+        app.include_router(web_router)
+        app.include_router(ws_router)
+        app.include_router(openai_router)
+        app.include_router(admin_router)
+
+        spa_dir = Path(__file__).resolve().parent.parent.parent / "web" / "dist"
+        if spa_dir.is_dir():
+            from pyclaw.channels.web.spa import SPAStaticFiles
+
+            app.mount("/", SPAStaticFiles(directory=str(spa_dir), html=True), name="spa")
 
     @app.get("/health")
     async def health(request: Request) -> dict:

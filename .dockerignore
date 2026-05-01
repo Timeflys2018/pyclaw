@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+web/node_modules/
+web/.vite/
+tests/
+openspec/
+docs/
+.pytest_cache/
+.mypy_cache/

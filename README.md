@@ -4,7 +4,7 @@
 
 [![License](https://img.shields.io/badge/license-AGPL--3.0%20%2B%20Commercial-blue.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-green.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-366%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-587%20passed-brightgreen.svg)]()
 [![CLA Required](https://img.shields.io/badge/CLA-required-orange.svg)](./CLA.md)
 
 A Python reimplementation of [OpenClaw](https://github.com/openclaw/openclaw), built from the ground up for **compute-storage separation**, **horizontal scaling**, and **modular architecture**.
@@ -30,9 +30,9 @@ OpenClaw is a powerful multi-channel AI assistant — but its TypeScript monolit
 | **Feishu Channel** | ✅ WebSocket, streaming CardKit reply, commands (/new /status /history) |
 | **Workspace** | ✅ FileWorkspaceStore + RedisWorkspaceStore, bootstrap context injection |
 | **Context Engine** | ✅ Phase 1 (compaction + bootstrap injection), Phase 2 planned (memory/RAG) |
-| **Web Channel** | 🔲 Planned (HTTP API + WebSocket) |
+| **Web Channel** | ✅ Per-user multiplexed WebSocket, REST API, OpenAI-compat SSE, React SPA, cluster observation |
 | **Memory/Dreaming** | 🔲 Planned (sqlite-vec / pgvector) |
-| **Skill Hub** | 🔲 Planned (ClawHub compatible) |
+| **Skill Hub** | ✅ ClawHub compatible: SKILL.md parsing, discovery, eligibility, prompt injection, install CLI |
 
 ## Architecture
 
@@ -76,6 +76,12 @@ OpenClaw is a powerful multi-channel AI assistant — but its TypeScript monolit
 | **Redis Sessions** | DAG tree session model, distributed write locks, sliding TTL |
 | **Workspace Store** | File or Redis backend, config-driven selection |
 | **Multi-Instance** | Feishu native cluster mode (up to 50 workers), distributed dedup + locks |
+| **Skill Hub** | ClawHub-compatible skill ecosystem: SKILL.md parsing, 5-layer discovery, eligibility filtering, prompt injection with budget, `pyclaw-skill` CLI |
+| **Web Channel** | Per-user multiplexed WebSocket, JWT auth, streaming chat, tool approval, OpenAI-compat `/v1/chat/completions` SSE, React SPA, cluster observation |
+
+### Web Channel Preview
+
+![PyClaw Web Channel](./docs/assets/web-channel-chat.png)
 
 ## Project Structure
 
@@ -94,6 +100,15 @@ src/pyclaw/
 │   ├── session/          # Redis + InMemory session stores
 │   ├── workspace/        # File + Redis workspace stores
 │   └── lock/             # Redis distributed lock (SET NX PX + Lua CAS)
+├── skills/               # Skill Hub (ClawHub compatible)
+│   ├── parser.py         # SKILL.md YAML frontmatter + body parser
+│   ├── discovery.py      # 5-layer directory scanner + dedup
+│   ├── eligibility.py    # Runtime requirement checks (bins, env, OS)
+│   ├── prompt.py         # XML prompt injection with budget enforcement
+│   ├── clawhub_client.py # ClawHub REST API client (search, download)
+│   └── installer.py      # ZIP extraction + lockfile management
+├── cli/                  # CLI tools
+│   └── skills.py         # pyclaw-skill CLI (list, search, install, check)
 ├── gateway/              # Multi-instance gateway (planned)
 ├── infra/                # Redis client, settings, logging
 ├── models/               # Shared data models (Pydantic)
@@ -130,6 +145,11 @@ python -m pyclaw.app
     "providers": { "anthropic": { "apiKey": "sk-...", "baseURL": "..." } }
   },
   "workspaces": { "default": "~/.pyclaw/workspaces", "backend": "file" },
+  "skills": {
+    "workspaceSkillsDir": "skills",
+    "managedSkillsDir": "~/.openclaw/skills",
+    "clawhubBaseUrl": "https://clawhub.ai"
+  },
   "channels": {
     "feishu": { "enabled": true, "appId": "cli_...", "appSecret": "..." }
   }
@@ -168,7 +188,7 @@ PYCLAW_TEST_REDIS_HOST=localhost .venv/bin/pytest tests/integration/
 PYCLAW_LLM_API_KEY=sk-... .venv/bin/pytest tests/e2e/
 ```
 
-366 unit/integration tests, 6 E2E tests with real LLM.
+587 unit/integration tests, 6 E2E tests with real LLM.
 
 ## Documentation
 
@@ -177,6 +197,7 @@ PYCLAW_LLM_API_KEY=sk-... .venv/bin/pytest tests/e2e/
 - [Context Engine](./docs/en/context-engine.md) — assemble/ingest/compact Protocol
 - [Compaction Guide](./docs/en/compaction-guide.md) — multi-stage context summarization
 - [Timeouts & Abort](./docs/en/timeouts-and-abort.md) — run/idle/tool timeout design
+- [Skill Hub Compatibility](./docs/en/skill-hub-compatibility.md) — ClawHub integration, SKILL.md format, discovery
 
 Chinese docs: [docs/zh/](./docs/zh/)
 
@@ -184,10 +205,10 @@ Chinese docs: [docs/zh/](./docs/zh/)
 
 See `openspec/changes/pyclaw-architecture/tasks.md` for the full breakdown. Major remaining items:
 
-- **Web Channel** — HTTP API + WebSocket streaming (roadmap 8.x)
+- ~~**Web Channel**~~ — ✅ Done: multiplexed WebSocket, OpenAI-compat SSE, React SPA, JWT auth, tool approval
 - **Memory Store** — SQLite-vec (dev) + PostgreSQL+pgvector (prod) (roadmap 9.x)
 - **Dreaming Engine** — Light/Deep/REM memory consolidation (roadmap 10.x)
-- **Skill Hub** — ClawHub SKILL.md parsing, discovery, installation (roadmap 5.x)
+- ~~**Skill Hub**~~ — ✅ Done: ClawHub SKILL.md parsing, discovery, installation, CLI
 - **Session Affinity Gateway** — multi-instance message routing (when needed)
 
 ## Relationship to OpenClaw

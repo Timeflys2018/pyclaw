@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  pyclaw:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - PYCLAW_STORAGE_SESSION_BACKEND=redis
+      - PYCLAW_REDIS_HOST=redis
+    volumes:
+      - ./configs:/app/configs:ro
+      - pyclaw-workspaces:/app/workspaces
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    command: redis-server --appendonly yes
+
+volumes:
+  redis-data:
+  pyclaw-workspaces:
