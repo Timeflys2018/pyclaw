@@ -43,6 +43,7 @@ from pyclaw.models import (
     MessageEntry,
     SessionHeader,
     SessionTree,
+    TextBlock,
     TextChunk,
     ToolCallEnd,
     ToolCallStart,
@@ -160,12 +161,21 @@ async def run_agent_stream(
         agent_id=request.agent_id,
     )
 
+    user_entry_content: Any
+    if request.attachments:
+        user_entry_content = [
+            *request.attachments,
+            TextBlock(type="text", text=request.user_message),
+        ]
+    else:
+        user_entry_content = request.user_message
+
     user_entry = MessageEntry(
         id=generate_entry_id(set(tree.entries.keys())),
         parent_id=tree.leaf_id,
         timestamp=now_iso(),
         role="user",
-        content=request.user_message,
+        content=user_entry_content,
     )
     await _append(deps, tree, user_entry)
 

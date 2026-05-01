@@ -1,8 +1,5 @@
 {
-  "server": {
-    "host": "0.0.0.0",
-    "port": 8000
-  },
+  "server": { "host": "0.0.0.0", "port": 8000 },
   "redis": {
     "host": "localhost",
     "port": 6379,
@@ -10,24 +7,10 @@
     "keyPrefix": "pyclaw:",
     "transcriptRetentionDays": 7
   },
-  "database": {
-    "url": "postgresql://pyclaw:pyclaw@localhost:5432/pyclaw"
-  },
-  "storage": {
-    "session_backend": "redis",
-    "memory_backend": "sqlite",
-    "lock_backend": "redis"
-  },
+  "storage": { "session_backend": "memory", "memory_backend": "sqlite", "lock_backend": "file" },
   "agent": {
     "default_model": "gpt-4o",
-    "max_context_tokens": 128000,
-    "providers": {
-      "openai": {
-        "apiKey": null,
-        "baseURL": null
-      }
-    },
-    "compaction_threshold": 0.8,
+    "providers": { "openai": { "apiKey": null, "baseURL": null } },
     "max_iterations": 50,
     "context_window": 128000,
     "timeouts": {
@@ -49,35 +32,18 @@
       "timeout_seconds": 900.0,
       "truncate_after_compaction": false
     },
-    "tools": {
-      "max_output_chars": 25000
-    }
+    "tools": { "max_output_chars": 25000 }
   },
-  "skills": {
-    "directories": [
-      "~/.openclaw/skills",
-      "./skills"
-    ],
-    "clawhub": {
-      "base_url": "https://clawhub.ai"
-    }
-  },
+  "workspaces": { "default": "~/.pyclaw/workspace" },
   "channels": {
     "feishu": {
       "enabled": false,
-      "app_id": "",
-      "app_secret": "",
-      "verification_token": ""
+      "appId": "",
+      "appSecret": "",
+      "sessionScope": "chat",
+      "groupContext": "recent",
+      "groupContextSize": 20
     },
-    "web": {
-      "enabled": true,
-      "auth_token": ""
-    }
-  },
-  "dreaming": {
-    "enabled": false,
-    "light_cron": "0 */6 * * *",
-    "deep_cron": "0 3 * * *",
-    "rem_cron": "0 5 * * 0"
+    "web": { "enabled": false, "authToken": "" }
   }
 }

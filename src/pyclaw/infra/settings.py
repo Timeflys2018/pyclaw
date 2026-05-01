@@ -6,6 +6,8 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from pyclaw.models import CompactionConfig, RetryConfig, TimeoutConfig, ToolsConfig
+
 CONFIG_SEARCH_PATHS = [
     "pyclaw.json",
     "configs/pyclaw.json",
@@ -64,6 +66,11 @@ class AgentSettings(BaseSettings):
     max_context_tokens: int = 128000
     compaction_threshold: float = 0.8
     providers: dict[str, ProviderSettings] = Field(default_factory=dict)
+    max_iterations: int = 50
+    timeouts: TimeoutConfig = Field(default_factory=TimeoutConfig)
+    retry: RetryConfig = Field(default_factory=RetryConfig)
+    compaction: CompactionConfig = Field(default_factory=CompactionConfig)
+    tools: ToolsConfig = Field(default_factory=ToolsConfig)
 
     model_config = SettingsConfigDict(env_prefix="PYCLAW_AGENT_", extra="ignore")
 
@@ -75,12 +82,45 @@ class ServerSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PYCLAW_SERVER_")
 
 
+class FeishuSettings(BaseSettings):
+    enabled: bool = False
+    app_id: str = Field("", alias="appId")
+    app_secret: str = Field("", alias="appSecret")
+    session_scope: str = Field("chat", alias="sessionScope")
+    group_context: str = Field("recent", alias="groupContext")
+    group_context_size: int = Field(20, alias="groupContextSize")
+
+    model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
+
+
+class WebSettings(BaseSettings):
+    enabled: bool = False
+    auth_token: str = Field("", alias="authToken")
+
+    model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
+
+
+class ChannelsSettings(BaseSettings):
+    feishu: FeishuSettings = Field(default_factory=FeishuSettings)
+    web: WebSettings = Field(default_factory=WebSettings)
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+
+class WorkspaceSettings(BaseSettings):
+    default: str = "~/.pyclaw/workspace"
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+
 class Settings(BaseSettings):
     server: ServerSettings = Field(default_factory=ServerSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
+    channels: ChannelsSettings = Field(default_factory=ChannelsSettings)
+    workspaces: WorkspaceSettings = Field(default_factory=WorkspaceSettings)
 
     model_config = SettingsConfigDict(env_prefix="PYCLAW_")
 

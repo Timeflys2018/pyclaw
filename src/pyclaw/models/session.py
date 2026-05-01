@@ -148,6 +148,8 @@ def _message_entry_to_dict(entry: MessageEntry) -> AgentMessageDict:
     content: Any
     if entry.role == "tool" and isinstance(entry.content, str):
         content = [{"type": "text", "text": entry.content}]
+    elif isinstance(entry.content, list):
+        content = _content_blocks_to_llm(entry.content)
     else:
         content = entry.content
     msg: AgentMessageDict = {"role": entry.role, "content": content}
@@ -156,3 +158,18 @@ def _message_entry_to_dict(entry: MessageEntry) -> AgentMessageDict:
     if entry.tool_call_id:
         msg["tool_call_id"] = entry.tool_call_id
     return msg
+
+
+def _content_blocks_to_llm(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
+    from pyclaw.models.agent import ImageBlock, TextBlock
+
+    result: list[dict[str, Any]] = []
+    for block in blocks:
+        if isinstance(block, ImageBlock):
+            result.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{block.mime_type};base64,{block.data}"},
+            })
+        elif isinstance(block, TextBlock):
+            result.append({"type": "text", "text": block.text})
+    return result
