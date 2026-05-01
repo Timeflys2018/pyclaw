@@ -35,6 +35,7 @@ class FeishuContext:
     bot_open_id: str
     session_router: SessionRouter = field(default_factory=lambda: SessionRouter(store=None))  # type: ignore[arg-type]
     workspace_base: Path = field(default_factory=lambda: Path.home() / ".pyclaw/workspaces")
+    bootstrap_files: list[str] = field(default_factory=lambda: ["AGENTS.md"])
 
 
 def build_session_key(app_id: str, event: Any, scope: str) -> str:
@@ -180,10 +181,13 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         if handled:
             return
 
-    agents_md = await ctx.workspace_store.get_file(workspace_id, "AGENTS.md")
+    from pyclaw.core.context.bootstrap import load_bootstrap_context
     extra_system_parts: list[str] = []
-    if agents_md:
-        extra_system_parts.append(agents_md)
+    bootstrap_ctx = await load_bootstrap_context(
+        workspace_id, ctx.workspace_store, ctx.bootstrap_files
+    )
+    if bootstrap_ctx:
+        extra_system_parts.append(bootstrap_ctx)
 
     if chat_type == "group" and ctx.settings.group_context == "recent":
         group_ctx = await build_group_context(ctx.feishu_client, chat_id, ctx.settings.group_context_size)

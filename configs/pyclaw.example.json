@@ -34,7 +34,7 @@
     },
     "tools": { "max_output_chars": 25000 }
   },
-  "workspaces": { "default": "~/.pyclaw/workspace" },
+  "workspaces": { "default": "~/.pyclaw/workspace", "backend": "file", "bootstrapFiles": ["AGENTS.md"] },
   "channels": {
     "feishu": {
       "enabled": false,

@@ -60,6 +60,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             runner_deps,
             dedup,
             workspace_store,
+            bootstrap_files=settings.workspaces.bootstrap_files,
         )
         app.state.feishu_channel = feishu_channel
         asyncio.create_task(feishu_channel.start())

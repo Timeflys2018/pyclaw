@@ -83,8 +83,10 @@ async def handle_command(
                 channel="feishu",
             )
 
-            agents_md = await ctx.workspace_store.get_file(workspace_id, "AGENTS.md")
-            followup_extra_system = agents_md or ""
+            from pyclaw.core.context.bootstrap import load_bootstrap_context
+            followup_extra_system = await load_bootstrap_context(
+                workspace_id, ctx.workspace_store, ctx.bootstrap_files
+            )
 
             async def _run_followup() -> None:
                 await _dispatch_and_reply(inbound, ctx, message_id, workspace_path, followup_extra_system)

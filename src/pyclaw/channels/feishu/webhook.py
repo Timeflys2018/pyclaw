@@ -31,12 +31,14 @@ class FeishuChannelPlugin:
         deps: AgentRunnerDeps,
         dedup: FeishuDedup,
         workspace_store: WorkspaceStore,
+        bootstrap_files: list[str] | None = None,
     ) -> None:
         self._settings = settings
         self._feishu_client = feishu_client
         self._deps = deps
         self._dedup = dedup
         self._workspace_store = workspace_store
+        self._bootstrap_files: list[str] = bootstrap_files or ["AGENTS.md"]
         self._ws_client: lark.ws.Client | None = None
         self._main_loop: asyncio.AbstractEventLoop | None = None
         self._ws_loop: asyncio.AbstractEventLoop | None = None
@@ -72,6 +74,7 @@ class FeishuChannelPlugin:
             bot_open_id=bot_open_id,
             session_router=session_router,
             workspace_base=Path.home() / ".pyclaw/workspaces",
+            bootstrap_files=self._bootstrap_files,
         )
 
         def _sync_handler(event: P2ImMessageReceiveV1) -> None:
