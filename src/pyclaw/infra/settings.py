@@ -14,10 +14,28 @@ CONFIG_SEARCH_PATHS = [
 
 
 class RedisSettings(BaseSettings):
-    url: str = "redis://localhost:6379"
-    key_prefix: str = "pyclaw:"
+    host: str = "localhost"
+    port: int = 6379
+    password: str | None = None
+    url: str = ""
+    key_prefix: str = Field("pyclaw:", alias="keyPrefix")
+    transcript_retention_days: int = Field(7, alias="transcriptRetentionDays")
 
-    model_config = SettingsConfigDict(env_prefix="PYCLAW_REDIS_")
+    model_config = SettingsConfigDict(
+        env_prefix="PYCLAW_REDIS_",
+        populate_by_name=True,
+    )
+
+    @property
+    def ttl_seconds(self) -> int:
+        return self.transcript_retention_days * 86_400
+
+    def build_url(self) -> str:
+        if self.url:
+            return self.url
+        if self.password:
+            return f"redis://:{self.password}@{self.host}:{self.port}"
+        return f"redis://{self.host}:{self.port}"
 
 
 class DatabaseSettings(BaseSettings):
@@ -27,7 +45,7 @@ class DatabaseSettings(BaseSettings):
 
 
 class StorageSettings(BaseSettings):
-    session_backend: str = "file"
+    session_backend: str = "memory"
     memory_backend: str = "sqlite"
     lock_backend: str = "file"
 
