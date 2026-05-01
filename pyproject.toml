@@ -59,6 +59,11 @@ markers = [
     "integration: requires real Redis at PYCLAW_TEST_REDIS_* env vars",
     "e2e: end-to-end tests requiring real LLM API (PYCLAW_LLM_API_KEY env var)",
 ]
+filterwarnings = [
+    # lark-oapi 1.5.5 uses websockets.legacy which is deprecated in websockets>=14
+    "ignore::DeprecationWarning:lark_oapi",
+    "ignore::DeprecationWarning:websockets.legacy",
+]
 
 [tool.ruff]
 target-version = "py312"
