@@ -263,16 +263,17 @@ def finalize_tool_calls(buffer: dict[int, dict[str, Any]]) -> list[dict[str, Any
         slot = buffer[idx]
         args_raw = slot["function"]["arguments"] or "{}"
         try:
-            arguments = json.loads(args_raw)
+            arguments_dict = json.loads(args_raw)
+            arguments_str = json.dumps(arguments_dict)
         except json.JSONDecodeError:
-            arguments = {"_raw": args_raw}
+            arguments_str = args_raw
         result.append(
             {
                 "id": slot["id"] or f"call_{idx}",
                 "type": "function",
                 "function": {
                     "name": slot["function"]["name"],
-                    "arguments": arguments,
+                    "arguments": arguments_str,
                 },
             }
         )

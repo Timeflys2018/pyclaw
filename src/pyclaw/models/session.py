@@ -145,7 +145,12 @@ class SessionTree(BaseModel):
 
 
 def _message_entry_to_dict(entry: MessageEntry) -> AgentMessageDict:
-    msg: AgentMessageDict = {"role": entry.role, "content": entry.content}
+    content: Any
+    if entry.role == "tool" and isinstance(entry.content, str):
+        content = [{"type": "text", "text": entry.content}]
+    else:
+        content = entry.content
+    msg: AgentMessageDict = {"role": entry.role, "content": content}
     if entry.tool_calls:
         msg["tool_calls"] = entry.tool_calls
     if entry.tool_call_id:

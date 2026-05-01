@@ -454,10 +454,17 @@ async def run_agent_stream(
 
         for call in response.tool_calls:
             fn = (call or {}).get("function") or {}
+            raw_args = fn.get("arguments") or {}
+            if isinstance(raw_args, str):
+                import json as _json
+                try:
+                    raw_args = _json.loads(raw_args)
+                except Exception:
+                    raw_args = {"_raw": raw_args}
             yield ToolCallStart(
                 tool_call_id=call.get("id", ""),
                 name=fn.get("name", "") or "",
-                arguments=fn.get("arguments") or {},
+                arguments=raw_args,
             )
 
         results: list[ToolResult] = await execute_tool_calls(

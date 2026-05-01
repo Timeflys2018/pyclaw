@@ -65,7 +65,7 @@ class TestToolCallStreamMerging:
         finalized = finalize_tool_calls(buffer)
         assert finalized[0]["id"] == "call_abc"
         assert finalized[0]["function"]["name"] == "read"
-        assert finalized[0]["function"]["arguments"] == {"path": "x"}
+        assert finalized[0]["function"]["arguments"] == '{"path": "x"}'
 
     def test_multiple_parallel_tool_calls(self) -> None:
         buffer: dict[int, dict] = {}
