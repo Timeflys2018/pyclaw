@@ -205,3 +205,40 @@ Bootstrap files are read via `load_bootstrap_context()` and injected into the sy
 **`_dispatch_and_reply()` helper**: Extracted from `handle_feishu_message` in this session to encapsulate the complete reply chain (CardKit card creation + streaming reply + text fallback), shared by both normal message flow and `/new <text>` followup dispatch.
 
 **Related**: `src/pyclaw/channels/feishu/handler.py::_dispatch_and_reply`
+
+## D25: Multi-instance Feishu deployment uses native cluster mode, not Dedicated Receiver
+
+**Feishu WebSocket natively supports multi-instance**: A single app_id can maintain up to 50 simultaneous WS connections. Feishu's server dispatches each message to **one random client** (cluster mode, not broadcast).
+
+**Chosen: Approach A (native cluster) over Approach B (Dedicated Receiver + Redis Stream).**
+
+| Approach | Description | Change size |
+|---|---|---|
+| **A: Native cluster (chosen)** | Each worker connects directly to Feishu WS. Feishu randomly distributes messages. Add a session-level distributed lock for same-session serialization. | ~20 lines |
+| B: Dedicated Receiver | Separate receiver process connects WS, publishes to Redis Stream. N workers consume via consumer group. | New component + ~200 lines |
+
+**Why A over B:**
+
+1. **PyClaw is a chat bot, not a payment system** — occasional message loss during worker crash is acceptable; user can resend
+2. **Approach B's receiver is a single point of failure** — not actually more available than "Feishu picks a random worker"
+3. **The real bottleneck is LLM calls (3-30s), not message dispatch** — Feishu chat volume is low (tens of msg/min); Redis Stream is over-engineering
+4. **Existing infrastructure is sufficient** — Redis distributed locks + dedup (SET NX EX) already cover multi-instance consistency needs
+5. **50-connection limit far exceeds foreseeable needs**
+
+**Signals to upgrade to Approach B** (switch when any appear):
+- Connection count approaching 50
+- Strict message-no-loss guarantee required (e.g., automated ticketing system integration)
+- Session affinity needed (e.g., GPU binding, local models)
+
+**Multi-instance serialization guarantee:**
+- Single instance: in-process `queue.py` per-session serial queue (existing)
+- Multi-instance: wrap `_run()` with a Redis distributed lock (session-level, TTL 60s) ensuring only one agent runs per session at a time
+- Feishu's at-least-once retry (4 attempts: 15s→5min→1h→6h) + Redis dedup (SET NX EX 43200) prevents duplicate processing
+
+**Feishu cluster mode constraints** (official docs):
+- Message delivery is cluster mode, no broadcast
+- Instance selection is random with equal weight
+- **Every instance MUST register all event handlers** (messages routed to handler-less instances return 500)
+- Processing timeout: 3 seconds (after which Feishu enters retry queue)
+
+**Reference**: Feishu Open Platform long-connection documentation `https://open.feishu.cn/document/server-docs/event-subscription-guide/event-subscription-configure-/request-url-configuration-case`

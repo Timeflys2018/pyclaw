@@ -209,3 +209,40 @@ Bootstrap 文件通过 `load_bootstrap_context()` 统一读取后注入 system p
 **`_dispatch_and_reply()` 函数**：本次 session 从 `handle_feishu_message` 提取的辅助函数，封装了 CardKit 卡片创建 + streaming reply + fallback text 的完整回复链路，供正常消息流和 `/new <text>` followup 共用，消除了代码重复。
 
 **相关实现**：`src/pyclaw/channels/feishu/handler.py::_dispatch_and_reply`
+
+## D25: 飞书多实例部署选择原生集群模式，而非 Dedicated Receiver
+
+**飞书 WebSocket 原生支持多实例**：单个 app_id 可同时维持最多 50 个 WS 连接，飞书服务端以**随机分发**方式将消息推送给其中一个客户端（集群模式，非广播）。
+
+**选择方案 A（原生集群）而非方案 B（Dedicated Receiver + Redis Stream）**。
+
+| 方案 | 描述 | 改动量 |
+|---|---|---|
+| **A: 原生集群（选定）** | 每个 Worker 直接连飞书 WS，飞书随机分发消息。加一个 session 级分布式锁保证同 session 串行。 | ~20 行 |
+| B: Dedicated Receiver | 单独 receiver 进程连 WS，publish 到 Redis Stream，N 个 worker 通过 consumer group 消费。 | 新组件 + ~200 行 |
+
+**选择 A 的理由**：
+
+1. **PyClaw 是聊天 bot，不是支付系统** — 消息偶尔丢失（worker crash 期间）可接受，用户重发一次即可
+2. **方案 B 的 receiver 是单点** — 并没有比「飞书随机选一个 worker」更高可用
+3. **真实瓶颈是 LLM 调用（3-30秒），不是消息分发** — 飞书场景的 QPS 很低（几十 msg/min），Redis Stream 过度设计
+4. **已有基础设施足够** — Redis 分布式锁 + 去重（SET NX EX）已经覆盖了多实例需要的一致性保证
+5. **50 连接上限远超需求** — 在可预见的未来不会接近
+
+**方案 B 的升级信号**（出现任一条再切换）：
+- 连接数接近 50
+- 需要严格消息不丢保证（如接入自动化工单系统）
+- 需要 session affinity（如 GPU 绑定、本地模型）
+
+**多实例下的串行保证**：
+- 单实例时：进程内 `queue.py` per-session serial queue（已有）
+- 多实例时：`_run()` 外层包一个 Redis 分布式锁（session 级，TTL 60s），确保同 session 同时只有一个 agent 在跑
+- 飞书的 at-least-once 重试（4 次，15s→5min→1h→6h）+ Redis 去重（SET NX EX 43200）保证无重复处理
+
+**飞书集群模式关键约束**（官方文档）：
+- 消息推送为集群模式，不支持广播
+- 实例采用随机选择策略，所有 client 权重相同
+- **每个实例必须注册所有事件 handler**（否则消息路由到无 handler 的实例会报 500）
+- 处理超时 3 秒（之后飞书认为投递失败进入重试队列）
+
+**相关参考**：飞书开放平台长连接模式文档 `https://open.feishu.cn/document/server-docs/event-subscription-guide/event-subscription-configure-/request-url-configuration-case`
