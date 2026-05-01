@@ -58,8 +58,15 @@ def classify_error(exc: Exception) -> str:
 
 
 class LLMClient:
-    def __init__(self, default_model: str = "gpt-4o-mini") -> None:
+    def __init__(
+        self,
+        default_model: str = "gpt-4o-mini",
+        api_key: str | None = None,
+        api_base: str | None = None,
+    ) -> None:
         self.default_model = default_model
+        self._api_key = api_key
+        self._api_base = api_base
 
     async def stream(
         self,
@@ -82,6 +89,12 @@ class LLMClient:
         effective_model = model or self.default_model
         payload_messages = _prepend_system(messages, system)
 
+        extra: dict[str, Any] = {}
+        if self._api_key:
+            extra["api_key"] = self._api_key
+        if self._api_base:
+            extra["api_base"] = self._api_base
+
         try:
             stream = await acompletion(
                 model=effective_model,
@@ -89,6 +102,7 @@ class LLMClient:
                 tools=tools or None,
                 stream=True,
                 stream_options={"include_usage": True},
+                **extra,
             )
         except Exception as exc:
             raise LLMError(classify_error(exc), str(exc), original=exc) from exc

@@ -52,10 +52,18 @@ class StorageSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PYCLAW_STORAGE_")
 
 
+class ProviderSettings(BaseSettings):
+    api_key: str | None = Field(default=None, alias="apiKey")
+    base_url: str | None = Field(default=None, alias="baseURL")
+
+    model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
+
+
 class AgentSettings(BaseSettings):
     default_model: str = "gpt-4o"
     max_context_tokens: int = 128000
     compaction_threshold: float = 0.8
+    providers: dict[str, ProviderSettings] = Field(default_factory=dict)
 
     model_config = SettingsConfigDict(env_prefix="PYCLAW_AGENT_", extra="ignore")
 

@@ -21,6 +21,12 @@
   "agent": {
     "default_model": "gpt-4o",
     "max_context_tokens": 128000,
+    "providers": {
+      "openai": {
+        "apiKey": null,
+        "baseURL": null
+      }
+    },
     "compaction_threshold": 0.8,
     "max_iterations": 50,
     "context_window": 128000,
