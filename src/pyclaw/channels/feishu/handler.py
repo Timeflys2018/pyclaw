@@ -181,13 +181,14 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         if handled:
             return
 
-    from pyclaw.core.context.bootstrap import load_bootstrap_context
     extra_system_parts: list[str] = []
-    bootstrap_ctx = await load_bootstrap_context(
-        workspace_id, ctx.workspace_store, ctx.bootstrap_files
-    )
-    if bootstrap_ctx:
-        extra_system_parts.append(bootstrap_ctx)
+    if ctx.deps.workspace_store is None:
+        from pyclaw.core.context.bootstrap import load_bootstrap_context
+        bootstrap_ctx = await load_bootstrap_context(
+            workspace_id, ctx.workspace_store, ctx.bootstrap_files
+        )
+        if bootstrap_ctx:
+            extra_system_parts.append(bootstrap_ctx)
 
     if chat_type == "group" and ctx.settings.group_context == "recent":
         group_ctx = await build_group_context(ctx.feishu_client, chat_id, ctx.settings.group_context_size)

@@ -20,6 +20,7 @@ from pyclaw.core.agent.compaction import (
     summarize_in_stages,
 )
 from pyclaw.models import AssembleResult, CompactResult
+from pyclaw.storage.workspace.base import WorkspaceStore
 
 
 @runtime_checkable
@@ -67,12 +68,17 @@ class DefaultContextEngine:
         summarize: _SummarizerCallable | None = None,
         compaction_timeout_s: float = DEFAULT_COMPACTION_SAFETY_TIMEOUT_S,
         chunk_token_budget: int = 8_000,
+        workspace_store: WorkspaceStore | None = None,
+        bootstrap_files: list[str] | None = None,
     ) -> None:
         self._threshold = threshold
         self._keep_recent_tokens = keep_recent_tokens
         self._summarize = summarize
         self._compaction_timeout_s = compaction_timeout_s
         self._chunk_token_budget = chunk_token_budget
+        self._workspace_store = workspace_store
+        self._bootstrap_files: list[str] = bootstrap_files or ["AGENTS.md"]
+        self._bootstrap_cache: dict[str, str] = {}
 
     async def assemble(
         self,
@@ -82,7 +88,23 @@ class DefaultContextEngine:
         token_budget: int | None = None,
         prompt: str | None = None,
     ) -> AssembleResult:
-        return AssembleResult(messages=list(messages), system_prompt_addition=None)
+        if self._workspace_store is None:
+            return AssembleResult(messages=list(messages), system_prompt_addition=None)
+
+        if session_id in self._bootstrap_cache:
+            bootstrap_str = self._bootstrap_cache[session_id]
+        else:
+            from pyclaw.core.context.bootstrap import load_bootstrap_context
+            workspace_id = session_id.replace(":", "_")
+            bootstrap_str = await load_bootstrap_context(
+                workspace_id, self._workspace_store, self._bootstrap_files
+            )
+            self._bootstrap_cache[session_id] = bootstrap_str
+
+        return AssembleResult(
+            messages=list(messages),
+            system_prompt_addition=bootstrap_str if bootstrap_str else None,
+        )
 
     async def ingest(self, session_id: str, message: dict[str, Any]) -> None:
         return None

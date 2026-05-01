@@ -52,11 +52,18 @@ def create_agent_runner_deps(
         }
     )
 
+    bootstrap_files = list(getattr(getattr(settings, "workspaces", None), "bootstrap_files", None) or ["AGENTS.md"])
+    engine = DefaultContextEngine(
+        workspace_store=workspace_store,
+        bootstrap_files=bootstrap_files,
+    )
+
     return AgentRunnerDeps(
         llm=llm,
         tools=tools,
-        context_engine=DefaultContextEngine(),
+        context_engine=engine,
         hooks=HookRegistry(),
         session_store=session_store,
         config=config,
+        workspace_store=workspace_store,
     )

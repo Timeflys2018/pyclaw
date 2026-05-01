@@ -40,11 +40,11 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     from pyclaw.core.agent.factory import create_agent_runner_deps
 
-    runner_deps = create_agent_runner_deps(settings, app.state.session_store)
-    app.state.runner_deps = runner_deps
-
     workspace_store = create_workspace_store(settings, redis_client=redis_client)
     app.state.workspace_store = workspace_store
+
+    runner_deps = create_agent_runner_deps(settings, app.state.session_store, workspace_store=workspace_store)
+    app.state.runner_deps = runner_deps
 
     app.state.feishu_channel = None
     if settings.channels.feishu.enabled:

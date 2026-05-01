@@ -52,6 +52,7 @@ from pyclaw.models import (
     now_iso,
 )
 from pyclaw.storage.session.base import InMemorySessionStore, SessionStore
+from pyclaw.storage.workspace.base import WorkspaceStore
 
 
 @dataclass
@@ -62,6 +63,7 @@ class AgentRunnerDeps:
     hooks: HookRegistry = field(default_factory=HookRegistry)
     session_store: SessionStore = field(default_factory=InMemorySessionStore)
     config: AgentRunConfig = field(default_factory=AgentRunConfig)
+    workspace_store: WorkspaceStore | None = field(default=None)
 
 
 @dataclass
