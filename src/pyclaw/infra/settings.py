@@ -57,7 +57,7 @@ class AgentSettings(BaseSettings):
     max_context_tokens: int = 128000
     compaction_threshold: float = 0.8
 
-    model_config = SettingsConfigDict(env_prefix="PYCLAW_AGENT_")
+    model_config = SettingsConfigDict(env_prefix="PYCLAW_AGENT_", extra="ignore")
 
 
 class ServerSettings(BaseSettings):
