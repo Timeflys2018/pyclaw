@@ -71,6 +71,8 @@ class RunRequest:
     user_message: str
     model: str | None = None
     tool_context_extras: dict[str, Any] = field(default_factory=dict)
+    attachments: list[Any] = field(default_factory=list)
+    extra_system: str = ""
 
 
 @dataclass
@@ -188,6 +190,8 @@ async def run_agent_stream(
         hooks=deps.hooks,
         user_prompt=request.user_message,
     )
+    if request.extra_system:
+        system_prompt = f"{system_prompt}\n\n{request.extra_system}"
 
     iteration = 0
     total_input_tokens = 0
