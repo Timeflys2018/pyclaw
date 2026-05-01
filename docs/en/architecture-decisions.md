@@ -112,3 +112,53 @@ class SessionStore(Protocol):
     async def save_header(self, tree: SessionTree) -> None: ...
     async def append_entry(self, session_id: str, entry: SessionEntry, leaf_id: str) -> None: ...
 ```
+
+## D19: SessionKey / SessionId two-layer separation
+
+The session system uses two distinct concepts rather than one ID serving multiple roles:
+
+| Concept | Role | Format | Lifetime |
+|---|---|---|---|
+| **sessionKey** | Routing address, derived from channel context | `feishu:{app_id}:{scope_id}` | Permanently stable |
+| **sessionId** | Storage container holding the actual conversation | `{sessionKey}:s:{8hex}` | Rotates on `/new` |
+
+**Background**: Originally `session_id` served as both routing address and storage key (e.g. `feishu:cli_xxx:ou_abc`). This made `/new` impossible to implement — changing the storage key would also change the routing address.
+
+**Design choices**:
+- sessionKey stays stable; `pyclaw:skey:{sessionKey}:current` (STRING) points to the active sessionId
+- Historical sessionIds archived in `pyclaw:skey:{sessionKey}:history` (ZSET, score = creation time ms)
+- `/new` only rotates the sessionId; all Redis keys for the old sessionId are preserved indefinitely
+- `SessionRouter` encapsulates routing: sessionKey → sessionId → SessionTree
+- Lazy migration: old-format sessions (sessionId == sessionKey) are transparently registered in the new index on first access — zero downtime
+
+**Alternative rejected**: Batch migration script — requires downtime coordination and is risky with many existing sessions.
+
+**Index keys have no TTL**: `skey:current` and `skey:history` persist indefinitely; per-session data keys (header/entries/order/leaf) retain sliding TTL (default 30 days).
+
+**Related**: `implement-session-key-rotation` change, `src/pyclaw/channels/session_router.py`
+
+## D20: Command interception at the channel layer; agent layer is unaware
+
+Feishu commands (`/new`, `/status`, `/whoami`, etc.) are intercepted in `handle_feishu_message()` and handled directly by command handlers — the **agent runner is never invoked**.
+
+**Rationale**:
+- Commands complete in milliseconds; no LLM reasoning needed
+- Keeps agent runner single-purpose (conversation only)
+- Command replies use plain text — no `cardkit:card:write` permission required
+- Adding new commands only requires channel-layer changes; core is untouched
+
+**Command set** (essential tier): `/new`, `/reset`, `/status`, `/whoami`, `/history`, `/help`, `/idle <Xm>`
+
+Unrecognized `/`-prefixed messages pass through to the agent as normal user messages.
+
+**Related**: `src/pyclaw/channels/feishu/commands.py`
+
+## D21: Idle auto-reset via last_interaction_at tracking
+
+`SessionHeader` carries `last_interaction_at: str | None` (UTC ISO timestamp), updated after every user message is processed by the agent runner. System events (command replies, heartbeats) do not update this field.
+
+**idle_minutes** configuration precedence (high to low):
+1. Per-session override set via `/idle 30m` (stored in `SessionHeader.idle_minutes_override`)
+2. `FeishuSettings.idle_minutes` (global default, default 0 = disabled)
+
+**Default off**: Consistent with OpenClaw (`DEFAULT_IDLE_MINUTES = 0`). When enabled, a message arriving after the idle window silently triggers session rotation; both old and new sessions are fully preserved.

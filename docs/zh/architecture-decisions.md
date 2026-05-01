@@ -112,3 +112,55 @@ class SessionStore(Protocol):
     async def save_header(self, tree: SessionTree) -> None: ...
     async def append_entry(self, session_id: str, entry: SessionEntry, leaf_id: str) -> None: ...
 ```
+
+## D19: SessionKey / SessionId 两层分离
+
+会话系统使用两个概念，而非一个 ID 身兼多职：
+
+| 概念 | 职责 | 格式 | 生命周期 |
+|---|---|---|---|
+| **sessionKey** | 路由地址，由渠道上下文确定 | `feishu:{app_id}:{scope_id}` | 永久稳定 |
+| **sessionId** | 存储容器，持有实际对话内容 | `{sessionKey}:s:{8hex}` | 随 `/new` 轮换 |
+
+**背景**：最初 `session_id` 既作路由地址又作存储 key（如 `feishu:cli_xxx:ou_abc`）。这使 `/new` 无法实现——改变存储 key 就等于改变了路由地址。
+
+**设计决策**：
+- sessionKey 保持稳定，存入 `pyclaw:skey:{sessionKey}:current`（STRING）指向当前活跃 sessionId
+- 历史 sessionId 通过 `pyclaw:skey:{sessionKey}:history`（ZSET，score=创建时间ms）归档
+- `/new` 只换 sessionId，旧 sessionId 的全部 Redis keys 完整保留，永不删除
+- `SessionRouter` 封装路由逻辑：sessionKey → sessionId → SessionTree
+- 懒迁移兼容：旧格式 session（sessionId == sessionKey）在首次访问时自动注册到新索引，零停机
+
+**被排除的替代方案**：
+- 只用 sessionKey（无 sessionId）：历史会话只能靠时间戳命名，无法原子归档
+- 批量迁移脚本：需要停机协调，旧 session 多时风险高
+
+**skey 索引键无 TTL**：`skey:current` 和 `skey:history` 永久保留（不设 EXPIRE）；每条对话的 header/entries/order/leaf 依然用滑动 TTL（默认 30 天）。索引键指向已过期的 session 数据是合理的（`/history` 展示"已归档"状态）。
+
+**相关实现**：`implement-session-key-rotation` change，`src/pyclaw/channels/session_router.py`
+
+## D20: 命令拦截在渠道层，Agent 层无感知
+
+飞书命令（`/new`、`/status`、`/whoami` 等）在 `handle_feishu_message()` 中被拦截，直接由命令处理器回复，**不进入 agent runner**。
+
+**理由**：
+- 命令应在毫秒内完成，不需要 LLM 推理
+- 保持 agent runner 职责单一（只处理普通对话）
+- 命令回复用纯文字，无需 `cardkit:card:write` 权限
+- 新增命令只需改渠道层，核心零改动
+
+**命令集**（essential tier）：`/new`、`/reset`、`/status`、`/whoami`、`/history`、`/help`、`/idle <Xm>`
+
+**未识别的 `/` 前缀消息**直接透传给 agent，LLM 自行处理。
+
+**相关实现**：`src/pyclaw/channels/feishu/commands.py`
+
+## D21: 空闲自动重置跟踪 last_interaction_at
+
+`SessionHeader` 持有 `last_interaction_at: str | None`（UTC ISO 时间戳），每次用户消息被 agent 处理后更新。系统事件（命令回复、心跳）不更新此字段。
+
+**idle_minutes** 配置来源（优先级由高到低）：
+1. 用户通过 `/idle 30m` 设置的 per-session 覆盖值（存于 `SessionHeader.idle_minutes_override`）
+2. `FeishuSettings.idle_minutes`（全局默认，默认 0 = 关闭）
+
+**默认关闭**：与 OpenClaw 保持一致（`DEFAULT_IDLE_MINUTES = 0`）。启用后，用户超时未发消息时下一条消息到来会静默触发 `/new`，新旧 session 均完整保留。
