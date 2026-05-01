@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +12,7 @@ from pyclaw.channels.base import InboundMessage
 from pyclaw.channels.feishu.dedup import FeishuDedup
 from pyclaw.channels.feishu.multimodal import feishu_image_to_block
 from pyclaw.channels.feishu.queue import enqueue
+from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.agent.runner import AgentRunnerDeps
 from pyclaw.infra.settings import FeishuSettings
 from pyclaw.models import AgentEvent, Done, ErrorEvent, ImageBlock, TextChunk, ToolCallStart
@@ -32,10 +33,11 @@ class FeishuContext:
     dedup: FeishuDedup
     workspace_store: WorkspaceStore
     bot_open_id: str
-    workspace_base: Path = Path.home() / ".pyclaw/workspaces"
+    session_router: SessionRouter = field(default_factory=lambda: SessionRouter(store=None))  # type: ignore[arg-type]
+    workspace_base: Path = field(default_factory=lambda: Path.home() / ".pyclaw/workspaces")
 
 
-def build_session_id(app_id: str, event: Any, scope: str) -> str:
+def build_session_key(app_id: str, event: Any, scope: str) -> str:
     msg = event.event.message
     sender = event.event.sender
     chat_type: str = msg.chat_type or ""
@@ -50,6 +52,9 @@ def build_session_id(app_id: str, event: Any, scope: str) -> str:
     if scope == "thread" and thread_id:
         return f"feishu:{app_id}:{chat_id}:thread:{thread_id}"
     return f"feishu:{app_id}:{chat_id}"
+
+
+build_session_id = build_session_key
 
 
 def is_bot_mentioned(event: Any, bot_open_id: str) -> bool:
@@ -145,9 +150,35 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         logger.debug("unsupported message type %s, skipping", msg_type)
         return
 
-    session_id = build_session_id(ctx.settings.app_id, event, ctx.settings.session_scope)
-    workspace_id = session_id.replace(":", "_")
+    session_key = build_session_key(ctx.settings.app_id, event, ctx.settings.session_scope)
+    workspace_id = session_key.replace(":", "_")
     workspace_path = ctx.workspace_base / workspace_id
+
+    session_id, _ = await ctx.session_router.resolve_or_create(session_key, workspace_id)
+
+    idle_minutes = (
+        ctx.settings.idle_minutes
+    )
+    _tree = await ctx.session_router.store.load(session_id)
+    if _tree and _tree.header.idle_minutes_override is not None:
+        idle_minutes = _tree.header.idle_minutes_override
+
+    if await ctx.session_router.check_idle_reset(session_key, session_id, idle_minutes):
+        logger.info("idle reset triggered for session %s", session_id)
+        session_id, _ = await ctx.session_router.rotate(session_key, workspace_id)
+
+    if text is not None and text.startswith("/"):
+        from pyclaw.channels.feishu.commands import handle_command
+        handled = await handle_command(
+            text=text,
+            session_key=session_key,
+            session_id=session_id,
+            message_id=message_id,
+            event=event,
+            ctx=ctx,
+        )
+        if handled:
+            return
 
     agents_md = await ctx.workspace_store.get_file(workspace_id, "AGENTS.md")
     extra_system_parts: list[str] = []
@@ -193,10 +224,12 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
             )
         else:
             final_text = ""
-            async for event in dispatch_message(inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system):
-                if isinstance(event, Done):
-                    final_text = event.final_message
+            async for ev in dispatch_message(inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system):
+                if isinstance(ev, Done):
+                    final_text = ev.final_message
             await _fallback_reply(final_text or "(no response)")
+
+        await ctx.session_router.update_last_interaction(session_id)
 
     await enqueue(session_id, _run())
 

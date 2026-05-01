@@ -13,6 +13,7 @@ from lark_oapi.api.im.v1.model import P2ImMessageReceiveV1
 from pyclaw.channels.feishu.client import FeishuClient
 from pyclaw.channels.feishu.dedup import FeishuDedup
 from pyclaw.channels.feishu.handler import FeishuContext, handle_feishu_message
+from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.agent.runner import AgentRunnerDeps
 from pyclaw.infra.settings import FeishuSettings
 from pyclaw.storage.workspace.base import WorkspaceStore
@@ -53,6 +54,7 @@ class FeishuChannelPlugin:
         main_loop = asyncio.get_event_loop()
         self._main_loop = main_loop
 
+        session_router = SessionRouter(store=self._deps.session_store)
         ctx = FeishuContext(
             settings=self._settings,
             feishu_client=self._feishu_client,
@@ -60,6 +62,7 @@ class FeishuChannelPlugin:
             dedup=self._dedup,
             workspace_store=self._workspace_store,
             bot_open_id=bot_open_id,
+            session_router=session_router,
             workspace_base=Path.home() / ".pyclaw/workspaces",
         )
 

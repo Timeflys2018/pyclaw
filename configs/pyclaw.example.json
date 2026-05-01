@@ -42,7 +42,8 @@
       "appSecret": "",
       "sessionScope": "chat",
       "groupContext": "recent",
-      "groupContextSize": 20
+      "groupContextSize": 20,
+      "idleMinutes": 0
     },
     "web": { "enabled": false, "authToken": "" }
   }

@@ -89,6 +89,7 @@ class FeishuSettings(BaseSettings):
     session_scope: str = Field("chat", alias="sessionScope")
     group_context: str = Field("recent", alias="groupContext")
     group_context_size: int = Field(20, alias="groupContextSize")
+    idle_minutes: int = Field(0, alias="idleMinutes")
 
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
 
