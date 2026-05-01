@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -13,11 +14,12 @@ from pyclaw.channels.feishu.multimodal import feishu_image_to_block
 from pyclaw.channels.feishu.queue import enqueue
 from pyclaw.core.agent.runner import AgentRunnerDeps
 from pyclaw.infra.settings import FeishuSettings
-from pyclaw.models import ImageBlock
+from pyclaw.models import AgentEvent, Done, ErrorEvent, ImageBlock, TextChunk, ToolCallStart
 from pyclaw.storage.workspace.base import WorkspaceStore
 
 if TYPE_CHECKING:
     from pyclaw.channels.feishu.client import FeishuClient
+    from pyclaw.channels.feishu.streaming import FeishuStreamingCard
 
 logger = logging.getLogger(__name__)
 
@@ -169,8 +171,61 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         attachments=attachments,
     )
 
+    async def _fallback_reply(reply_text: str) -> None:
+        await ctx.feishu_client.reply_text(message_id, reply_text)
+
     async def _run() -> None:
-        async for _ in dispatch_message(inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system):
-            pass
+        from pyclaw.channels.feishu.streaming import FeishuStreamingCard
+
+        card = FeishuStreamingCard(ctx.feishu_client._client, message_id)
+        try:
+            await card.start()
+            use_card = True
+        except Exception:
+            logger.exception("Failed to start streaming card, falling back to text")
+            use_card = False
+
+        if use_card:
+            await stream_agent_reply(
+                dispatch_message(inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system),
+                card=card,
+                fallback_fn=_fallback_reply,
+            )
+        else:
+            final_text = ""
+            async for event in dispatch_message(inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system):
+                if isinstance(event, Done):
+                    final_text = event.final_message
+            await _fallback_reply(final_text or "(no response)")
 
     await enqueue(session_id, _run())
+
+
+async def stream_agent_reply(
+    events: AsyncIterator[AgentEvent],
+    card: FeishuStreamingCard,
+    fallback_fn: Any,
+) -> None:
+    accumulated = ""
+    try:
+        async for event in events:
+            if isinstance(event, TextChunk):
+                accumulated += event.text
+                await card.update(accumulated)
+            elif isinstance(event, ToolCallStart):
+                accumulated += f"\n🔧 {event.name}...\n"
+                await card.update(accumulated)
+            elif isinstance(event, Done):
+                await card.finish(event.final_message)
+                return
+            elif isinstance(event, ErrorEvent):
+                await card.error(event.message)
+                return
+        if accumulated:
+            await card.finish(accumulated)
+    except Exception:
+        logger.exception("stream_agent_reply failed")
+        try:
+            await fallback_fn(accumulated or "(error)")
+        except Exception:
+            logger.exception("fallback_fn also failed")
