@@ -10,7 +10,7 @@ from lark_oapi.api.im.v1 import (
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
-from lark_oapi.core.enum import AccessTokenType
+from lark_oapi.core.enum import AccessTokenType, HttpMethod
 from lark_oapi.core.model.base_request import BaseRequest
 
 from pyclaw.infra.settings import FeishuSettings
@@ -31,7 +31,7 @@ class FeishuClient:
     async def probe_bot_identity(self) -> str:
         req = (
             BaseRequest.builder()
-            .http_method("GET")
+            .http_method(HttpMethod.GET)
             .uri("/open-apis/bot/v3/info")
             .token_types({AccessTokenType.TENANT})
             .build()
