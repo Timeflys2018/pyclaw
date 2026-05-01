@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from pathlib import Path
-from typing import Any
 
 import lark_oapi as lark
+import lark_oapi.ws.client as _ws_client_module
 from lark_oapi import EventDispatcherHandler
 from lark_oapi.api.im.v1.model import P2ImMessageReceiveV1
 
@@ -36,7 +37,9 @@ class FeishuChannelPlugin:
         self._dedup = dedup
         self._workspace_store = workspace_store
         self._ws_client: lark.ws.Client | None = None
-        self._loop: asyncio.AbstractEventLoop | None = None
+        self._main_loop: asyncio.AbstractEventLoop | None = None
+        self._ws_loop: asyncio.AbstractEventLoop | None = None
+        self._ws_thread: threading.Thread | None = None
         self._status: str = "disconnected"
 
     @property
@@ -46,6 +49,9 @@ class FeishuChannelPlugin:
     async def start(self) -> None:
         bot_open_id = await self._feishu_client.probe_bot_identity()
         logger.info("Feishu bot open_id: %s", bot_open_id)
+
+        main_loop = asyncio.get_event_loop()
+        self._main_loop = main_loop
 
         ctx = FeishuContext(
             settings=self._settings,
@@ -57,13 +63,10 @@ class FeishuChannelPlugin:
             workspace_base=Path.home() / ".pyclaw/workspaces",
         )
 
-        loop = asyncio.get_event_loop()
-        self._loop = loop
-
         def _sync_handler(event: P2ImMessageReceiveV1) -> None:
             asyncio.run_coroutine_threadsafe(
                 handle_feishu_message(event, ctx),
-                loop,
+                main_loop,
             )
 
         dispatcher = (
@@ -79,9 +82,27 @@ class FeishuChannelPlugin:
             auto_reconnect=True,
         )
 
+        ws_loop = asyncio.new_event_loop()
+        self._ws_loop = ws_loop
+
+        _ws_client_module.loop = ws_loop
+
+        def _run_ws() -> None:
+            asyncio.set_event_loop(ws_loop)
+            try:
+                self._ws_client.start()
+            except Exception:
+                logger.exception("Feishu WS thread exited with error")
+
+        thread = threading.Thread(target=_run_ws, daemon=True, name="feishu-ws")
+        self._ws_thread = thread
+        thread.start()
+
         self._status = "connected"
-        await loop.run_in_executor(None, self._ws_client.start)
+        logger.info("Feishu WS thread started")
 
     async def stop(self) -> None:
         self._status = "disconnected"
+        if self._ws_loop is not None and not self._ws_loop.is_closed():
+            self._ws_loop.call_soon_threadsafe(self._ws_loop.stop)
         logger.info("Feishu channel stopped")
