@@ -164,3 +164,48 @@ class SessionStore(Protocol):
 2. `FeishuSettings.idle_minutes`（全局默认，默认 0 = 关闭）
 
 **默认关闭**：与 OpenClaw 保持一致（`DEFAULT_IDLE_MINUTES = 0`）。启用后，用户超时未发消息时下一条消息到来会静默触发 `/new`，新旧 session 均完整保留。
+
+## D22: session_backend 只有 memory / redis 两个有效值
+
+`StorageSettings.session_backend` 目前只支持 `"memory"`（InMemorySessionStore，进程内 dict）和 `"redis"`（RedisSessionStore，完整持久化后端）。
+
+| backend | 实现状态 | 使用场景 |
+|---|---|---|
+| `"memory"` | ✅ 完整实现 | 开发/测试，零依赖 |
+| `"redis"` | ✅ 完整实现 | 生产，多实例水平扩展 |
+| `"file"` | ❌ stub 未实现 | 计划中（task 3.3），JSONL 文件后端 |
+
+`StorageSettings` 中另有 `memory_backend`（向量记忆存储，`"sqlite"`/`"postgres"`）和 `lock_backend`（分布式锁，`"file"`/`"redis"`）两个字段，与 `session_backend` 是独立的维度，不要混淆。
+
+**相关实现**：`src/pyclaw/storage/session/factory.py`
+
+## D23: Bootstrap 文件与工具操作文件的存储分离
+
+Workspace 有两种截然不同的文件，服务不同目的，应走不同存储路径：
+
+| 类型 | 代表文件 | 存储路径 | 后端 | TTL |
+|---|---|---|---|---|
+| **Bootstrap 配置文件** | AGENTS.md, SOUL.md, USER.md | `WorkspaceStore` | File 或 Redis（可选） | 无，永久保留 |
+| **工具操作文件** | 用户代码、数据文件 | `workspace_path: Path`（本地 FS） | 本地文件系统（多实例需 NFS） | 无限制 |
+
+Bootstrap 文件通过 `load_bootstrap_context()` 统一读取后注入 system prompt，不参与 agent 的 read/write/edit 工具操作。工具操作文件通过 `workspace_path`（传给 `bash` 的 `cwd`）访问，必须是真实文件系统路径。
+
+**多实例注意**：`WorkspaceStore` 可以换成 `RedisWorkspaceStore` 实现存算分离；`workspace_path` 在多实例下仍需共享文件系统（NFS/EFS），或通过沙箱容器解决。
+
+**相关 change**：`implement-workspace-context-pipeline`
+
+## D24: Bootstrap 文件注入从渠道层迁移到 ContextEngine
+
+**当前（临时）**：bootstrap 文件（AGENTS.md）在 `handle_feishu_message()` 中读取，通过 `extra_system` 参数注入 agent runner。这是渠道层的职责，导致：
+- 注入逻辑在 `handler.py` 和 `commands.py` 两处重复
+- 非飞书渠道（Web Channel）不自动获得 bootstrap 注入
+
+**目标（implement-workspace-context-pipeline）**：将 bootstrap 注入迁移到 `DefaultContextEngine.assemble()`：
+1. `AgentRunnerDeps` 携带 `workspace_store: WorkspaceStore | None`
+2. `DefaultContextEngine.assemble()` 读取 bootstrap 文件，填入 `AssembleResult.system_prompt_addition`
+3. Runner 已有 `if assembled.system_prompt_addition:` 逻辑，自动注入，零改动
+4. 所有渠道统一受益，渠道层只处理渠道特有上下文（如群组最近消息）
+
+**`_dispatch_and_reply()` 函数**：本次 session 从 `handle_feishu_message` 提取的辅助函数，封装了 CardKit 卡片创建 + streaming reply + fallback text 的完整回复链路，供正常消息流和 `/new <text>` followup 共用，消除了代码重复。
+
+**相关实现**：`src/pyclaw/channels/feishu/handler.py::_dispatch_and_reply`

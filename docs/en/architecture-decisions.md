@@ -162,3 +162,46 @@ Unrecognized `/`-prefixed messages pass through to the agent as normal user mess
 2. `FeishuSettings.idle_minutes` (global default, default 0 = disabled)
 
 **Default off**: Consistent with OpenClaw (`DEFAULT_IDLE_MINUTES = 0`). When enabled, a message arriving after the idle window silently triggers session rotation; both old and new sessions are fully preserved.
+
+## D22: session_backend has only two valid values — memory / redis
+
+`StorageSettings.session_backend` currently supports only `"memory"` (InMemorySessionStore, in-process dict) and `"redis"` (RedisSessionStore, full persistent backend).
+
+| backend | Status | Use case |
+|---|---|---|
+| `"memory"` | ✅ Implemented | Dev/test, zero dependencies |
+| `"redis"` | ✅ Implemented | Production, horizontal scaling |
+| `"file"` | ❌ Stub, unimplemented | Planned (task 3.3), JSONL file backend |
+
+`StorageSettings` also has `memory_backend` (vector memory store, `"sqlite"`/`"postgres"`) and `lock_backend` (distributed lock, `"file"`/`"redis"`), which are independent dimensions — do not conflate them with `session_backend`.
+
+**Related**: `src/pyclaw/storage/session/factory.py`
+
+## D23: Bootstrap config files and tool-operation files use separate storage paths
+
+Two distinct categories of workspace files serve different purposes and must flow through different storage paths:
+
+| Type | Examples | Storage | Backend | TTL |
+|---|---|---|---|---|
+| **Bootstrap config files** | AGENTS.md, SOUL.md, USER.md | `WorkspaceStore` | File or Redis (pluggable) | None, persistent |
+| **Tool-operation files** | user code, data files | `workspace_path: Path` (local FS) | Local filesystem (NFS for multi-instance) | Unlimited |
+
+Bootstrap files are read via `load_bootstrap_context()` and injected into the system prompt. They are not accessible to agent tools (read/write/edit/bash). Tool-operation files are accessed through `workspace_path` (the `cwd` passed to bash), which must be a real filesystem path.
+
+**Multi-instance note**: `WorkspaceStore` can be swapped to `RedisWorkspaceStore` for compute-storage separation. `workspace_path` in multi-instance deployments still requires shared filesystem (NFS/EFS) or sandbox containers.
+
+**Related change**: `implement-workspace-context-pipeline`
+
+## D24: Bootstrap injection migrating from channel layer to ContextEngine
+
+**Current (temporary)**: Bootstrap files (AGENTS.md) are read in `handle_feishu_message()` and injected via `extra_system` parameter. This causes two problems: duplication across `handler.py` and `commands.py`, and non-Feishu channels not automatically receiving bootstrap injection.
+
+**Target (implement-workspace-context-pipeline)**: Move bootstrap injection to `DefaultContextEngine.assemble()`:
+1. `AgentRunnerDeps` carries `workspace_store: WorkspaceStore | None`
+2. `DefaultContextEngine.assemble()` reads bootstrap files, populates `AssembleResult.system_prompt_addition`
+3. Runner already has `if assembled.system_prompt_addition:` logic — zero runner changes needed
+4. All channels benefit automatically; channel layer only handles channel-specific context (e.g. group recent messages)
+
+**`_dispatch_and_reply()` helper**: Extracted from `handle_feishu_message` in this session to encapsulate the complete reply chain (CardKit card creation + streaming reply + text fallback), shared by both normal message flow and `/new <text>` followup dispatch.
+
+**Related**: `src/pyclaw/channels/feishu/handler.py::_dispatch_and_reply`
