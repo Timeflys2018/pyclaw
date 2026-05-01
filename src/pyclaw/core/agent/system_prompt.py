@@ -22,6 +22,7 @@ class PromptInputs:
     model: str
     tools: Sequence[tuple[str, str]] = ()
     skills: Sequence[SkillSummary] = ()
+    skills_prompt: str | None = None
     workspace_path: str | None = None
     now_iso: str | None = None
     identity: str = "You are PyClaw, a multi-channel AI assistant with tool access."
@@ -97,7 +98,7 @@ async def build_system_prompt(
     base_sections: list[str | None] = [
         identity_section(inputs),
         tooling_section(inputs),
-        skills_section(inputs),
+        inputs.skills_prompt if inputs.skills_prompt else skills_section(inputs),
         workspace_section(inputs),
         runtime_section(inputs),
     ]

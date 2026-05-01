@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pyclaw.models import CompactionConfig, RetryConfig, TimeoutConfig, ToolsConfig
@@ -94,9 +94,31 @@ class FeishuSettings(BaseSettings):
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
 
 
+class WebUserConfig(BaseModel):
+    id: str
+    password: str
+
+
 class WebSettings(BaseSettings):
     enabled: bool = False
     auth_token: str = Field("", alias="authToken")
+    jwt_secret: str = Field("change-me-in-production", alias="jwtSecret")
+    admin_token: str = Field("", alias="adminToken")
+    heartbeat_interval: int = Field(30, alias="heartbeatInterval")
+    pong_timeout: int = Field(10, alias="pongTimeout")
+    max_connections_per_user: int = Field(3, alias="maxConnectionsPerUser")
+    buffer_ttl_seconds: int = Field(300, alias="bufferTtlSeconds")
+    buffer_max_entries: int = Field(1000, alias="bufferMaxEntries")
+    tools_requiring_approval: list[str] = Field(
+        default_factory=lambda: ["bash", "write"], alias="toolsRequiringApproval"
+    )
+    allowed_tools: list[str] = Field(
+        default_factory=lambda: ["read"], alias="allowedTools"
+    )
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:5173"], alias="corsOrigins"
+    )
+    users: list[WebUserConfig] = Field(default_factory=list)
 
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
 
@@ -118,6 +140,22 @@ class WorkspaceSettings(BaseSettings):
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
 
 
+class SkillSettings(BaseSettings):
+    workspace_skills_dir: str = "skills"
+    project_agents_skills_dir: str = ".agents/skills"
+    managed_skills_dir: str = "~/.openclaw/skills"
+    personal_agents_skills_dir: str = "~/.agents/skills"
+    bundled_skills_dir: str | None = None
+    clawhub_base_url: str = "https://clawhub.ai"
+    max_skills_in_prompt: int = 150
+    max_skills_prompt_chars: int = 18000
+    max_skill_file_bytes: int = 256_000
+    max_candidates_per_root: int = 300
+    max_skills_loaded_per_source: int = 200
+
+    model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
+
+
 class Settings(BaseSettings):
     server: ServerSettings = Field(default_factory=ServerSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
@@ -126,6 +164,7 @@ class Settings(BaseSettings):
     agent: AgentSettings = Field(default_factory=AgentSettings)
     channels: ChannelsSettings = Field(default_factory=ChannelsSettings)
     workspaces: WorkspaceSettings = Field(default_factory=WorkspaceSettings)
+    skills: SkillSettings = Field(default_factory=SkillSettings)
 
     model_config = SettingsConfigDict(env_prefix="PYCLAW_")
 

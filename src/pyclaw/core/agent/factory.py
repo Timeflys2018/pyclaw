@@ -66,4 +66,5 @@ def create_agent_runner_deps(
         session_store=session_store,
         config=config,
         workspace_store=workspace_store,
+        skill_settings=settings.skills,
     )

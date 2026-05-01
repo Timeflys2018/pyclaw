@@ -69,7 +69,15 @@ class ErrorEvent(BaseModel):
     message: str
 
 
-AgentEvent = Union[TextChunk, ToolCallStart, ToolCallEnd, Done, ErrorEvent]
+class ToolApprovalRequest(BaseModel):
+    type: Literal["tool_approval_request"] = "tool_approval_request"
+    tool_call_id: str
+    tool_name: str
+    args: dict[str, Any] = Field(default_factory=dict)
+    reason: str = "Tool requires user approval before execution"
+
+
+AgentEvent = Union[TextChunk, ToolCallStart, ToolCallEnd, Done, ErrorEvent, ToolApprovalRequest]
 
 
 class AssembleResult(BaseModel):

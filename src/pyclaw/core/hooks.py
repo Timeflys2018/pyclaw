@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pyclaw.models import CompactResult
 
@@ -37,6 +37,16 @@ class CompactionContext:
     tokens_before: int = 0
     message_count: int = 0
     extras: dict[str, Any] = field(default_factory=dict)
+
+
+ApprovalDecision = Literal["approve", "deny", "wait"]
+
+
+@runtime_checkable
+class ToolApprovalHook(Protocol):
+    async def before_tool_execution(
+        self, tool_calls: list[dict], session_id: str,
+    ) -> list[ApprovalDecision]: ...
 
 
 @runtime_checkable

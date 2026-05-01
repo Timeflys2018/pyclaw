@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -35,7 +36,11 @@ from pyclaw.core.agent.tools.registry import (
     tool_result_to_llm_content,
 )
 from pyclaw.core.context_engine import ContextEngine, DefaultContextEngine
-from pyclaw.core.hooks import HookRegistry, ResponseObservation
+from pyclaw.core.hooks import HookRegistry, ResponseObservation, ToolApprovalHook
+from pyclaw.infra.settings import SkillSettings
+from pyclaw.skills.discovery import discover_skills
+from pyclaw.skills.eligibility import filter_eligible
+from pyclaw.skills.prompt import build_skills_prompt
 from pyclaw.models import (
     AgentRunConfig,
     Done,
@@ -45,6 +50,7 @@ from pyclaw.models import (
     SessionTree,
     TextBlock,
     TextChunk,
+    ToolApprovalRequest,
     ToolCallEnd,
     ToolCallStart,
     ToolResult,
@@ -64,6 +70,8 @@ class AgentRunnerDeps:
     session_store: SessionStore = field(default_factory=InMemorySessionStore)
     config: AgentRunConfig = field(default_factory=AgentRunConfig)
     workspace_store: WorkspaceStore | None = field(default=None)
+    skill_settings: SkillSettings | None = field(default=None)
+    tool_approval_hook: ToolApprovalHook | None = field(default=None)
 
 
 @dataclass
@@ -189,6 +197,24 @@ async def run_agent_stream(
         extras=request.tool_context_extras,
     )
 
+    # Skill discovery (per-request, workspace-dependent)
+    skills_prompt_str: str | None = None
+    if tool_workspace_path:
+        try:
+            all_skills = discover_skills(
+                tool_workspace_path,
+                deps.skill_settings,
+            )
+            eligible = filter_eligible(all_skills)
+            if eligible:
+                skills_prompt_str = build_skills_prompt(
+                    eligible, deps.skill_settings
+                )
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Skill discovery failed", exc_info=True,
+            )
+
     tool_summaries = [(t.name, t.description) for t in (deps.tools.get(n) for n in deps.tools.names()) if t is not None]
     system_prompt = await build_system_prompt(
         PromptInputs(
@@ -197,6 +223,7 @@ async def run_agent_stream(
             agent_id=request.agent_id,
             model=request.model or deps.llm.default_model,
             tools=tool_summaries,
+            skills_prompt=skills_prompt_str,
             workspace_path=str(tool_workspace_path),
         ),
         hooks=deps.hooks,
@@ -468,6 +495,7 @@ async def run_agent_stream(
             await _append(deps, tree, guidance_entry)
             continue
 
+        parsed_calls: list[tuple[dict, str, dict]] = []
         for call in response.tool_calls:
             fn = (call or {}).get("function") or {}
             raw_args = fn.get("arguments") or {}
@@ -477,11 +505,59 @@ async def run_agent_stream(
                     raw_args = _json.loads(raw_args)
                 except Exception:
                     raw_args = {"_raw": raw_args}
+            parsed_calls.append((call, fn.get("name", "") or "", raw_args))
             yield ToolCallStart(
                 tool_call_id=call.get("id", ""),
                 name=fn.get("name", "") or "",
                 arguments=raw_args,
             )
+
+        if deps.tool_approval_hook is not None:
+            for call, tool_name, raw_args in parsed_calls:
+                yield ToolApprovalRequest(
+                    tool_call_id=call.get("id", ""),
+                    tool_name=tool_name,
+                    args=raw_args,
+                )
+
+            decisions = await deps.tool_approval_hook.before_tool_execution(
+                [
+                    {"id": c.get("id", ""), "name": tn, "args": ra}
+                    for c, tn, ra in parsed_calls
+                ],
+                session_id=request.session_id,
+            )
+
+            denied_ids: set[str] = set()
+            for idx, decision in enumerate(decisions):
+                if decision == "deny":
+                    denied_ids.add(parsed_calls[idx][0].get("id", ""))
+
+            if denied_ids:
+                response.tool_calls = [
+                    tc for tc in response.tool_calls
+                    if tc.get("id", "") not in denied_ids
+                ]
+                if not response.tool_calls:
+                    for call, tool_name, _ in parsed_calls:
+                        cid = call.get("id", "")
+                        if cid in denied_ids:
+                            denied_result = ToolResult(
+                                tool_call_id=cid,
+                                content=[TextBlock(text=f"Tool '{tool_name}' was denied by approval hook.")],
+                                is_error=True,
+                            )
+                            denied_entry = MessageEntry(
+                                id=generate_entry_id(set(tree.entries.keys())),
+                                parent_id=tree.leaf_id,
+                                timestamp=now_iso(),
+                                role="tool",
+                                content=tool_result_to_llm_content(denied_result),
+                                tool_call_id=cid,
+                            )
+                            await _append(deps, tree, denied_entry)
+                            yield ToolCallEnd(tool_call_id=cid, result=denied_result)
+                    continue
 
         results: list[ToolResult] = await execute_tool_calls(
             deps.tools,

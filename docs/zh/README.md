@@ -6,3 +6,4 @@
 - [typescript-vs-python.md](./typescript-vs-python.md) — 语言权衡
 - [skill-hub-compatibility.md](./skill-hub-compatibility.md) — ClawHub 集成
 - [context-engine.md](./context-engine.md) — Context Engine 设计
+- [roadmap.md](./roadmap.md) — 开发路线图、分阶段计划、风险登记

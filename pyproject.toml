@@ -43,6 +43,7 @@ dev = [
 
 [project.scripts]
 pyclaw = "pyclaw.app:main"
+pyclaw-skill = "pyclaw.cli.skills:main"
 
 [build-system]
 requires = ["hatchling"]

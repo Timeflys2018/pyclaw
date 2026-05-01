@@ -6,3 +6,4 @@
 - [typescript-vs-python.md](./typescript-vs-python.md) — Language trade-offs
 - [skill-hub-compatibility.md](./skill-hub-compatibility.md) — ClawHub integration
 - [context-engine.md](./context-engine.md) — Context Engine design
+- [roadmap.md](./roadmap.md) — Development roadmap, phased plan, risk register

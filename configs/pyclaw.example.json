@@ -35,6 +35,19 @@
     "tools": { "max_output_chars": 25000 }
   },
   "workspaces": { "default": "~/.pyclaw/workspaces", "backend": "file", "bootstrapFiles": ["AGENTS.md"] },
+  "skills": {
+    "workspaceSkillsDir": "skills",
+    "projectAgentsSkillsDir": ".agents/skills",
+    "managedSkillsDir": "~/.openclaw/skills",
+    "personalAgentsSkillsDir": "~/.agents/skills",
+    "bundledSkillsDir": null,
+    "clawhubBaseUrl": "https://clawhub.ai",
+    "maxSkillsInPrompt": 150,
+    "maxSkillsPromptChars": 18000,
+    "maxSkillFileBytes": 256000,
+    "maxCandidatesPerRoot": 300,
+    "maxSkillsLoadedPerSource": 200
+  },
   "channels": {
     "feishu": {
       "enabled": false,
@@ -45,6 +58,19 @@
       "groupContextSize": 20,
       "idleMinutes": 0
     },
-    "web": { "enabled": false, "authToken": "" }
+    "web": {
+      "enabled": false,
+      "jwtSecret": "change-me-in-production",
+      "adminToken": "admin-secret",
+      "heartbeatInterval": 30,
+      "pongTimeout": 10,
+      "maxConnectionsPerUser": 3,
+      "bufferTtlSeconds": 300,
+      "bufferMaxEntries": 1000,
+      "toolsRequiringApproval": ["bash", "write"],
+      "allowedTools": ["read"],
+      "corsOrigins": ["http://localhost:5173"],
+      "users": [{"id": "admin", "password": "changeme"}]
+    }
   }
 }
