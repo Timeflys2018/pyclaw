@@ -27,10 +27,10 @@ def _parse_idle_duration(arg: str) -> int | None:
     arg = arg.strip().lower()
     if arg in ("off", "0", "disable", "关闭"):
         return 0
-    m = re.fullmatch(r"(\d+)m(?:in)?", arg)
+    m = re.fullmatch(r"(\d+)m(?:ins?|inutes?)?", arg)
     if m:
         return int(m.group(1))
-    m = re.fullmatch(r"(\d+)h(?:our)?", arg)
+    m = re.fullmatch(r"(\d+)h(?:ours?)?", arg)
     if m:
         return int(m.group(1)) * 60
     return None
@@ -71,8 +71,8 @@ async def handle_command(
         await ctx.feishu_client.reply_text(message_id, reply_text)
         if followup:
             from pyclaw.channels.base import InboundMessage
-            from pyclaw.channels.dispatch import dispatch_message
             from pyclaw.channels.feishu.queue import enqueue
+            from pyclaw.channels.feishu.handler import _dispatch_and_reply
 
             new_sid = await ctx.session_router.store.get_current_session_id(session_key) or session_id
             workspace_path = ctx.workspace_base / workspace_id
@@ -83,9 +83,12 @@ async def handle_command(
                 channel="feishu",
             )
 
+            agents_md = await ctx.workspace_store.get_file(workspace_id, "AGENTS.md")
+            followup_extra_system = agents_md or ""
+
             async def _run_followup() -> None:
-                async for _ in dispatch_message(inbound, ctx.deps, workspace_path=workspace_path):
-                    pass
+                await _dispatch_and_reply(inbound, ctx, message_id, workspace_path, followup_extra_system)
+                await ctx.session_router.update_last_interaction(new_sid)
 
             await enqueue(new_sid, _run_followup())
         return True
@@ -192,5 +195,10 @@ async def _cmd_idle(args: str, session_id: str, ctx: FeishuContext) -> str:
 
     if minutes == 0:
         return "✅ 空闲超时已关闭。"
-    unit = "分钟" if minutes < 60 else f"{minutes // 60} 小时"
+    if minutes < 60:
+        unit = f"{minutes} 分钟"
+    elif minutes % 60 == 0:
+        unit = f"{minutes // 60} 小时"
+    else:
+        unit = f"{minutes // 60} 小时 {minutes % 60} 分钟"
     return f"✅ 空闲超时已设置为 {unit}。"

@@ -206,32 +206,44 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         await ctx.feishu_client.reply_text(message_id, reply_text)
 
     async def _run() -> None:
-        from pyclaw.channels.feishu.streaming import FeishuStreamingCard
-
-        card = FeishuStreamingCard(ctx.feishu_client._client, message_id)
-        try:
-            await card.start()
-            use_card = True
-        except Exception:
-            logger.exception("Failed to start streaming card, falling back to text")
-            use_card = False
-
-        if use_card:
-            await stream_agent_reply(
-                dispatch_message(inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system),
-                card=card,
-                fallback_fn=_fallback_reply,
-            )
-        else:
-            final_text = ""
-            async for ev in dispatch_message(inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system):
-                if isinstance(ev, Done):
-                    final_text = ev.final_message
-            await _fallback_reply(final_text or "(no response)")
-
+        await _dispatch_and_reply(inbound, ctx, message_id, workspace_path, extra_system)
         await ctx.session_router.update_last_interaction(session_id)
 
     await enqueue(session_id, _run())
+
+
+async def _dispatch_and_reply(
+    inbound: InboundMessage,
+    ctx: FeishuContext,
+    message_id: str,
+    workspace_path: Path,
+    extra_system: str,
+) -> None:
+    from pyclaw.channels.feishu.streaming import FeishuStreamingCard
+
+    async def _fallback(reply_text: str) -> None:
+        await ctx.feishu_client.reply_text(message_id, reply_text)
+
+    card = FeishuStreamingCard(ctx.feishu_client._client, message_id)
+    try:
+        await card.start()
+        use_card = True
+    except Exception:
+        logger.exception("Failed to start streaming card, falling back to text")
+        use_card = False
+
+    if use_card:
+        await stream_agent_reply(
+            dispatch_message(inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system),
+            card=card,
+            fallback_fn=_fallback,
+        )
+    else:
+        final_text = ""
+        async for ev in dispatch_message(inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system):
+            if isinstance(ev, Done):
+                final_text = ev.final_message
+        await _fallback(final_text or "(no response)")
 
 
 async def stream_agent_reply(
