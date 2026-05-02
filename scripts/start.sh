@@ -4,6 +4,9 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
+export LITELLM_LOCAL_MODEL_COST_MAP=True
+export LITELLM_LOG=ERROR
+
 # Check Python venv
 if [ ! -f ".venv/bin/python" ]; then
   echo "❌ .venv not found. Run: python3 -m venv .venv && pip install -e ."
