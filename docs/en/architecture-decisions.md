@@ -242,3 +242,46 @@ Bootstrap files are read via `load_bootstrap_context()` and injected into the sy
 - Processing timeout: 3 seconds (after which Feishu enters retry queue)
 
 **Reference**: Feishu Open Platform long-connection documentation `https://open.feishu.cn/document/server-docs/event-subscription-guide/event-subscription-configure-/request-url-configuration-case`
+
+## D26: User Isolation Model — Personal Assistant, Not Multi-Tenant SaaS
+
+**Positioning**: PyClaw is a personal/small-team AI assistant, not a multi-tenant platform. Isolation is designed around "trusted users + prevent accidental cross-access" rather than "defend against malicious tenants."
+
+### Implemented Isolation Layers
+
+| Dimension | Mechanism | Level |
+|-----------|-----------|-------|
+| Session data | session_key contains user identity (`web:{user_id}` / `feishu:{app}:{open_id}`), Redis keys naturally separated | ✅ Full isolation |
+| Session REST access | `routes.py` checks `session_key.startswith(f"web:{user_id}")` | ✅ Access control |
+| Feishu user workspace | Per-user directory `~/.pyclaw/workspaces/feishu_{app}_{open_id}/` | ✅ Filesystem-level |
+| read/write/edit tools | `WorkspaceResolver.resolve_within()` path traversal prevention | ✅ Workspace boundary |
+| WS message buffer | Redis key `pyclaw:ws_stream:{user_id}` | ✅ Full isolation |
+| Redis keys | All keys contain session_key/session_id with embedded user identity | ✅ Namespace isolation |
+
+### Known Limitations (Acceptable at Current Scale)
+
+| Limitation | Impact | Mitigation | Upgrade Signal |
+|------------|--------|-----------|----------------|
+| Web users share `tool_workspace_path="."` | All web users' bash/read/write ops in same directory | Currently only admin user configured | Multiple web users needed |
+| BashTool has no sandbox | Agent can execute arbitrary shell commands | Tool Approval Hook (risky tools require manual approval) | Public demo / untrusted users |
+| Web users share workspace_id `"default"` | Shared AGENTS.md (bootstrap context) | Personal assistant design — sharing is intentional | Enterprise multi-team isolation |
+| SessionStore has no ACL | Knowing session_id allows reading it | session_id contains 16 random bytes + channel enforces ownership | Public API / OAuth integration |
+
+### Multi-Tenant Upgrade Path (When Needed)
+
+| Fix | Description | Effort | Trigger |
+|-----|-------------|--------|---------|
+| Per-user workspace | `chat.py`: `tool_workspace_path=base / f"web_{user_id}"` | 1h | Multiple web users |
+| conversation_id validation | WS always prepends `f"web:{user_id}:"` | 30 min | Security audit |
+| BashTool sandbox | bubblewrap/firejail or containerization | 1-3 days | Untrusted users |
+| Store-level ACL | SessionStore.load() verifies ownership | 2h | Public API |
+| Per-user AGENTS.md | workspace_id = `web_{user_id}` instead of `"default"` | 30 min | Enterprise multi-team |
+
+### Memory Store Isolation Constraint (§9 Pre-Requisite)
+
+When implementing Memory Store, memory keys **MUST** include session_key prefix:
+- User A's memories never injected into User B's context
+- Search scope limited to current user's memory space
+- Delete operations affect only current user
+
+Design pattern: `memory:{session_key}:{chunk_id}` or per-user SQLite db file.

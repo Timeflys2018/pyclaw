@@ -246,3 +246,46 @@ Bootstrap 文件通过 `load_bootstrap_context()` 统一读取后注入 system p
 - 处理超时 3 秒（之后飞书认为投递失败进入重试队列）
 
 **相关参考**：飞书开放平台长连接模式文档 `https://open.feishu.cn/document/server-docs/event-subscription-guide/event-subscription-configure-/request-url-configuration-case`
+
+## D26: 用户隔离模型 — 个人助手定位，非多租户 SaaS
+
+**定位**：PyClaw 是个人/小团队 AI 助手，不是多租户平台。隔离设计围绕"信任用户 + 防误操作"而非"防恶意租户"。
+
+### 已实现的隔离层
+
+| 维度 | 机制 | 隔离级别 |
+|------|------|---------|
+| Session 数据 | session_key 含用户标识（`web:{user_id}` / `feishu:{app}:{open_id}`），Redis key 天然分离 | ✅ 完全隔离 |
+| Session REST 访问 | `routes.py` 检查 `session_key.startswith(f"web:{user_id}")` | ✅ 访问控制 |
+| 飞书用户 workspace | 每用户独立目录 `~/.pyclaw/workspaces/feishu_{app}_{open_id}/` | ✅ 文件系统级 |
+| read/write/edit 工具 | `WorkspaceResolver.resolve_within()` 路径穿越防护 | ✅ workspace 边界 |
+| WS 消息 buffer | Redis key `pyclaw:ws_stream:{user_id}` | ✅ 完全隔离 |
+| Redis 键 | 所有 key 含 session_key/session_id，用户标识嵌入 key | ✅ 命名空间隔离 |
+
+### 已知限制（当前可接受）
+
+| 限制 | 影响 | 缓解 | 升级信号 |
+|------|------|------|---------|
+| Web 用户共享 `tool_workspace_path="."` | 所有 web 用户 bash/read/write 在同一目录 | 当前只有 admin 一个用户 | 多 web 用户接入时 |
+| BashTool 无沙箱 | agent 可执行任意 shell 命令 | Tool Approval Hook（高风险工具需人工审批） | 公开 demo / 不信任用户场景 |
+| Web 用户共享 workspace_id `"default"` | 共享 AGENTS.md（bootstrap 上下文） | 个人助手设计——共享是预期行为 | 企业多团队隔离时 |
+| SessionStore 无 ACL | 知道 session_id 即可读取 | session_id 含随机 16 字节、渠道层有权限检查 | 公开 API / OAuth 接入时 |
+
+### 如需升级为多租户
+
+| 修复 | 描述 | 工时 | 触发条件 |
+|------|------|------|---------|
+| Per-user workspace | `chat.py` 中 `tool_workspace_path=base / f"web_{user_id}"` | 1h | 多 web 用户 |
+| conversation_id 校验 | WS 中始终 prepend `f"web:{user_id}:"` | 30 min | 安全审计 |
+| BashTool 沙箱 | bubblewrap/firejail 或容器化 | 1-3 天 | 不信任用户 |
+| Store 层 ACL | SessionStore.load() 验证 ownership | 2h | 公开 API |
+| Per-user AGENTS.md | workspace_id 改为 `web_{user_id}` | 30 min | 企业多团队 |
+
+### Memory Store 隔离设计（§9 前置约束）
+
+未来实现 Memory Store 时，memory key **必须** 含 session_key 前缀，确保：
+- 用户 A 的记忆不会注入用户 B 的上下文
+- 搜索范围限定在当前用户的 memory 空间
+- 删除操作只影响当前用户
+
+设计模式：`memory:{session_key}:{chunk_id}` 或 SQLite 每用户一个 db 文件。
