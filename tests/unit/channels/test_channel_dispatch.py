@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from pyclaw.channels.base import InboundMessage
-from pyclaw.channels.dispatch import dispatch_message
+from pyclaw.channels.feishu.dispatch import dispatch_message
 from pyclaw.core.agent.llm import LLMClient, LLMStreamChunk, LLMUsage
 from pyclaw.core.agent.runner import AgentRunnerDeps
 from pyclaw.core.agent.tools.registry import ToolRegistry

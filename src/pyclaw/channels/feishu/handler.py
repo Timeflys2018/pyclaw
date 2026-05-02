@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pyclaw.channels.dispatch import dispatch_message
+from pyclaw.channels.feishu.dispatch import dispatch_message
 from pyclaw.channels.base import InboundMessage
 from pyclaw.channels.feishu.dedup import FeishuDedup
 from pyclaw.channels.feishu.multimodal import feishu_image_to_block

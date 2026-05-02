@@ -36,11 +36,7 @@ from pyclaw.core.agent.tools.registry import (
     tool_result_to_llm_content,
 )
 from pyclaw.core.context_engine import ContextEngine, DefaultContextEngine
-from pyclaw.core.hooks import HookRegistry, ResponseObservation, ToolApprovalHook
-from pyclaw.infra.settings import SkillSettings
-from pyclaw.skills.discovery import discover_skills
-from pyclaw.skills.eligibility import filter_eligible
-from pyclaw.skills.prompt import build_skills_prompt
+from pyclaw.core.hooks import HookRegistry, ResponseObservation, SkillProvider, ToolApprovalHook
 from pyclaw.models import (
     AgentRunConfig,
     Done,
@@ -70,7 +66,7 @@ class AgentRunnerDeps:
     session_store: SessionStore = field(default_factory=InMemorySessionStore)
     config: AgentRunConfig = field(default_factory=AgentRunConfig)
     workspace_store: WorkspaceStore | None = field(default=None)
-    skill_settings: SkillSettings | None = field(default=None)
+    skill_provider: SkillProvider | None = field(default=None)
     tool_approval_hook: ToolApprovalHook | None = field(default=None)
 
 
@@ -197,23 +193,9 @@ async def run_agent_stream(
         extras=request.tool_context_extras,
     )
 
-    # Skill discovery (per-request, workspace-dependent)
     skills_prompt_str: str | None = None
-    if tool_workspace_path:
-        try:
-            all_skills = discover_skills(
-                tool_workspace_path,
-                deps.skill_settings,
-            )
-            eligible = filter_eligible(all_skills)
-            if eligible:
-                skills_prompt_str = build_skills_prompt(
-                    eligible, deps.skill_settings
-                )
-        except Exception:
-            logging.getLogger(__name__).warning(
-                "Skill discovery failed", exc_info=True,
-            )
+    if tool_workspace_path and deps.skill_provider:
+        skills_prompt_str = deps.skill_provider.resolve_skills_prompt(str(tool_workspace_path))
 
     tool_summaries = [(t.name, t.description) for t in (deps.tools.get(n) for n in deps.tools.names()) if t is not None]
     system_prompt = await build_system_prompt(

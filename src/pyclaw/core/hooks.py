@@ -43,6 +43,11 @@ ApprovalDecision = Literal["approve", "deny", "wait"]
 
 
 @runtime_checkable
+class SkillProvider(Protocol):
+    def resolve_skills_prompt(self, workspace_path: str) -> str | None: ...
+
+
+@runtime_checkable
 class ToolApprovalHook(Protocol):
     async def before_tool_execution(
         self, tool_calls: list[dict], session_id: str,
@@ -53,6 +58,8 @@ class ToolApprovalHook(Protocol):
 class AgentHook(Protocol):
     async def before_prompt_build(self, context: PromptBuildContext) -> PromptBuildResult | None: ...
     async def after_response(self, observation: ResponseObservation) -> None: ...
+    async def before_compaction(self, context: CompactionContext) -> None: ...
+    async def after_compaction(self, context: CompactionContext, result: CompactResult) -> None: ...
 
 
 class HookRegistry:
@@ -90,11 +97,8 @@ class HookRegistry:
 
         logger = logging.getLogger(__name__)
         for hook in self._hooks:
-            before = getattr(hook, "before_compaction", None)
-            if before is None:
-                continue
             try:
-                await before(context)
+                await hook.before_compaction(context)
             except Exception:
                 logger.exception("before_compaction hook failed: %r", hook)
 
@@ -105,10 +109,7 @@ class HookRegistry:
 
         logger = logging.getLogger(__name__)
         for hook in self._hooks:
-            after = getattr(hook, "after_compaction", None)
-            if after is None:
-                continue
             try:
-                await after(context, result)
+                await hook.after_compaction(context, result)
             except Exception:
                 logger.exception("after_compaction hook failed: %r", hook)

@@ -66,7 +66,12 @@ class FeishuChannelPlugin:
         main_loop = asyncio.get_event_loop()
         self._main_loop = main_loop
 
-        session_router = SessionRouter(store=self._deps.session_store)
+        from pyclaw.channels.feishu.queue import cleanup_session
+
+        session_router = SessionRouter(
+            store=self._deps.session_store,
+            on_session_rotated=cleanup_session,
+        )
         ctx = FeishuContext(
             settings=self._settings,
             feishu_client=self._feishu_client,

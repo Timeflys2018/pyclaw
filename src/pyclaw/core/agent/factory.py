@@ -58,6 +58,10 @@ def create_agent_runner_deps(
         bootstrap_files=bootstrap_files,
     )
 
+    from pyclaw.skills.provider import DefaultSkillProvider
+
+    skill_provider = DefaultSkillProvider(settings=settings.skills)
+
     return AgentRunnerDeps(
         llm=llm,
         tools=tools,
@@ -66,5 +70,5 @@ def create_agent_runner_deps(
         session_store=session_store,
         config=config,
         workspace_store=workspace_store,
-        skill_settings=settings.skills,
+        skill_provider=skill_provider,
     )
