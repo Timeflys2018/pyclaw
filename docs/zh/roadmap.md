@@ -192,22 +192,59 @@
 | 单实例 Redis SPOF | 全部会话丢失 | Redis 持久化(RDB/AOF)；Phase 4 file 备选 |
 | Web Channel 安全 | 未授权访问 | Bearer token + rate limit 从第一天起 |
 
-## UI/UX 优化（下一轮）
+## UI/UX 优化 ✅ 已完成
 
-Web Channel v1 验证时发现的界面问题。参考：DeepSeek 聊天界面。
+Web Channel v1 验证时发现的界面问题。参考 DeepSeek 界面风格，已在 `enhance-web-ui` change 中全部完成。
 
-| 项目 | 描述 | 工时 |
+| 项目 | 描述 | 状态 |
 |------|------|------|
-| 对话区域居中 | `max-w-3xl mx-auto`，对话和输入框同宽居中 | 15min |
-| 简化消息气泡 | 用户消息去掉蓝色填充，改为右对齐 + 细边框 | 30min |
-| Session 标题用内容 | 用第一条用户消息作标题（非 session ID hash） | 30min |
-| Session 时间分组 | 侧边栏按"今天"/"近7天"/"更早"分组 | 1h |
-| 集群状态栏 | 底部显示 Worker 状态圆点 + "Session on Worker X"（admin only） | 2h |
-| Markdown 渲染 | 标题大小、列表、行内代码、代码块+复制按钮 | 2h |
-| 输入框精细化 | 圆角、阴影、与对话区域等宽居中 | 15min |
-| 浅色模式 | 白色背景、细边框、匹配 DeepSeek 简洁风 | 1h |
+| 对话区域居中 | `max-w-3xl mx-auto`，对话和输入框同宽居中 | ✅ |
+| 简化消息气泡 | 用户消息右对齐 + 细边框，assistant 左对齐无背景 | ✅ |
+| Session 标题用内容 | 用第一条用户消息作标题（后端 `title` 字段） | ✅ |
+| Session 时间分组 | 侧边栏按"Today"/"Last 7 days"/"Earlier"分组 | ✅ |
+| 集群状态栏 | 底部 32px 状态栏 Worker 圆点（admin only） | ✅ |
+| Markdown 渲染 | react-markdown + remark-gfm，代码块复制按钮 | ✅ |
+| 浅色模式 | 纯白背景、#f3f4f6 代码块、#e5e7eb 边框 | ✅ |
 
-**设计参考**：DeepSeek — 对话区域 max-width ~800px 居中、白色干净、session 按时间分组、无重色气泡。
+---
+
+## 项目结构优化（待执行）
+
+基于 Oracle 架构审核 + 业界对比（LangChain、OpenAI Agents、CrewAI、Pydantic AI）的改进建议。
+
+### P1：删除死代码（30 min）
+
+| 目标 | 状态 | 说明 |
+|------|------|------|
+| `orchestration/` | 空包 | 删除（只有 docstring） |
+| `plugins/` | 空包树 | 删除（dreaming/ + memory/ 全是空 stub） |
+| `storage/memory/` | 空 stub | 删除（postgres.py + sqlite.py 各 1 行） |
+| `storage/config/` | 空包 | 删除 |
+| `storage/lock/file.py` | 空 stub | 删除 |
+| `storage/session/file.py` | 空 stub | 删除 |
+| `infra/config.py` | 空 | 删除 |
+| `infra/logging.py` | 空 | 删除 |
+| `channels/models.py` | 死代码 | 删除（FeishuSender/Message，无人引用） |
+| `storage/protocols.py` 中 `MemoryStore`/`ConfigStore` | 无实现者 | 移除 |
+
+### P2：解耦 core → skills（2-4h）
+
+**问题**：`core/agent/runner.py` 硬导入 `skills.discovery`、`skills.eligibility`、`skills.prompt`。
+
+**方案**：提取 `SkillProvider` Protocol 到 `core/hooks.py`，skills 子系统实现该 Protocol，通过 `AgentRunnerDeps` 注入。预期 skills 会变复杂（async 加载、远程 registry、运行时执行），Protocol 方案为未来扩展留好接口。
+
+### P3：InMemorySessionStore 延迟导入（30 min）
+
+**问题**：`runner.py` 模块级导入 `InMemorySessionStore` 作为默认值，造成 core → storage 具体实现耦合。
+
+**方案**：改为 `default_factory=lambda: _get_default_store()`，把导入移到函数内部。保留零配置开发体验。
+
+### 触发条件
+
+以上改动在满足任一条件时执行：
+- 开始实施 Memory Store（P2 Phase 2）前
+- 开始实施 Session Affinity（Phase 4）前
+- 有新贡献者加入时（降低认知负担）
 
 ## 公众号发布节奏
 
