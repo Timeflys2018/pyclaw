@@ -18,6 +18,8 @@ htmlcov/
 .vscode/
 .opencode/
 openspec/
+DailyWork/
+.sisyphus/
 
 configs/pyclaw.json
 pyclaw.json
