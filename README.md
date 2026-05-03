@@ -2,7 +2,7 @@
 
 [中文文档](./README_CN.md)
 
-[![License](https://img.shields.io/badge/license-AGPL--3.0%20%2B%20Commercial-blue.svg)](./LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-green.svg)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/tests-587%20passed-brightgreen.svg)]()
 [![CLA Required](https://img.shields.io/badge/CLA-required-orange.svg)](./CLA.md)
@@ -246,9 +246,4 @@ PRs welcome. See the `openspec/` directory for architectural specs and task brea
 
 ## License
 
-PyClaw is dual-licensed:
-
-- **[AGPL-3.0](./LICENSE)** — free for open-source projects, personal use, and internal use
-- **[Commercial License](./COMMERCIAL-LICENSE.md)** — required for proprietary/SaaS deployments that cannot comply with AGPL-3.0
-
-Contact `timeflying2018@gmail.com` for commercial licensing inquiries.
+[MIT License](./LICENSE) — free to use, modify, and distribute, including commercial use.
