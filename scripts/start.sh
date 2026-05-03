@@ -7,15 +7,15 @@ cd "$PROJECT_ROOT"
 export LITELLM_LOCAL_MODEL_COST_MAP=True
 export LITELLM_LOG=ERROR
 
-# Check Python venv
 if [ ! -f ".venv/bin/python" ]; then
-  echo "❌ .venv not found. Run: python3 -m venv .venv && pip install -e ."
-  exit 1
+  echo "🐍 Creating virtual environment..."
+  python3 -m venv .venv
+  echo "📦 Installing dependencies..."
+  .venv/bin/pip install -e ".[dev]" --quiet
 fi
 
-# Check if web/dist exists, build if not
 if [ ! -d "web/dist" ]; then
-  echo "📦 Building frontend..."
+  echo "🌐 Building frontend..."
   (cd web && npm install && npm run build)
 fi
 
