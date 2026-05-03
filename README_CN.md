@@ -177,9 +177,15 @@ pyclaw-skill list
 pyclaw-skill check
 ```
 
+## 安全与隔离
+
+PyClaw 定位为**个人/小团队助手**，非多租户 SaaS。Session 数据、Redis 键、飞书 Workspace 按用户完全隔离。Web 渠道为信任用户设计（Tool Approval Hook 管控高风险操作）。
+
+详见 [D26: 用户隔离模型](./docs/zh/architecture-decisions.md) — 隔离边界、已知限制、多租户升级路径。
+
 ## 文档
 
-- [架构决策（D1-D25）](./docs/zh/architecture-decisions.md)
+- [架构决策（D1-D26）](./docs/zh/architecture-decisions.md)
 - [会话系统设计](./docs/zh/session-design.md)
 - [上下文引擎](./docs/zh/context-engine.md)
 - [Skill Hub 兼容性](./docs/zh/skill-hub-compatibility.md)

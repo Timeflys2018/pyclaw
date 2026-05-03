@@ -203,9 +203,15 @@ PYCLAW_LLM_API_KEY=sk-... .venv/bin/pytest tests/e2e/
 
 587 unit/integration tests, 6 E2E tests with real LLM.
 
+## Security & Isolation
+
+PyClaw is designed as a **personal/small-team assistant**, not a multi-tenant SaaS. Session data, Redis keys, and Feishu workspaces are fully isolated per user. Web channel is designed for trusted users (Tool Approval Hook gates dangerous operations).
+
+See [D26: User Isolation Model](./docs/en/architecture-decisions.md#d26-user-isolation-model--personal-assistant-not-multi-tenant-saas) for full isolation boundaries, known limitations, and multi-tenant upgrade path.
+
 ## Documentation
 
-- [Architecture Decisions (D1-D25)](./docs/en/architecture-decisions.md) — all design choices and rationale
+- [Architecture Decisions (D1-D26)](./docs/en/architecture-decisions.md) — all design choices and rationale
 - [Session System Design](./docs/en/session-design.md) — SessionKey/SessionId, commands, idle reset
 - [Context Engine](./docs/en/context-engine.md) — assemble/ingest/compact Protocol
 - [Compaction Guide](./docs/en/compaction-guide.md) — multi-stage context summarization
