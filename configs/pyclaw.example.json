@@ -8,6 +8,18 @@
     "transcriptRetentionDays": 7
   },
   "storage": { "session_backend": "memory", "memory_backend": "sqlite", "lock_backend": "file" },
+  "memory": {
+    "base_dir": "~/.pyclaw/memory",
+    "l1_max_entries": 30,
+    "l1_max_chars": 3000,
+    "l1_ttl_seconds": 2592000
+  },
+  "embedding": {
+    "model": "",
+    "apiKey": "",
+    "baseURL": "",
+    "dimensions": 4096
+  },
   "agent": {
     "default_model": "gpt-4o",
     "providers": { "openai": { "apiKey": null, "baseURL": null } },

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from pyclaw.storage.memory.base import MemoryStore
 from pyclaw.storage.session.base import SessionStore
 
-__all__ = ["LockManager", "SessionStore"]
+__all__ = ["LockManager", "MemoryStore", "SessionStore"]
 
 
 @runtime_checkable

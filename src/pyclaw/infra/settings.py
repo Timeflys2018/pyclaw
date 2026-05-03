@@ -54,6 +54,27 @@ class StorageSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PYCLAW_STORAGE_")
 
 
+class MemorySettings(BaseSettings):
+    base_dir: str = "~/.pyclaw/memory"
+    l1_max_entries: int = 30
+    l1_max_chars: int = 3000
+    l1_ttl_seconds: int = 2_592_000  # 30 days
+
+    model_config = SettingsConfigDict(env_prefix="PYCLAW_MEMORY_")
+
+
+class EmbeddingSettings(BaseSettings):
+    model: str = ""
+    api_key: str = Field("", alias="apiKey")
+    base_url: str = Field("", alias="baseURL")
+    dimensions: int = 4096
+
+    model_config = SettingsConfigDict(
+        env_prefix="PYCLAW_EMBEDDING_",
+        populate_by_name=True,
+    )
+
+
 class ProviderSettings(BaseSettings):
     api_key: str | None = Field(default=None, alias="apiKey")
     base_url: str | None = Field(default=None, alias="baseURL")
@@ -161,6 +182,8 @@ class Settings(BaseSettings):
     redis: RedisSettings = Field(default_factory=RedisSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
+    memory: MemorySettings = Field(default_factory=MemorySettings)
+    embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
     channels: ChannelsSettings = Field(default_factory=ChannelsSettings)
     workspaces: WorkspaceSettings = Field(default_factory=WorkspaceSettings)
