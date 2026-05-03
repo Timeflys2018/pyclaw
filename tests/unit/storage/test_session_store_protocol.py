@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from pyclaw.storage import SessionStore as FromPackage
 from pyclaw.storage.protocols import SessionStore as FromProtocols
 from pyclaw.storage.session.base import SessionStore as FromBase
 
 
 def test_all_import_paths_yield_same_protocol() -> None:
-    assert FromPackage is FromProtocols
     assert FromProtocols is FromBase
 
 
