@@ -5,7 +5,6 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-green.svg)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/tests-599%20passed-brightgreen.svg)]()
-[![CLA Required](https://img.shields.io/badge/CLA-required-orange.svg)](./CLA.md)
 
 A Python reimplementation of [OpenClaw](https://github.com/openclaw/openclaw), built from the ground up for **compute-storage separation**, **horizontal scaling**, and **modular architecture**.
 
