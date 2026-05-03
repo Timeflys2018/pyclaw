@@ -2,17 +2,11 @@
 
 [English](./README.md)
 
-<table><tr><td>
+<a href="#关注我们"><img align="right" src="./docs/assets/Time留痕.jpg" width="120" alt="微信公众号: Time留痕" /></a>
 
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-green.svg)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/tests-599%20passed-brightgreen.svg)]()
-
-</td><td align="right">
-
-<img src="./docs/assets/Time留痕.jpg" width="100" alt="微信公众号: Time留痕" />
-
-</td></tr></table>
 
 基于 [OpenClaw](https://github.com/openclaw/openclaw) 重新设计的 Python 实现，从零构建，核心目标：**存算分离**、**水平扩展**、**模块化架构**。
 

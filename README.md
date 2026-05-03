@@ -2,17 +2,11 @@
 
 [中文文档](./README_CN.md)
 
-<table><tr><td>
+<a href="#follow-us"><img align="right" src="./docs/assets/Time留痕.jpg" width="120" alt="WeChat: Time留痕" /></a>
 
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-green.svg)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/tests-599%20passed-brightgreen.svg)]()
-
-</td><td align="right">
-
-<img src="./docs/assets/Time留痕.jpg" width="100" alt="WeChat: Time留痕" />
-
-</td></tr></table>
 
 A Python reimplementation of [OpenClaw](https://github.com/openclaw/openclaw), built from the ground up for **compute-storage separation**, **horizontal scaling**, and **modular architecture**.
 
