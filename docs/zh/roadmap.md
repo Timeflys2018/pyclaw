@@ -10,7 +10,7 @@
 | 总 Roadmap Tasks | 100 |
 | 已完成 | 86 (86%) |
 | 剩余 | 14 (14%) |
-| 测试覆盖 | 587 passed, 19 skipped |
+| 测试覆盖 | 599 passed, 19 skipped |
 | 已交付 Changes | 12 个（全部 complete） |
 
 ## 模块完成度
