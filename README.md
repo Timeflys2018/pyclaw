@@ -234,11 +234,15 @@ See `openspec/changes/pyclaw-architecture/tasks.md` for the full breakdown. Majo
 
 PyClaw is inspired by [OpenClaw](https://github.com/openclaw/openclaw) and designed to be compatible with its skill ecosystem. PyClaw is an **independent Python reimplementation**, not a fork. It inherits the domain model (sessions, memory, channels, skills) but redesigns the architecture for compute-storage separation.
 
+## Follow Us
+
+WeChat Official Account: **Time留痕** — PyClaw development journey, AI Agent architecture insights.
+
+<img src="./docs/assets/Time留痕.jpg" width="200" alt="WeChat: Time留痕" />
+
 ## Contributing
 
 PRs welcome. See the `openspec/` directory for architectural specs and task breakdown.
-
-**Before submitting a PR**: Please read and agree to the [Contributor License Agreement (CLA)](./CLA.md).
 
 ## License
 

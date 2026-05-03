@@ -208,11 +208,15 @@ English docs: [docs/en/](./docs/en/)
 
 PyClaw 受 [OpenClaw](https://github.com/openclaw/openclaw) 启发，并设计为与其技能生态兼容。PyClaw 是**独立的 Python 重新实现**，不是 fork。它继承了领域模型（Session、Memory、Channel、Skill），但为存算分离重新设计了架构。
 
+## 关注我们
+
+微信公众号 **Time留痕** — 持续分享 PyClaw 开发历程、AI Agent 架构设计、技术洞察。
+
+<img src="./docs/assets/Time留痕.jpg" width="200" alt="微信公众号 Time留痕" />
+
 ## 参与贡献
 
 欢迎 PR。项目使用 `openspec/` 目录管理架构规范和任务分解。
-
-**提交 PR 前**：请阅读并同意 [贡献者许可协议 (CLA)](./CLA.md)。
 
 ## 许可证
 
