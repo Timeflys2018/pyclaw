@@ -81,7 +81,7 @@ OpenClaw is a powerful multi-channel AI assistant — but its TypeScript monolit
 
 ### Web Channel Preview
 
-![PyClaw Web Channel](./docs/assets/web-channel-chat.png)
+![PyClaw Web Channel](./docs/assets/web-channel-chat.png?v=2)
 
 ## Project Structure
 
