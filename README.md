@@ -240,6 +240,8 @@ WeChat Official Account: **Time留痕** — PyClaw development journey, AI Agent
 
 <img src="./docs/assets/Time留痕.jpg" width="200" alt="WeChat: Time留痕" />
 
+**Latest Article:** [从 6000 行包装到 645 行单循环：我如何重写 OpenClaw 的 Agent 内核](https://mp.weixin.qq.com/s/sGLHdPsMD1vj8CfUTd6PdQ) — 六大 Agent 框架源码级对比（Claude Code / OpenClaw / OpenCode / DeerFlow / GenericAgent / Hermes）
+
 ## Contributing
 
 PRs welcome. See the `openspec/` directory for architectural specs and task breakdown.
