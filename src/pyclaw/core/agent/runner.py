@@ -28,7 +28,11 @@ from pyclaw.core.agent.runtime_util import (
     is_abort_set,
     iterate_with_deadline,
 )
-from pyclaw.core.agent.system_prompt import PromptInputs, build_system_prompt
+from pyclaw.core.agent.system_prompt import (
+    PromptInputs,
+    build_frozen_prefix,
+    build_per_turn_suffix,
+)
 from pyclaw.core.agent.tools.registry import (
     ToolContext,
     ToolRegistry,
@@ -55,6 +59,8 @@ from pyclaw.models import (
 )
 from pyclaw.storage.session.base import InMemorySessionStore, SessionStore
 from pyclaw.storage.workspace.base import WorkspaceStore
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -198,21 +204,23 @@ async def run_agent_stream(
         skills_prompt_str = deps.skill_provider.resolve_skills_prompt(str(tool_workspace_path))
 
     tool_summaries = [(t.name, t.description) for t in (deps.tools.get(n) for n in deps.tools.names()) if t is not None]
-    system_prompt = await build_system_prompt(
-        PromptInputs(
-            session_id=request.session_id,
-            workspace_id=request.workspace_id,
-            agent_id=request.agent_id,
-            model=request.model or deps.llm.default_model,
-            tools=tool_summaries,
-            skills_prompt=skills_prompt_str,
-            workspace_path=str(tool_workspace_path),
-        ),
-        hooks=deps.hooks,
-        user_prompt=request.user_message,
+    prompt_inputs = PromptInputs(
+        session_id=request.session_id,
+        workspace_id=request.workspace_id,
+        agent_id=request.agent_id,
+        model=request.model or deps.llm.default_model,
+        tools=tool_summaries,
+        skills_prompt=skills_prompt_str,
+        workspace_path=str(tool_workspace_path),
     )
-    if request.extra_system:
-        system_prompt = f"{system_prompt}\n\n{request.extra_system}"
+
+    frozen_result = build_frozen_prefix(
+        prompt_inputs, budget=deps.config.prompt_budget.system_zone_tokens
+    )
+
+    history_budget = deps.config.prompt_budget.compute_history_budget(
+        deps.config.context_window
+    )
 
     iteration = 0
     total_input_tokens = 0
@@ -235,16 +243,24 @@ async def run_agent_stream(
             return
         iteration += 1
 
+        per_turn_result = await build_per_turn_suffix(
+            prompt_inputs, hooks=deps.hooks, user_prompt=request.user_message
+        )
+
         base_messages = tree.build_session_context()
         assembled = await deps.context_engine.assemble(
             session_id=request.session_id,
             messages=base_messages,
-            token_budget=deps.config.context_window,
+            token_budget=history_budget,
             prompt=request.user_message,
         )
-        effective_system = system_prompt
+
+        system_parts = [frozen_result.text, per_turn_result.text]
         if assembled.system_prompt_addition:
-            effective_system = f"{system_prompt}\n\n{assembled.system_prompt_addition}"
+            system_parts.append(assembled.system_prompt_addition)
+        if request.extra_system:
+            system_parts.append(request.extra_system)
+        effective_system = "\n\n".join(system_parts)
 
         remaining_run = _remaining_run_seconds(run_deadline_s, run_started)
         if remaining_run is not None and remaining_run <= 0:
@@ -299,6 +315,7 @@ async def run_agent_stream(
             yield ErrorEvent(error_code="aborted", message="run aborted during llm call")
             return
         except LLMError as exc:
+            logger.error("LLM error: code=%s message=%s", exc.code, str(exc)[:500])
             if exc.code == "context_overflow":
                 compaction_ctx = CompactionContext(
                     session_id=request.session_id,
@@ -313,7 +330,7 @@ async def run_agent_stream(
                     compact_result = await deps.context_engine.compact(
                         session_id=request.session_id,
                         messages=base_messages,
-                        token_budget=deps.config.context_window,
+                        token_budget=history_budget,
                         force=True,
                         abort_event=abort_event,
                         model=deps.config.compaction.model,
@@ -368,6 +385,23 @@ async def run_agent_stream(
 
         total_input_tokens += response.usage.input_tokens
         total_output_tokens += response.usage.output_tokens
+
+        frozen_tokens = sum(frozen_result.token_breakdown.values())
+        bootstrap_tokens = len(assembled.system_prompt_addition or "") // 4
+        per_turn_tokens = sum(per_turn_result.token_breakdown.values())
+        history_tokens = estimate_messages_tokens(assembled.messages)
+        logger.info(
+            "token_usage turn=%d frozen=%d bootstrap=%d per_turn=%d history=%d "
+            "input=%d output=%d budget_remaining=%d",
+            iteration,
+            frozen_tokens,
+            bootstrap_tokens,
+            per_turn_tokens,
+            history_tokens,
+            response.usage.input_tokens,
+            response.usage.output_tokens,
+            max(0, history_budget - history_tokens),
+        )
 
         if not response.tool_calls:
             classification = classify_turn(

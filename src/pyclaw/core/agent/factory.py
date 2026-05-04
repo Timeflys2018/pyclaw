@@ -47,10 +47,13 @@ def create_agent_runner_deps(
             "context_window": settings.agent.max_context_tokens,
             "timeouts": settings.agent.timeouts.model_dump(),
             "retry": settings.agent.retry.model_dump(),
-            "compaction": settings.agent.compaction.model_dump(),
+            "compaction": settings.agent.compaction.model_dump(by_alias=True),
             "tools": settings.agent.tools.model_dump(),
+            "prompt_budget": settings.agent.prompt_budget.model_dump(),
         }
     )
+
+    config.prompt_budget.validate_against_context_window(config.context_window)
 
     bootstrap_files = list(getattr(getattr(settings, "workspaces", None), "bootstrap_files", None) or ["AGENTS.md"])
     engine = DefaultContextEngine(
@@ -61,6 +64,11 @@ def create_agent_runner_deps(
     from pyclaw.skills.provider import DefaultSkillProvider
 
     skill_provider = DefaultSkillProvider(settings=settings.skills)
+
+    if settings.skills.progressive_disclosure:
+        from pyclaw.core.agent.tools.skill_view import SkillViewTool
+
+        tools.register(SkillViewTool(skill_provider))
 
     return AgentRunnerDeps(
         llm=llm,
