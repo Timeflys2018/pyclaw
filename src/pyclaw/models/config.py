@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class WorkspaceConfig(BaseModel):
@@ -56,9 +57,15 @@ class CompactionConfig(BaseModel):
         default=None,
         description="Override LLM model for summarization. If None, chat model is used.",
     )
-    threshold: float = Field(
+    history_threshold: float = Field(
         default=0.8,
-        description="Fraction of context_window that triggers compaction.",
+        alias="historyThreshold",
+        description="Fraction of history_budget that triggers compaction.",
+    )
+    threshold: float | None = Field(
+        default=None,
+        exclude=True,
+        description="DEPRECATED: use history_threshold (alias historyThreshold).",
     )
     keep_recent_tokens: int = Field(
         default=20_000,
@@ -73,12 +80,74 @@ class CompactionConfig(BaseModel):
         description="If True, hard-truncate residual messages after compaction if still over budget.",
     )
 
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def _migrate_threshold(self) -> Self:
+        if self.threshold is not None and self.history_threshold == 0.8:
+            self.history_threshold = self.threshold
+        return self
+
 
 class ToolsConfig(BaseModel):
     max_output_chars: int = Field(
         default=25_000,
         description="Default cap for tool result content length (per-tool may override).",
     )
+
+
+class PromptBudgetConfig(BaseModel):
+    system_zone_tokens: int = Field(
+        default=4096,
+        description="Hard cap for frozen zone (identity + tools + skills_index + workspace).",
+    )
+    dynamic_zone_tokens: int = Field(
+        default=4096,
+        description="Budget for user message injection area (working_memory, memory_context, etc.).",
+    )
+    output_reserve_tokens: int | None = Field(
+        default=None,
+        description="Tokens reserved for LLM output. None = auto-detect from model max output.",
+    )
+    output_reserve_ratio: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+    )
+
+    def validate_against_context_window(self, max_context_tokens: int) -> None:
+        """Validate that fixed zones don't exceed the context window.
+
+        Only validates when output_reserve_tokens is explicitly set.
+        When None (auto-detect), validation is deferred to runtime.
+        """
+        if self.output_reserve_tokens is None:
+            return
+        total = self.system_zone_tokens + self.dynamic_zone_tokens + self.output_reserve_tokens
+        if total > max_context_tokens:
+            raise ValueError(
+                f"prompt_budget zones ({total}) exceed max_context_tokens ({max_context_tokens}): "
+                f"system_zone={self.system_zone_tokens} + dynamic_zone={self.dynamic_zone_tokens} "
+                f"+ output_reserve={self.output_reserve_tokens} = {total}"
+            )
+
+    def compute_history_budget(
+        self,
+        max_context_tokens: int,
+        model_max_output: int | None = None,
+    ) -> int:
+        """Compute the history budget from context window and budget config.
+
+        Returns the number of tokens available for conversation history.
+        """
+        remaining = max_context_tokens - self.system_zone_tokens - self.dynamic_zone_tokens
+        if self.output_reserve_tokens is not None:
+            output_reserve = self.output_reserve_tokens
+        elif model_max_output is not None:
+            output_reserve = model_max_output
+        else:
+            output_reserve = int(remaining * self.output_reserve_ratio)
+        return max(0, remaining - output_reserve)
 
 
 class AgentRunConfig(BaseModel):
@@ -105,3 +174,4 @@ class AgentRunConfig(BaseModel):
     retry: RetryConfig = Field(default_factory=RetryConfig)
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    prompt_budget: PromptBudgetConfig = Field(default_factory=PromptBudgetConfig)

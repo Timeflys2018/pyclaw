@@ -21,6 +21,7 @@ from pyclaw.models.agent import (
 from pyclaw.models.config import (
     AgentRunConfig,
     CompactionConfig,
+    PromptBudgetConfig,
     RetryConfig,
     TimeoutConfig,
     ToolsConfig,
@@ -47,6 +48,7 @@ __all__ = [
     "AssembleResult",
     "CompactResult",
     "CompactionConfig",
+    "PromptBudgetConfig",
     "CompactionEntry",
     "CompactionReasonCode",
     "ContentBlock",
