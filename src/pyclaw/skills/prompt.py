@@ -22,6 +22,11 @@ _COMPACT_PREAMBLE = (
     "path in tool commands."
 )
 
+_INDEX_PREAMBLE = (
+    "\n\nThe following skills provide specialized instructions for specific tasks.\n"
+    "If a task matches a skill below, use the `skill_view` tool to load its full instructions."
+)
+
 _OVERHEAD_RESERVE = 150
 
 
@@ -71,6 +76,26 @@ def format_skills_full(skills: list[SkillManifest]) -> str:
     parts = [_FULL_PREAMBLE, "", "<available_skills>"]
     for skill in skills:
         parts.append(_render_skill_full(skill))
+    parts.append("</available_skills>")
+    return "\n".join(parts)
+
+
+def _render_skill_index(skill: SkillManifest) -> str:
+    lines = [
+        "  <skill>",
+        "    <name>" + _xml_escape(skill.name) + "</name>",
+        "    <description>" + _xml_escape(skill.description) + "</description>",
+        "  </skill>",
+    ]
+    return "\n".join(lines)
+
+
+def format_skills_index(skills: list[SkillManifest]) -> str:
+    if not skills:
+        return ""
+    parts = [_INDEX_PREAMBLE, "", "<available_skills>"]
+    for skill in skills:
+        parts.append(_render_skill_index(skill))
     parts.append("</available_skills>")
     return "\n".join(parts)
 
