@@ -6,6 +6,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
+import os
+
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+
 from fastapi import FastAPI, Request
 
 from pyclaw.infra.redis import close_client, get_client, ping
@@ -16,6 +20,10 @@ from pyclaw.storage.session.factory import create_session_store
 from pyclaw.storage.workspace.factory import create_workspace_store
 
 logger = logging.getLogger(__name__)
+
+import litellm
+
+litellm.suppress_debug_info = True
 
 
 @asynccontextmanager

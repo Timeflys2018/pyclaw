@@ -93,6 +93,8 @@ class FeishuChannelPlugin:
         dispatcher = (
             EventDispatcherHandler.builder("", "")
             .register_p2_im_message_receive_v1(_sync_handler)
+            .register_p2_im_message_message_read_v1(lambda _: None)
+            .register_p2_im_chat_access_event_bot_p2p_chat_entered_v1(lambda _: None)
             .build()
         )
 
