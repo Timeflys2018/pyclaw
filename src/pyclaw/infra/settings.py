@@ -6,7 +6,13 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from pyclaw.models import CompactionConfig, RetryConfig, TimeoutConfig, ToolsConfig
+from pyclaw.models import (
+    CompactionConfig,
+    PromptBudgetConfig,
+    RetryConfig,
+    TimeoutConfig,
+    ToolsConfig,
+)
 
 CONFIG_SEARCH_PATHS = [
     "pyclaw.json",
@@ -92,8 +98,13 @@ class AgentSettings(BaseSettings):
     retry: RetryConfig = Field(default_factory=RetryConfig)
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    prompt_budget: PromptBudgetConfig = Field(
+        default_factory=PromptBudgetConfig, alias="promptBudget"
+    )
 
-    model_config = SettingsConfigDict(env_prefix="PYCLAW_AGENT_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="PYCLAW_AGENT_", extra="ignore", populate_by_name=True
+    )
 
 
 class ServerSettings(BaseSettings):
@@ -173,6 +184,10 @@ class SkillSettings(BaseSettings):
     max_skill_file_bytes: int = 256_000
     max_candidates_per_root: int = 300
     max_skills_loaded_per_source: int = 200
+    progressive_disclosure: bool = Field(
+        default=True,
+        alias="progressiveDisclosure",
+    )
 
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
 

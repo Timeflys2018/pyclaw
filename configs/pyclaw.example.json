@@ -24,7 +24,13 @@
     "default_model": "gpt-4o",
     "providers": { "openai": { "apiKey": null, "baseURL": null } },
     "max_iterations": 50,
-    "context_window": 128000,
+    "max_context_tokens": 200000,
+    "promptBudget": {
+      "system_zone_tokens": 4096,
+      "dynamic_zone_tokens": 4096,
+      "output_reserve_tokens": null,
+      "output_reserve_ratio": 0.3
+    },
     "timeouts": {
       "run_seconds": 300.0,
       "idle_seconds": 60.0,
@@ -39,7 +45,7 @@
     },
     "compaction": {
       "model": null,
-      "threshold": 0.8,
+      "historyThreshold": 0.8,
       "keep_recent_tokens": 20000,
       "timeout_seconds": 900.0,
       "truncate_after_compaction": false
@@ -58,7 +64,8 @@
     "maxSkillsPromptChars": 18000,
     "maxSkillFileBytes": 256000,
     "maxCandidatesPerRoot": 300,
-    "maxSkillsLoadedPerSource": 200
+    "maxSkillsLoadedPerSource": 200,
+    "progressiveDisclosure": true
   },
   "channels": {
     "feishu": {
