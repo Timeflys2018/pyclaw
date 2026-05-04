@@ -23,12 +23,6 @@ export interface Conversation {
   active: boolean
 }
 
-export interface WorkerStatus {
-  worker_id: string
-  status: 'healthy' | 'stale' | 'dead'
-  last_heartbeat: number
-}
-
 /* ─── WebSocket Protocol ─── */
 
 export type WSState = 'connecting' | 'identifying' | 'ready' | 'disconnected'
@@ -129,11 +123,6 @@ export interface WSServerToolApproveRequest {
   }
 }
 
-export interface WSServerClusterStatus {
-  type: 'cluster.status'
-  data: { workers: WorkerStatus[] }
-}
-
 export interface WSServerPing {
   type: 'ping'
 }
@@ -152,7 +141,6 @@ export type WSServerMessage =
   | WSServerChatDone
   | WSServerChatQueued
   | WSServerToolApproveRequest
-  | WSServerClusterStatus
   | WSServerPing
   | WSServerError
 

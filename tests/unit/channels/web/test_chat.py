@@ -25,6 +25,7 @@ from pyclaw.channels.web.protocol import (
 )
 from pyclaw.channels.web.websocket import ConnectionState
 from pyclaw.infra.settings import WebSettings
+from pyclaw.infra.task_manager import TaskManager
 from pyclaw.models.agent import (
     Done,
     ErrorEvent,
@@ -44,7 +45,8 @@ class TestSessionQueue:
 
     @pytest.mark.asyncio
     async def test_enqueue_starts_consumer(self) -> None:
-        sq = SessionQueue()
+        tm = TaskManager()
+        sq = SessionQueue(task_manager=tm)
         consumed: list[str] = []
 
         async def handler(msg: ChatSendMessage) -> None:
@@ -56,7 +58,8 @@ class TestSessionQueue:
 
     @pytest.mark.asyncio
     async def test_serial_execution(self) -> None:
-        sq = SessionQueue()
+        tm = TaskManager()
+        sq = SessionQueue(task_manager=tm)
         order: list[int] = []
 
         async def slow_handler(msg: ChatSendMessage) -> None:
@@ -71,7 +74,8 @@ class TestSessionQueue:
 
     @pytest.mark.asyncio
     async def test_queue_position(self) -> None:
-        sq = SessionQueue()
+        tm = TaskManager()
+        sq = SessionQueue(task_manager=tm)
         gate = asyncio.Event()
 
         async def blocking_handler(msg: ChatSendMessage) -> None:
@@ -106,8 +110,39 @@ class TestSessionQueue:
         decision = sq.get_approval_decision("conv-1", "tc-1")
         assert decision is True
 
+    @pytest.mark.asyncio
+    async def test_consumer_running_returns_true_for_active(self) -> None:
+        tm = TaskManager()
+        sq = SessionQueue(task_manager=tm)
+        gate = asyncio.Event()
+
+        async def blocking(msg: ChatSendMessage) -> None:
+            await gate.wait()
+
+        await sq.enqueue("conv-1", ChatSendMessage(content="a"), blocking)
+        await asyncio.sleep(0.01)
+        assert sq._consumer_running("conv-1") is True
+        gate.set()
+        await asyncio.sleep(0.1)
+
+    @pytest.mark.asyncio
+    async def test_consumer_running_returns_false_when_no_tm(self) -> None:
+        sq = SessionQueue()
+        assert sq._consumer_running("conv-1") is False
+
+    @pytest.mark.asyncio
+    async def test_consumer_running_returns_false_for_unknown(self) -> None:
+        tm = TaskManager()
+        sq = SessionQueue(task_manager=tm)
+        assert sq._consumer_running("nonexistent") is False
+
 
 class TestEnqueueChat:
+    @pytest.fixture(autouse=True)
+    def _inject_task_manager(self) -> None:
+        from pyclaw.channels.web import chat as chat_mod
+        chat_mod._session_queue.set_task_manager(TaskManager())
+
     @pytest.mark.asyncio
     async def test_sends_delta_events(self) -> None:
         mock_ws = AsyncMock()

@@ -71,7 +71,6 @@ async def handle_command(
         await ctx.feishu_client.reply_text(message_id, reply_text)
         if followup:
             from pyclaw.channels.base import InboundMessage
-            from pyclaw.channels.feishu.queue import enqueue
             from pyclaw.channels.feishu.handler import _dispatch_and_reply
 
             new_sid = await ctx.session_router.store.get_current_session_id(session_key) or session_id
@@ -95,7 +94,8 @@ async def handle_command(
                 await _dispatch_and_reply(inbound, ctx, message_id, workspace_path, followup_extra_system)
                 await ctx.session_router.update_last_interaction(new_sid)
 
-            await enqueue(new_sid, _run_followup())
+            assert ctx.queue_registry is not None, "queue_registry must be set on FeishuContext"
+            await ctx.queue_registry.enqueue(new_sid, _run_followup())
         return True
 
     if lower == "/status":

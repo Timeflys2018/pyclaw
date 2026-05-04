@@ -11,7 +11,7 @@ from pyclaw.channels.feishu.dispatch import dispatch_message
 from pyclaw.channels.base import InboundMessage
 from pyclaw.channels.feishu.dedup import FeishuDedup
 from pyclaw.channels.feishu.multimodal import feishu_image_to_block
-from pyclaw.channels.feishu.queue import enqueue
+from pyclaw.channels.feishu.queue import FeishuQueueRegistry
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.agent.runner import AgentRunnerDeps
 from pyclaw.infra.settings import FeishuSettings
@@ -36,6 +36,7 @@ class FeishuContext:
     session_router: SessionRouter = field(default_factory=lambda: SessionRouter(store=None))  # type: ignore[arg-type]
     workspace_base: Path = field(default_factory=lambda: Path.home() / ".pyclaw/workspaces")
     bootstrap_files: list[str] = field(default_factory=lambda: ["AGENTS.md"])
+    queue_registry: FeishuQueueRegistry | None = None
 
 
 def build_session_key(app_id: str, event: Any, scope: str) -> str:
@@ -214,7 +215,8 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         await _dispatch_and_reply(inbound, ctx, message_id, workspace_path, extra_system)
         await ctx.session_router.update_last_interaction(session_id)
 
-    await enqueue(session_id, _run())
+    assert ctx.queue_registry is not None, "queue_registry must be set on FeishuContext"
+    await ctx.queue_registry.enqueue(session_id, _run())
 
 
 async def _dispatch_and_reply(

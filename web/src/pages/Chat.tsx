@@ -4,14 +4,12 @@ import { useAuth } from '../context/AuthContext'
 import { useWebSocket } from '../hooks/useWebSocket'
 import SessionSidebar from '../components/SessionSidebar'
 import ChatArea from '../components/ChatArea'
-import ClusterPanel from '../components/ClusterPanel'
 import ThemeToggle from '../components/ThemeToggle'
 import ToolApprovalModal from '../components/ToolApproval'
 import type {
   Theme,
   Message,
   ToolCallInfo,
-  WorkerStatus,
   PendingApproval,
   WSServerMessage,
 } from '../types'
@@ -21,7 +19,7 @@ function loadTheme(): Theme {
 }
 
 export default function Chat() {
-  const { token, userId, isAdmin, logout } = useAuth()
+  const { token, userId, logout } = useAuth()
   const { wsState, send, lastMessage, conversations, setConversations } =
     useWebSocket(token)
 
@@ -34,7 +32,6 @@ export default function Chat() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [isQueued, setIsQueued] = useState(false)
   const [queuePosition, setQueuePosition] = useState(0)
-  const [workers, setWorkers] = useState<WorkerStatus[]>([])
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null)
 
   const toolCallsRef = useRef<ToolCallInfo[]>([])
@@ -155,10 +152,6 @@ export default function Chat() {
             reason: msg.data.reason,
           })
         }
-        break
-
-      case 'cluster.status':
-        setWorkers(msg.data.workers)
         break
 
       case 'error':
@@ -326,8 +319,6 @@ export default function Chat() {
           onAbort={handleAbort}
         />
       </div>
-
-      {isAdmin && <ClusterPanel workers={workers} />}
 
       {pendingApproval && (
         <ToolApprovalModal

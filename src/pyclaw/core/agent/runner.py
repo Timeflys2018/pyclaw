@@ -57,6 +57,7 @@ from pyclaw.models import (
     generate_entry_id,
     now_iso,
 )
+from pyclaw.infra.task_manager import TaskManager
 from pyclaw.storage.session.base import InMemorySessionStore, SessionStore
 from pyclaw.storage.workspace.base import WorkspaceStore
 
@@ -74,6 +75,7 @@ class AgentRunnerDeps:
     workspace_store: WorkspaceStore | None = field(default=None)
     skill_provider: SkillProvider | None = field(default=None)
     tool_approval_hook: ToolApprovalHook | None = field(default=None)
+    task_manager: TaskManager | None = field(default=None)
 
 
 @dataclass

@@ -16,6 +16,7 @@ from pyclaw.channels.web.websocket import (
     ws_router,
 )
 from pyclaw.infra.settings import WebSettings
+from pyclaw.infra.task_manager import TaskManager
 
 
 def _make_app(settings: WebSettings | None = None) -> FastAPI:
@@ -23,6 +24,7 @@ def _make_app(settings: WebSettings | None = None) -> FastAPI:
     app.include_router(ws_router)
     s = settings or WebSettings(jwt_secret="test-secret", heartbeat_interval=60, pong_timeout=10)
     app.state.web_settings = s
+    app.state.task_manager = TaskManager()
     return app
 
 
@@ -102,6 +104,11 @@ class TestSendEvent:
 
 
 class TestWebSocketEndpoint:
+    @pytest.fixture(autouse=True)
+    def _reset_registry(self) -> None:
+        from pyclaw.channels.web.websocket import registry
+        registry._connections.clear()
+
     def test_hello_then_identify_then_ready(self) -> None:
         app = _make_app()
         client = TestClient(app)

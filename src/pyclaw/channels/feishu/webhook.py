@@ -66,11 +66,13 @@ class FeishuChannelPlugin:
         main_loop = asyncio.get_event_loop()
         self._main_loop = main_loop
 
-        from pyclaw.channels.feishu.queue import cleanup_session
+        from pyclaw.channels.feishu.queue import FeishuQueueRegistry
 
+        assert self._deps.task_manager is not None, "Feishu channel requires task_manager in AgentRunnerDeps"
+        queue_registry = FeishuQueueRegistry(task_manager=self._deps.task_manager)
         session_router = SessionRouter(
             store=self._deps.session_store,
-            on_session_rotated=cleanup_session,
+            on_session_rotated=queue_registry.cleanup_session,
         )
         ctx = FeishuContext(
             settings=self._settings,
@@ -82,6 +84,7 @@ class FeishuChannelPlugin:
             session_router=session_router,
             workspace_base=self._workspace_base,
             bootstrap_files=self._bootstrap_files,
+            queue_registry=queue_registry,
         )
 
         def _sync_handler(event: P2ImMessageReceiveV1) -> None:
@@ -108,12 +111,22 @@ class FeishuChannelPlugin:
         ws_loop = asyncio.new_event_loop()
         self._ws_loop = ws_loop
 
+        # MONKEY-PATCH: lark-oapi's ws.Client.start() calls
+        # run_until_complete() on a module-level asyncio loop.  We replace
+        # it with our own event loop running in a dedicated thread so that
+        # the WS client doesn't block the main event loop.  Remove this
+        # when lark-oapi ships a native async WS client.
         _ws_client_module.loop = ws_loop
 
         def _run_ws() -> None:
             asyncio.set_event_loop(ws_loop)
             try:
                 self._ws_client.start()
+            except RuntimeError as exc:
+                if "Event loop stopped" in str(exc) or "Event loop is closed" in str(exc):
+                    logger.debug("Feishu WS thread stopped (shutdown): %s", exc)
+                else:
+                    logger.exception("Feishu WS thread exited with error")
             except Exception:
                 logger.exception("Feishu WS thread exited with error")
 
@@ -128,4 +141,8 @@ class FeishuChannelPlugin:
         self._status = "disconnected"
         if self._ws_loop is not None and not self._ws_loop.is_closed():
             self._ws_loop.call_soon_threadsafe(self._ws_loop.stop)
+        if self._ws_thread is not None:
+            self._ws_thread.join(timeout=5.0)
+            if self._ws_thread.is_alive():
+                logger.warning("Feishu WS thread did not terminate within 5s")
         logger.info("Feishu channel stopped")

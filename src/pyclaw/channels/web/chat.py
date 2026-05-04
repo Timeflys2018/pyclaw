@@ -20,6 +20,7 @@ from pyclaw.channels.web.protocol import (
 from pyclaw.channels.web.websocket import ConnectionState, send_event
 from pyclaw.core.agent.runner import RunRequest, run_agent_stream, AgentRunnerDeps
 from pyclaw.infra.settings import WebSettings
+from pyclaw.infra.task_manager import TaskManager
 from pyclaw.models.agent import (
     Done,
     ErrorEvent,
@@ -35,17 +36,28 @@ MessageHandler = Callable[[ChatSendMessage], Coroutine[Any, Any, None]]
 
 
 class SessionQueue:
-    def __init__(self) -> None:
+    def __init__(self, task_manager: TaskManager | None = None) -> None:
+        self._task_manager = task_manager
         self._queues: dict[str, asyncio.Queue[tuple[ChatSendMessage, MessageHandler]]] = {}
-        self._consumers: dict[str, asyncio.Task[None]] = {}
+        self._consumers: dict[str, str] = {}
         self._busy: dict[str, bool] = {}
         self._abort_events: dict[str, asyncio.Event] = {}
         self._approval_decisions: dict[str, bool] = {}
 
+    def set_task_manager(self, tm: TaskManager) -> None:
+        self._task_manager = tm
+
+    def _consumer_running(self, conversation_id: str) -> bool:
+        tid = self._consumers.get(conversation_id)
+        if tid is None or self._task_manager is None:
+            return False
+        state = self._task_manager.get_state(tid)
+        return state == "running"
+
     def is_idle(self, conversation_id: str) -> bool:
         if self._busy.get(conversation_id, False):
             return False
-        return conversation_id not in self._consumers or self._consumers[conversation_id].done()
+        return not self._consumer_running(conversation_id)
 
     async def enqueue(
         self,
@@ -62,10 +74,13 @@ class SessionQueue:
 
         await self._queues[conversation_id].put((msg, handler))
 
-        if conversation_id not in self._consumers or self._consumers[conversation_id].done():
-            self._consumers[conversation_id] = asyncio.create_task(
-                self._consume(conversation_id)
+        if not self._consumer_running(conversation_id) and self._task_manager is not None:
+            task_id = self._task_manager.spawn(
+                f"web-consumer:{conversation_id}",
+                self._consume(conversation_id),
+                category="consumer",
             )
+            self._consumers[conversation_id] = task_id
 
         return position
 
@@ -124,6 +139,13 @@ async def enqueue_chat(
     msg: ChatSendMessage,
     settings: WebSettings,
 ) -> None:
+    if _session_queue._task_manager is None:
+        tm = getattr(getattr(state.ws, "app", None), "state", None)
+        if tm is not None:
+            tm = getattr(tm, "task_manager", None)
+        if tm is not None:
+            _session_queue.set_task_manager(tm)
+
     conversation_id = msg.conversation_id
 
     async def _handle(m: ChatSendMessage) -> None:

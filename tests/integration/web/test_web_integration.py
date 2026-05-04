@@ -16,6 +16,7 @@ from pyclaw.channels.web.protocol import SERVER_HELLO, SERVER_READY
 from pyclaw.channels.web.routes import set_web_deps, web_router
 from pyclaw.channels.web.websocket import ws_router
 from pyclaw.infra.settings import WebSettings, WebUserConfig
+from pyclaw.infra.task_manager import TaskManager
 from pyclaw.models.agent import Done, TextChunk
 from pyclaw.storage.session.base import InMemorySessionStore
 
@@ -34,6 +35,7 @@ def _make_app() -> tuple[FastAPI, InMemorySessionStore]:
         users=[WebUserConfig(id="testuser", password="testpass")],
     )
     app.state.web_settings = settings
+    app.state.task_manager = TaskManager()
 
     store = InMemorySessionStore()
     session_router = SessionRouter(store=store)

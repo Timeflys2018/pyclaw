@@ -203,6 +203,12 @@ class Settings(BaseSettings):
     channels: ChannelsSettings = Field(default_factory=ChannelsSettings)
     workspaces: WorkspaceSettings = Field(default_factory=WorkspaceSettings)
     skills: SkillSettings = Field(default_factory=SkillSettings)
+    # Graceful shutdown timeout in seconds.  Matches the default K8s
+    # SIGTERM→SIGKILL window (30 s) so that TaskManager drain completes
+    # before the orchestrator force-kills the process.
+    shutdown_grace_seconds: int = Field(
+        30, alias="shutdownGraceSeconds"
+    )
 
     model_config = SettingsConfigDict(env_prefix="PYCLAW_")
 

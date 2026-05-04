@@ -87,7 +87,7 @@ class TestWorkerRegistryWithRedis:
     async def test_active_workers_stale_status(self) -> None:
         redis = self._mock_redis()
         now = time.time()
-        redis.zrangebyscore.return_value = [("w1", now - 65)]
+        redis.zrangebyscore.return_value = [("w1", now - 100)]
         reg = WorkerRegistry(redis_client=redis, worker_id="w1")
         workers = await reg.active_workers()
         assert workers[0]["status"] == "stale"
@@ -96,7 +96,7 @@ class TestWorkerRegistryWithRedis:
     async def test_active_workers_dead_status(self) -> None:
         redis = self._mock_redis()
         now = time.time()
-        redis.zrangebyscore.return_value = [("w1", now - 100)]
+        redis.zrangebyscore.return_value = [("w1", now - 140)]
         reg = WorkerRegistry(redis_client=redis, worker_id="w1")
         workers = await reg.active_workers()
         assert workers[0]["status"] == "dead"
@@ -117,3 +117,18 @@ class TestWorkerRegistryWithRedis:
         reg = WorkerRegistry(redis_client=redis, worker_id="w1")
         workers = await reg.active_workers()
         assert workers == []
+
+    @pytest.mark.asyncio
+    async def test_active_workers_honors_stale_threshold(self) -> None:
+        redis = self._mock_redis()
+        now = time.time()
+        redis.zrangebyscore.return_value = [
+            ("w1", now - 30),
+            ("w2", now - 150),
+            ("w3", now - 200),
+        ]
+        reg = WorkerRegistry(redis_client=redis, worker_id="w1")
+        workers = await reg.active_workers(stale_threshold=120)
+        assert workers[0]["status"] == "healthy"
+        assert workers[1]["status"] == "stale"
+        assert workers[2]["status"] == "dead"

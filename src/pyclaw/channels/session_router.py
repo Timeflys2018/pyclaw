@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -12,7 +12,7 @@ from pyclaw.storage.session.base import SessionStore
 @dataclass
 class SessionRouter:
     store: SessionStore
-    on_session_rotated: Callable[[str], None] | None = field(default=None)
+    on_session_rotated: Callable[[str], Awaitable[None]] | None = field(default=None)
 
     async def resolve_or_create(
         self,
@@ -45,7 +45,7 @@ class SessionRouter:
             session_key, workspace_id, agent_id, parent_session_id=old_id
         )
         if old_id is not None and self.on_session_rotated:
-            self.on_session_rotated(old_id)
+            await self.on_session_rotated(old_id)
         return tree.header.id, tree
 
     async def update_last_interaction(self, session_id: str) -> None:

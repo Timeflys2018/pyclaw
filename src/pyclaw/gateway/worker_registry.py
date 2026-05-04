@@ -54,9 +54,9 @@ class WorkerRegistry:
         for member, score in members or []:
             worker_id = member.decode() if isinstance(member, bytes) else member
             age = now - score
-            if age < 60:
+            if age < stale_threshold:
                 status = "healthy"
-            elif age < 90:
+            elif age < stale_threshold * 1.5:
                 status = "stale"
             else:
                 status = "dead"

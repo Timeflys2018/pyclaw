@@ -89,7 +89,7 @@ class TestClusterEndpoint:
         now = time.time()
         redis.zrangebyscore.return_value = [
             ("w1", now - 5),
-            ("w2", now - 100),
+            ("w2", now - 140),
         ]
         reg = WorkerRegistry(redis_client=redis, worker_id="w1")
         app = _make_app(reg)

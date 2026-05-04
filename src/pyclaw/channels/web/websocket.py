@@ -25,6 +25,7 @@ from pyclaw.channels.web.protocol import (
     SERVER_READY,
 )
 from pyclaw.infra.settings import WebSettings
+from pyclaw.infra.task_manager import TaskManager
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,10 @@ def _get_settings(websocket: WebSocket) -> WebSettings:
     return websocket.app.state.web_settings
 
 
+def _get_task_manager(websocket: WebSocket) -> TaskManager:
+    return websocket.app.state.task_manager
+
+
 @ws_router.websocket("/api/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     settings: WebSettings = _get_settings(websocket)
@@ -128,14 +133,19 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         "conversations": [],
     })
 
-    heartbeat_task = asyncio.create_task(_heartbeat_loop(state, settings))
+    task_manager = _get_task_manager(websocket)
+    heartbeat_task_id = task_manager.spawn(
+        f"ws-heartbeat:{state.ws_session_id}",
+        _heartbeat_loop(state, settings),
+        category="heartbeat",
+    )
 
     try:
-        await _dispatch_loop(state, settings)
+        await _dispatch_loop(state, settings, task_manager)
     except WebSocketDisconnect:
         pass
     finally:
-        heartbeat_task.cancel()
+        await task_manager.cancel(heartbeat_task_id)
         registry.disconnect(user_id, websocket)
 
 
@@ -158,7 +168,9 @@ async def _heartbeat_loop(state: ConnectionState, settings: WebSettings) -> None
         return
 
 
-async def _dispatch_loop(state: ConnectionState, settings: WebSettings) -> None:
+async def _dispatch_loop(
+    state: ConnectionState, settings: WebSettings, task_manager: TaskManager,
+) -> None:
     while True:
         raw = await state.ws.receive_json()
         msg = parse_client_message(raw)
@@ -168,7 +180,12 @@ async def _dispatch_loop(state: ConnectionState, settings: WebSettings) -> None:
 
         elif isinstance(msg, ChatSendMessage):
             from pyclaw.channels.web.chat import enqueue_chat
-            asyncio.create_task(enqueue_chat(state, msg, settings))
+            task_manager.spawn(
+                f"ws-enqueue:{state.ws_session_id}",
+                enqueue_chat(state, msg, settings),
+                category="generic",
+                on_error=lambda e: logger.warning("ws-enqueue failed: %s", e),
+            )
 
         elif isinstance(msg, ChatAbortMessage):
             from pyclaw.channels.web.chat import handle_abort

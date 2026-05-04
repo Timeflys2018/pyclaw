@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request
 
 from pyclaw.infra.redis import close_client, get_client, ping
 from pyclaw.infra.settings import load_settings
+from pyclaw.infra.task_manager import TaskManager
 from pyclaw.storage.lock.redis import RedisLockManager
 from pyclaw.storage.protocols import SessionStore
 from pyclaw.storage.session.factory import create_session_store
@@ -28,6 +29,9 @@ litellm.suppress_debug_info = True
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    if not logging.root.handlers:
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
+
     settings = load_settings()
     redis_client = None
 
@@ -49,10 +53,19 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     from pyclaw.core.agent.factory import create_agent_runner_deps
 
+    task_manager = TaskManager(
+        default_shutdown_grace_s=float(settings.shutdown_grace_seconds),
+    )
+    app.state.task_manager = task_manager
+
     workspace_store = create_workspace_store(settings, redis_client=redis_client)
     app.state.workspace_store = workspace_store
 
-    runner_deps = create_agent_runner_deps(settings, app.state.session_store, workspace_store=workspace_store)
+    runner_deps = create_agent_runner_deps(
+        settings, app.state.session_store,
+        workspace_store=workspace_store,
+        task_manager=task_manager,
+    )
     app.state.runner_deps = runner_deps
 
     app.state.feishu_channel = None
@@ -74,11 +87,10 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             workspace_base=workspace_base,
         )
         app.state.feishu_channel = feishu_channel
-        asyncio.create_task(feishu_channel.start())
-        logger.info("Feishu channel starting...")
+        await feishu_channel.start()
+        logger.info("Feishu channel started")
 
     app.state.worker_registry = None
-    heartbeat_task = None
     if settings.channels.web.enabled:
         from pyclaw.channels.session_router import SessionRouter
         from pyclaw.channels.web.admin import admin_router, set_admin_registry
@@ -104,22 +116,31 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         set_admin_registry(worker_registry)
 
         await worker_registry.register()
-        heartbeat_task = asyncio.create_task(
-            _worker_heartbeat_loop(worker_registry)
+        task_manager.spawn(
+            "worker-heartbeat",
+            _worker_heartbeat_loop(worker_registry),
+            category="heartbeat",
         )
 
         logger.info("Web channel enabled (worker=%s)", worker_id)
 
     yield
 
-    if heartbeat_task is not None:
-        heartbeat_task.cancel()
+    # Phase 1: Stop accepting new work
     if app.state.worker_registry is not None:
         await app.state.worker_registry.deregister()
-
     if app.state.feishu_channel is not None:
         await app.state.feishu_channel.stop()
 
+    # Phase 2: Drain background tasks
+    report = await task_manager.shutdown()
+    logger.info(
+        "shutdown drain complete: completed=%d cancelled=%d timed_out=%d failed=%d duration=%.2fs",
+        report.completed, report.cancelled, report.timed_out, report.failed,
+        report.total_duration_s,
+    )
+
+    # Phase 3+4: Close storage and infrastructure
     if redis_client is not None:
         await close_client(redis_client)
 

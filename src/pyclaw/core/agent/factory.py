@@ -10,6 +10,7 @@ from pyclaw.core.agent.tools.workspace import WorkspaceResolver
 from pyclaw.core.context_engine import DefaultContextEngine
 from pyclaw.core.hooks import HookRegistry
 from pyclaw.infra.settings import Settings
+from pyclaw.infra.task_manager import TaskManager
 from pyclaw.models import AgentRunConfig, WorkspaceConfig
 from pyclaw.storage.protocols import SessionStore
 from pyclaw.storage.workspace.base import WorkspaceStore
@@ -19,6 +20,7 @@ def create_agent_runner_deps(
     settings: Settings,
     session_store: SessionStore,
     workspace_store: WorkspaceStore | None = None,
+    task_manager: TaskManager | None = None,
 ) -> AgentRunnerDeps:
     api_key: str | None = None
     base_url: str | None = None
@@ -79,4 +81,5 @@ def create_agent_runner_deps(
         config=config,
         workspace_store=workspace_store,
         skill_provider=skill_provider,
+        task_manager=task_manager,
     )

@@ -8,8 +8,10 @@ import pytest
 
 from pyclaw.channels.feishu.dedup import FeishuDedup
 from pyclaw.channels.feishu.handler import FeishuContext, handle_feishu_message
+from pyclaw.channels.feishu.queue import FeishuQueueRegistry
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.infra.settings import FeishuSettings
+from pyclaw.infra.task_manager import TaskManager
 from pyclaw.models import Done, TextChunk
 from pyclaw.storage.session.base import InMemorySessionStore
 from pyclaw.storage.workspace.file import FileWorkspaceStore
@@ -68,6 +70,8 @@ def _make_ctx(store: InMemorySessionStore, tmp_path: Path) -> FeishuContext:
     workspace_store = FileWorkspaceStore(base_dir=tmp_path / "workspaces")
     router = SessionRouter(store=store)
 
+    tm = TaskManager()
+    queue_registry = FeishuQueueRegistry(task_manager=tm)
     return FeishuContext(
         settings=settings,
         feishu_client=feishu_client,
@@ -77,6 +81,7 @@ def _make_ctx(store: InMemorySessionStore, tmp_path: Path) -> FeishuContext:
         bot_open_id="bot_open_id",
         session_router=router,
         workspace_base=tmp_path / "workspaces",
+        queue_registry=queue_registry,
     )
 
 
@@ -86,14 +91,14 @@ async def test_handle_feishu_message_creates_session_and_enqueues(tmp_path: Path
     ctx = _make_ctx(store, tmp_path)
     event = _make_text_event("你好", message_id="msg_001")
 
-    enqueued = []
-    original_enqueue = __import__("pyclaw.channels.feishu.queue", fromlist=["enqueue"]).enqueue
+    enqueued: list[str] = []
+    _original = ctx.queue_registry.enqueue
 
     async def _capture_enqueue(session_id: str, coro) -> None:
         enqueued.append(session_id)
         await coro
 
-    with patch("pyclaw.channels.feishu.handler.enqueue", side_effect=_capture_enqueue):
+    with patch.object(ctx.queue_registry, "enqueue", side_effect=_capture_enqueue):
         await handle_feishu_message(event, ctx)
 
     assert len(enqueued) == 1
@@ -110,13 +115,13 @@ async def test_handle_feishu_message_dedup_skips_duplicate(tmp_path: Path) -> No
     ctx = _make_ctx(store, tmp_path)
     event = _make_text_event("hello", message_id="msg_dup")
 
-    enqueued = []
+    enqueued: list[str] = []
 
     async def _capture_enqueue(session_id: str, coro) -> None:
         enqueued.append(session_id)
         await coro
 
-    with patch("pyclaw.channels.feishu.handler.enqueue", side_effect=_capture_enqueue):
+    with patch.object(ctx.queue_registry, "enqueue", side_effect=_capture_enqueue):
         await handle_feishu_message(event, ctx)
         await handle_feishu_message(event, ctx)
 
@@ -129,13 +134,13 @@ async def test_handle_feishu_message_group_no_mention_skipped(tmp_path: Path) ->
     ctx = _make_ctx(store, tmp_path)
     event = _make_text_event("大家好", chat_type="group", message_id="msg_group_001")
 
-    enqueued = []
+    enqueued: list[str] = []
 
     async def _capture_enqueue(session_id: str, coro) -> None:
         enqueued.append(session_id)
         await coro
 
-    with patch("pyclaw.channels.feishu.handler.enqueue", side_effect=_capture_enqueue):
+    with patch.object(ctx.queue_registry, "enqueue", side_effect=_capture_enqueue):
         await handle_feishu_message(event, ctx)
 
     assert len(enqueued) == 0
@@ -154,7 +159,7 @@ async def test_handle_feishu_message_slash_command_intercepted(tmp_path: Path) -
         enqueued.append(session_id)
         await coro
 
-    with patch("pyclaw.channels.feishu.handler.enqueue", side_effect=_capture_enqueue):
+    with patch.object(ctx.queue_registry, "enqueue", side_effect=_capture_enqueue):
         await handle_feishu_message(event, ctx)
 
     assert len(enqueued) == 0
@@ -172,7 +177,7 @@ async def test_handle_feishu_message_updates_last_interaction(tmp_path: Path) ->
     async def _run_immediately(session_id: str, coro) -> None:
         await coro
 
-    with patch("pyclaw.channels.feishu.handler.enqueue", side_effect=_run_immediately):
+    with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
         with patch("pyclaw.channels.feishu.handler._dispatch_and_reply", new_callable=AsyncMock):
             await handle_feishu_message(event, ctx)
 
@@ -234,9 +239,8 @@ async def test_cmd_new_with_args_rotates_and_enqueues_followup(tmp_path: Path) -
         all_enqueued.append((session_id, coro))
         coro.close()
 
-    with patch("pyclaw.channels.feishu.handler.enqueue", side_effect=_capture_enqueue):
-        with patch("pyclaw.channels.feishu.queue.enqueue", side_effect=_capture_enqueue):
-            await handle_feishu_message(event, ctx)
+    with patch.object(ctx.queue_registry, "enqueue", side_effect=_capture_enqueue):
+        await handle_feishu_message(event, ctx)
 
     new_sid = await store.get_current_session_id("feishu:cli_x:ou_test")
     assert new_sid is not None
@@ -278,6 +282,8 @@ def _make_ctx_with_workspace_store(store: InMemorySessionStore, tmp_path: Path) 
 
     dedup = FeishuDedup()
     router = SessionRouter(store=store)
+    tm = TaskManager()
+    queue_registry = FeishuQueueRegistry(task_manager=tm)
 
     return FeishuContext(
         settings=FeishuSettings(enabled=True, app_id="cli_x", app_secret="s"),
@@ -288,6 +294,7 @@ def _make_ctx_with_workspace_store(store: InMemorySessionStore, tmp_path: Path) 
         bot_open_id="bot_open_id",
         session_router=router,
         workspace_base=tmp_path / "workspaces",
+        queue_registry=queue_registry,
     )
 
 
@@ -310,7 +317,7 @@ async def test_channel_skips_bootstrap_when_deps_has_workspace_store(tmp_path: P
     async def _run_immediately(session_id: str, coro) -> None:
         await coro
 
-    with patch("pyclaw.channels.feishu.handler.enqueue", side_effect=_run_immediately):
+    with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
         with patch("pyclaw.channels.feishu.handler._dispatch_and_reply",
                    side_effect=_capture_dispatch_and_reply):
             await handle_feishu_message(event, ctx)
@@ -337,7 +344,7 @@ async def test_channel_injects_bootstrap_when_deps_missing_workspace_store(tmp_p
     async def _run_immediately(session_id: str, coro) -> None:
         await coro
 
-    with patch("pyclaw.channels.feishu.handler.enqueue", side_effect=_run_immediately):
+    with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
         with patch("pyclaw.channels.feishu.handler._dispatch_and_reply",
                    side_effect=_capture_dispatch_and_reply):
             await handle_feishu_message(event, ctx)
@@ -373,6 +380,8 @@ async def test_workspace_base_comes_from_context_not_hardcoded(tmp_path: Path) -
     dedup = FeishuDedup()
     ws_store = FileWorkspaceStore(base_dir=custom_base)
     router = SessionRouter(store=store)
+    tm = TaskManager()
+    qr = FeishuQueueRegistry(task_manager=tm)
 
     ctx = FeishuContext(
         settings=FeishuSettings(enabled=True, app_id="cli_x", app_secret="s"),
@@ -380,6 +389,7 @@ async def test_workspace_base_comes_from_context_not_hardcoded(tmp_path: Path) -
         deps=deps, dedup=dedup, workspace_store=ws_store,
         bot_open_id="bot", session_router=router,
         workspace_base=custom_base,
+        queue_registry=qr,
     )
 
     event = _make_text_event("test", message_id="msg_base_001")
@@ -392,7 +402,7 @@ async def test_workspace_base_comes_from_context_not_hardcoded(tmp_path: Path) -
     async def _run_immediately(session_id: str, coro) -> None:
         await coro
 
-    with patch("pyclaw.channels.feishu.handler.enqueue", side_effect=_run_immediately):
+    with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
         with patch("pyclaw.channels.feishu.handler._dispatch_and_reply", side_effect=_capture):
             await handle_feishu_message(event, ctx)
 

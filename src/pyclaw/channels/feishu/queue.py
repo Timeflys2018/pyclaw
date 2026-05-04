@@ -5,33 +5,43 @@ import logging
 from collections.abc import Coroutine
 from typing import Any
 
+from pyclaw.infra.task_manager import TaskManager
+
 logger = logging.getLogger(__name__)
 
-_queues: dict[str, asyncio.Queue[Coroutine[Any, Any, None]]] = {}
-_consumers: dict[str, asyncio.Task[None]] = {}
 
+class FeishuQueueRegistry:
+    def __init__(self, task_manager: TaskManager) -> None:
+        self._task_manager = task_manager
+        self._entries: dict[str, tuple[asyncio.Queue[Coroutine[Any, Any, None]], str]] = {}
 
-async def enqueue(session_id: str, coro: Coroutine[Any, Any, None]) -> None:
-    if session_id not in _queues:
-        _queues[session_id] = asyncio.Queue()
-        _consumers[session_id] = asyncio.create_task(_consume(session_id))
-    await _queues[session_id].put(coro)
+    async def enqueue(self, session_id: str, coro: Coroutine[Any, Any, None]) -> None:
+        if session_id not in self._entries:
+            q: asyncio.Queue[Coroutine[Any, Any, None]] = asyncio.Queue()
+            task_id = self._task_manager.spawn(
+                f"feishu-consumer:{session_id}",
+                self._consume(session_id, q),
+                category="consumer",
+            )
+            self._entries[session_id] = (q, task_id)
+        queue, _tid = self._entries[session_id]
+        await queue.put(coro)
 
+    async def cleanup_session(self, session_id: str) -> None:
+        entry = self._entries.pop(session_id, None)
+        if entry is not None:
+            _q, task_id = entry
+            await self._task_manager.cancel(task_id)
 
-def cleanup_session(session_id: str) -> None:
-    task = _consumers.pop(session_id, None)
-    if task is not None and not task.done():
-        task.cancel()
-    _queues.pop(session_id, None)
-
-
-async def _consume(session_id: str) -> None:
-    q = _queues[session_id]
-    while True:
-        coro = await q.get()
-        try:
-            await coro
-        except Exception:
-            logger.exception("error in serial queue consumer for session %s", session_id)
-        finally:
-            q.task_done()
+    async def _consume(self, session_id: str, q: asyncio.Queue[Coroutine[Any, Any, None]]) -> None:
+        while True:
+            coro = await q.get()
+            try:
+                await coro
+            except Exception:
+                logger.exception("error in serial queue consumer for session %s", session_id)
+            finally:
+                try:
+                    q.task_done()
+                except ValueError:
+                    pass
