@@ -21,6 +21,7 @@ class _StubMemoryStore:
         *,
         layers: list[str] | None = None,
         limit: int = 10,
+        per_layer_limits: dict[str, int] | None = None,
     ) -> list[MemoryEntry]:
         return []
 
@@ -36,7 +37,7 @@ class _StubMemoryStore:
         pass
 
     async def search_archives(
-        self, session_key: str, query: str, *, limit: int = 5
+        self, session_key: str, query: str, *, limit: int = 5, min_similarity: float = 0.0
     ) -> list[ArchiveEntry]:
         return []
 

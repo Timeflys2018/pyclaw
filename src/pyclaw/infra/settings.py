@@ -65,6 +65,12 @@ class MemorySettings(BaseSettings):
     l1_max_entries: int = 30
     l1_max_chars: int = 3000
     l1_ttl_seconds: int = 2_592_000  # 30 days
+    search_l2_quota: int = 3
+    search_l3_quota: int = 2
+    search_fts_min_query_chars: int = 3
+    archive_max_results: int = 5
+    archive_min_similarity: float = 0.5
+    archive_min_results: int = 1
 
     model_config = SettingsConfigDict(env_prefix="PYCLAW_MEMORY_")
 
@@ -114,6 +120,17 @@ class ServerSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PYCLAW_SERVER_")
 
 
+class FeishuStreamingConfig(BaseModel):
+    """Streaming card configuration — passed directly to Feishu CardKit API."""
+    print_frequency_ms: int = Field(50, alias="printFrequencyMs")
+    print_step: int = Field(2, alias="printStep")
+    print_strategy: str = Field("fast", alias="printStrategy")
+    summary: str = Field("", alias="summary")
+    throttle_ms: int = Field(100, alias="throttleMs")
+
+    model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
+
+
 class FeishuSettings(BaseSettings):
     enabled: bool = False
     app_id: str = Field("", alias="appId")
@@ -122,6 +139,7 @@ class FeishuSettings(BaseSettings):
     group_context: str = Field("recent", alias="groupContext")
     group_context_size: int = Field(20, alias="groupContextSize")
     idle_minutes: int = Field(0, alias="idleMinutes")
+    streaming: FeishuStreamingConfig = Field(default_factory=FeishuStreamingConfig)
 
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
 

@@ -81,7 +81,7 @@ async def test_search_delegates_to_sqlite() -> None:
     store = CompositeMemoryStore(l1=l1, sqlite=sqlite)
     result = await store.search("sess-A", "hello", layers=["L2"], limit=5)
 
-    sqlite.search.assert_awaited_once_with("sess-A", "hello", layers=["L2"], limit=5)
+    sqlite.search.assert_awaited_once_with("sess-A", "hello", layers=["L2"], limit=5, per_layer_limits=None)
     assert result == [entry]
 
 
@@ -143,7 +143,7 @@ async def test_search_archives_delegates_to_sqlite() -> None:
     store = CompositeMemoryStore(l1=l1, sqlite=sqlite)
     result = await store.search_archives("sess-A", "query", limit=3)
 
-    sqlite.search_archives.assert_awaited_once_with("sess-A", "query", limit=3)
+    sqlite.search_archives.assert_awaited_once_with("sess-A", "query", limit=3, min_similarity=0.0)
     assert result == [archive]
 
 

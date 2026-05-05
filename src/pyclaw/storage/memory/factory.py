@@ -45,6 +45,10 @@ def create_memory_store(
                 max_chars=memory_settings.l1_max_chars,
                 ttl_seconds=memory_settings.l1_ttl_seconds,
             ),
-            sqlite=SqliteMemoryBackend(base_dir, embedding),
+            sqlite=SqliteMemoryBackend(
+                base_dir,
+                embedding,
+                fts_min_query_chars=memory_settings.search_fts_min_query_chars,
+            ),
         )
     raise ValueError(f"unknown memory_backend: {backend!r}")

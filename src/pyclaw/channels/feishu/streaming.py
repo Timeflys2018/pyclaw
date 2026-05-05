@@ -23,13 +23,37 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 STREAMING_ELEMENT_ID = "streaming_content"
-THROTTLE_MS = 160
+_DEFAULT_THROTTLE_MS = 100
+
+
+class StreamingConfig:
+    __slots__ = ("print_frequency_ms", "print_step", "print_strategy", "summary", "throttle_ms")
+
+    def __init__(
+        self,
+        print_frequency_ms: int = 50,
+        print_step: int = 2,
+        print_strategy: str = "fast",
+        summary: str = "",
+        throttle_ms: int = _DEFAULT_THROTTLE_MS,
+    ) -> None:
+        self.print_frequency_ms = print_frequency_ms
+        self.print_step = print_step
+        self.print_strategy = print_strategy
+        self.summary = summary
+        self.throttle_ms = throttle_ms
 
 
 class FeishuStreamingCard:
-    def __init__(self, lark_client: object, reply_to_message_id: str) -> None:
+    def __init__(
+        self,
+        lark_client: object,
+        reply_to_message_id: str,
+        streaming_config: StreamingConfig | None = None,
+    ) -> None:
         self._client = lark_client  # type: ignore[misc]
         self._reply_to = reply_to_message_id
+        self._config = streaming_config or StreamingConfig()
         self._card_id: str | None = None
         self._seq = 1
         self._last_update: float = 0.0
@@ -38,7 +62,7 @@ class FeishuStreamingCard:
         card_body = json.dumps(self._build_initial_card())
         body = (
             CreateCardRequestBody.builder()
-            .type("card")
+            .type("card_json")
             .data(card_body)
             .build()
         )
@@ -71,7 +95,7 @@ class FeishuStreamingCard:
         if not self._card_id:
             return
         now = time.monotonic() * 1000
-        if now - self._last_update < THROTTLE_MS:
+        if now - self._last_update < self._config.throttle_ms:
             return
         self._last_update = now
         await self._send_content_update(text)
@@ -108,12 +132,14 @@ class FeishuStreamingCard:
             logger.warning("content update failed: %s %s", resp.code, resp.msg)
 
     async def _close_streaming(self) -> None:
-        settings_data = json.dumps({"streaming_mode": False})
+        settings_data = json.dumps({"config": {"streaming_mode": False}})
         body = (
             SettingsCardRequestBody.builder()
             .settings(settings_data)
+            .sequence(self._seq)
             .build()
         )
+        self._seq += 1
         req = (
             SettingsCardRequest.builder()
             .card_id(self._card_id)  # type: ignore[arg-type]
@@ -125,9 +151,18 @@ class FeishuStreamingCard:
             logger.warning("close streaming failed: %s %s", resp.code, resp.msg)
 
     def _build_initial_card(self) -> dict:  # type: ignore[type-arg]
+        cfg = self._config
         return {
             "schema": "2.0",
-            "streaming_mode": True,
+            "config": {
+                "streaming_mode": True,
+                "summary": {"content": cfg.summary},
+                "streaming_config": {
+                    "print_frequency_ms": {"default": cfg.print_frequency_ms},
+                    "print_step": {"default": cfg.print_step},
+                    "print_strategy": cfg.print_strategy,
+                },
+            },
             "body": {
                 "elements": [
                     {

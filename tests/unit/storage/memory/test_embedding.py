@@ -32,6 +32,7 @@ async def test_embed(mock_aembedding: AsyncMock, client: EmbeddingClient) -> Non
         input=["hello world"],
         api_key="test-key",
         api_base="https://api.example.com",
+        encoding_format="float",
     )
     assert result == [0.1, 0.2, 0.3]
 
@@ -52,5 +53,6 @@ async def test_embed_batch(mock_aembedding: AsyncMock, client: EmbeddingClient) 
         input=["hello", "world"],
         api_key="test-key",
         api_base="https://api.example.com",
+        encoding_format="float",
     )
     assert result == [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]

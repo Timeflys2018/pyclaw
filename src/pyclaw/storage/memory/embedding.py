@@ -24,6 +24,7 @@ class EmbeddingClient:
             input=[text],
             api_key=self._api_key,
             api_base=self._api_base,
+            encoding_format="float",
         )
         return response.data[0]["embedding"]
 
@@ -33,5 +34,6 @@ class EmbeddingClient:
             input=texts,
             api_key=self._api_key,
             api_base=self._api_base,
+            encoding_format="float",
         )
         return [item["embedding"] for item in response.data]

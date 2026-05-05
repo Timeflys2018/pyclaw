@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+CHINESE_STOP_WORDS: set[str] = {
+    '我', '你', '他', '她', '它', '们', '自己', '什么', '哪', '谁',
+    '这', '那', '这些', '那些', '这个', '那个', '哪个', '哪些', '某',
+    '的', '了', '吗', '呢', '吧', '呀', '啊', '哦', '嘛', '着',
+    '过', '得', '地', '么', '罢了',
+    '在', '从', '到', '把', '被', '给', '向', '对', '于', '以',
+    '按', '按照',
+    '和', '与', '及', '或', '而', '且', '但', '却', '因为', '所以',
+    '如果', '虽然', '然而', '不过', '因此', '于是', '并且', '或者',
+    '都', '也', '还', '就', '只', '才', '又', '再', '很', '太',
+    '最', '非常', '已经', '正在', '可能', '应该', '可以', '必须',
+    '一定', '当然', '其实', '大概', '几乎', '至少', '仅仅',
+    '是', '有', '没有', '会', '能', '要', '想', '让', '使', '做',
+    '怎么', '如何', '为什么', '哪里', '多少', '几', '怎样', '何时', '何处', '是否',
+    '不', '没', '别', '请', '好', '一', '个', '些', '每', '各',
+    '我该', '你们', '他们', '她们', '它们', '自从', '关于',
+}
+
+ENGLISH_STOP_WORDS: set[str] = {
+    'the', 'a', 'an',
+    'i', 'me', 'my', 'mine', 'myself',
+    'you', 'your', 'yours', 'yourself',
+    'he', 'him', 'his', 'she', 'her', 'hers',
+    'we', 'us', 'our', 'ours', 'they', 'them', 'their', 'theirs',
+    'it', 'its', 'who', 'whom', 'whose',
+    'am', 'are', 'was', 'were', 'been', 'being',
+    'have', 'has', 'had', 'having', 'does', 'did', 'doing', 'done',
+    'will', 'would', 'could', 'should', 'might', 'shall', 'may', 'must',
+    'of', 'to', 'with', 'at', 'by', 'from', 'about',
+    'into', 'through', 'during', 'before', 'after',
+    'above', 'below', 'between', 'under',
+    'and', 'but', 'yet', 'so', 'because', 'although', 'though',
+    'while', 'unless', 'until', 'since',
+    'very', 'just', 'also', 'too', 'quite', 'rather',
+    'already', 'still', 'always', 'never', 'often',
+    'however', 'therefore', 'thus', 'hence',
+    'than', 'more', 'most', 'much', 'many', 'few', 'less',
+    'there', 'here', 'then', 'when', 'where', 'how', 'why', 'what',
+    'this', 'that', 'these', 'those', 'such', 'other', 'each', 'every',
+    'some', 'any', 'all',
+}
+
+STOP_WORDS: set[str] = CHINESE_STOP_WORDS | ENGLISH_STOP_WORDS

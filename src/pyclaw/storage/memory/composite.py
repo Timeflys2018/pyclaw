@@ -38,8 +38,11 @@ class CompositeMemoryStore:
         *,
         layers: list[str] | None = None,
         limit: int = 10,
+        per_layer_limits: dict[str, int] | None = None,
     ) -> list[MemoryEntry]:
-        return await self._sqlite.search(session_key, query, layers=layers, limit=limit)
+        return await self._sqlite.search(
+            session_key, query, layers=layers, limit=limit, per_layer_limits=per_layer_limits
+        )
 
     async def store(self, session_key: str, entry: MemoryEntry) -> None:
         await self._sqlite.store(session_key, entry)
@@ -67,9 +70,11 @@ class CompositeMemoryStore:
         await self._sqlite.archive_session(session_key, session_id, summary)
 
     async def search_archives(
-        self, session_key: str, query: str, *, limit: int = 5
+        self, session_key: str, query: str, *, limit: int = 5, min_similarity: float = 0.0
     ) -> list[ArchiveEntry]:
-        return await self._sqlite.search_archives(session_key, query, limit=limit)
+        return await self._sqlite.search_archives(
+            session_key, query, limit=limit, min_similarity=min_similarity
+        )
 
     async def close(self) -> None:
         for backend in (self._l1, self._sqlite):

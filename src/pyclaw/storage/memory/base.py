@@ -18,6 +18,8 @@ class MemoryEntry(BaseModel):
     last_used_at: float | None = None
     use_count: int = 0
     status: str = "active"
+    score: float | None = None
+    low_confidence: bool = False
 
 
 class ArchiveEntry(BaseModel):
@@ -26,6 +28,8 @@ class ArchiveEntry(BaseModel):
     summary: str
     created_at: float
     distance: float | None = None
+    similarity: float | None = None
+    low_confidence: bool = False
 
 
 @runtime_checkable
@@ -41,6 +45,7 @@ class MemoryStore(Protocol):
         *,
         layers: list[str] | None = None,
         limit: int = 10,
+        per_layer_limits: dict[str, int] | None = None,
     ) -> list[MemoryEntry]: ...
     async def store(self, session_key: str, entry: MemoryEntry) -> None: ...
     async def delete(self, session_key: str, entry_id: str) -> None: ...
@@ -49,7 +54,7 @@ class MemoryStore(Protocol):
         self, session_key: str, session_id: str, summary: str
     ) -> None: ...
     async def search_archives(
-        self, session_key: str, query: str, *, limit: int = 5
+        self, session_key: str, query: str, *, limit: int = 5, min_similarity: float = 0.0
     ) -> list[ArchiveEntry]: ...
 
     async def close(self) -> None: ...

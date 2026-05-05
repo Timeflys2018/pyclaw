@@ -19,22 +19,26 @@ def _make_embedding_client(dimensions: int = 4) -> MagicMock:
     return client
 
 
+def _query_sync(backend: SqliteMemoryBackend, session_key: str, sql: str) -> list[dict]:
+    conn = backend._get_conn_sync(session_key)
+    cursor = conn.execute(sql)
+    desc = cursor.getdescription()
+    return [{d[0]: v for d, v in zip(desc, row)} for row in cursor]
+
+
 async def test_archive_session_writes_to_both_tables(tmp_path: Path) -> None:
     client = _make_embedding_client()
     b = SqliteMemoryBackend(tmp_path, client)
     try:
         await b.archive_session("ws:alice", "sess-001", "User discussed Python testing")
 
-        conn = await b._get_conn("ws:alice")
-        cursor = await conn.execute("SELECT * FROM archives")
-        rows = await cursor.fetchall()
+        rows = _query_sync(b, "ws:alice", "SELECT * FROM archives")
         assert len(rows) == 1
         assert rows[0]["session_id"] == "sess-001"
         assert rows[0]["summary"] == "User discussed Python testing"
 
-        cursor = await conn.execute("SELECT count(*) as cnt FROM archives_vec")
-        row = await cursor.fetchone()
-        assert row["cnt"] == 1
+        vec_rows = _query_sync(b, "ws:alice", "SELECT count(*) as cnt FROM archives_vec")
+        assert vec_rows[0]["cnt"] == 1
 
         client.embed.assert_awaited_once_with("User discussed Python testing")
     finally:
@@ -76,15 +80,12 @@ async def test_embedding_failure_on_archive_still_writes_summary(tmp_path: Path)
     try:
         await b.archive_session("ws:alice", "sess-001", "Important session summary")
 
-        conn = await b._get_conn("ws:alice")
-        cursor = await conn.execute("SELECT * FROM archives")
-        rows = await cursor.fetchall()
+        rows = _query_sync(b, "ws:alice", "SELECT * FROM archives")
         assert len(rows) == 1
         assert rows[0]["summary"] == "Important session summary"
 
-        cursor = await conn.execute("SELECT count(*) as cnt FROM archives_vec")
-        row = await cursor.fetchone()
-        assert row["cnt"] == 0
+        vec_rows = _query_sync(b, "ws:alice", "SELECT count(*) as cnt FROM archives_vec")
+        assert vec_rows[0]["cnt"] == 0
     finally:
         await b.close()
 
@@ -119,9 +120,7 @@ async def test_no_embedding_client_returns_empty(tmp_path: Path) -> None:
         results = await b.search_archives("ws:alice", "anything")
         assert results == []
 
-        conn = await b._get_conn("ws:alice")
-        cursor = await conn.execute("SELECT * FROM archives")
-        rows = await cursor.fetchall()
+        rows = _query_sync(b, "ws:alice", "SELECT * FROM archives")
         assert len(rows) == 1
     finally:
         await b.close()

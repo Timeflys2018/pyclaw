@@ -29,7 +29,8 @@ postgres = [
     "pgvector>=0.3.0",
 ]
 sqlite = [
-    "aiosqlite>=0.20.0",
+    "apsw>=3.45.0",
+    "jieba>=0.42.0",
     "sqlite-vec>=0.1.6",
 ]
 dev = [
