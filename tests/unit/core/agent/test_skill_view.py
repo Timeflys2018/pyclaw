@@ -40,7 +40,7 @@ class TestSkillViewTool:
 
 
 class TestSkillViewFactoryRegistration:
-    def test_skill_view_registered_when_progressive_on(self) -> None:
+    async def test_skill_view_registered_when_progressive_on(self) -> None:
         from pyclaw.core.agent.factory import create_agent_runner_deps
         from pyclaw.infra.settings import Settings
         from pyclaw.storage.session.base import InMemorySessionStore
@@ -48,10 +48,10 @@ class TestSkillViewFactoryRegistration:
         settings = Settings()
         settings.skills.progressive_disclosure = True
         store = InMemorySessionStore()
-        deps = create_agent_runner_deps(settings, store)
+        deps = await create_agent_runner_deps(settings, store)
         assert "skill_view" in deps.tools
 
-    def test_skill_view_not_registered_when_progressive_off(self) -> None:
+    async def test_skill_view_not_registered_when_progressive_off(self) -> None:
         from pyclaw.core.agent.factory import create_agent_runner_deps
         from pyclaw.infra.settings import Settings
         from pyclaw.storage.session.base import InMemorySessionStore
@@ -59,5 +59,5 @@ class TestSkillViewFactoryRegistration:
         settings = Settings()
         settings.skills.progressive_disclosure = False
         store = InMemorySessionStore()
-        deps = create_agent_runner_deps(settings, store)
+        deps = await create_agent_runner_deps(settings, store)
         assert "skill_view" not in deps.tools

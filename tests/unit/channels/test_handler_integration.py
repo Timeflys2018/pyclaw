@@ -327,7 +327,7 @@ async def test_channel_skips_bootstrap_when_deps_has_workspace_store(tmp_path: P
 
 
 @pytest.mark.asyncio
-async def test_channel_injects_bootstrap_when_deps_missing_workspace_store(tmp_path: Path) -> None:
+async def test_channel_no_longer_passes_bootstrap_via_extra_system(tmp_path: Path) -> None:
     store = InMemorySessionStore()
     ctx = _make_ctx(store, tmp_path)
     ws_id = "feishu_cli_x_ou_test"
@@ -350,7 +350,7 @@ async def test_channel_injects_bootstrap_when_deps_missing_workspace_store(tmp_p
             await handle_feishu_message(event, ctx)
 
     assert len(extra_systems_seen) == 1
-    assert "channel fallback content" in extra_systems_seen[0]
+    assert "channel fallback content" not in extra_systems_seen[0]
 
 
 @pytest.mark.asyncio

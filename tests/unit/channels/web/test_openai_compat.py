@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
+from pathlib import Path
 from typing import Any, AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,7 +22,7 @@ from pyclaw.storage.session.base import InMemorySessionStore
 JWT_SECRET = "test-secret"
 
 
-def _make_app() -> tuple[FastAPI, InMemorySessionStore]:
+def _make_app(workspace_base: Path | None = None) -> tuple[FastAPI, InMemorySessionStore]:
     app = FastAPI()
     settings = WebSettings(jwt_secret=JWT_SECRET)
     app.state.web_settings = settings
@@ -30,7 +32,9 @@ def _make_app() -> tuple[FastAPI, InMemorySessionStore]:
     router = SessionRouter(store=store)
     deps = MagicMock()
     deps.session_store = store
-    set_openai_deps(deps=deps, session_router=router)
+    if workspace_base is None:
+        workspace_base = Path(tempfile.mkdtemp())
+    set_openai_deps(deps=deps, session_router=router, workspace_base=workspace_base)
     return app, store
 
 
@@ -183,7 +187,7 @@ class TestChatCompletionsStreaming:
 
 class TestChatCompletionsUserField:
     @patch("pyclaw.channels.web.openai_compat.run_agent_stream")
-    def test_user_field_overrides_session_key(self, mock_stream: MagicMock) -> None:
+    def test_user_field_ignored_uses_jwt_user(self, mock_stream: MagicMock) -> None:
         app, _ = _make_app()
 
         captured_requests: list[Any] = []
@@ -197,7 +201,7 @@ class TestChatCompletionsUserField:
         client = TestClient(app)
         client.post(
             "/v1/chat/completions",
-            headers=_auth_header(),
+            headers=_auth_header("user1"),
             json={
                 "model": "m",
                 "messages": [{"role": "user", "content": "hi"}],
@@ -205,4 +209,5 @@ class TestChatCompletionsUserField:
             },
         )
         assert len(captured_requests) == 1
-        assert "openai:custom-user" in captured_requests[0].session_id
+        assert "openai:user1" in captured_requests[0].session_id
+        assert "custom-user" not in captured_requests[0].session_id

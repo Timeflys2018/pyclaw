@@ -61,12 +61,34 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     workspace_store = create_workspace_store(settings, redis_client=redis_client)
     app.state.workspace_store = workspace_store
 
-    runner_deps = create_agent_runner_deps(
+    memory_store = None
+    if redis_client is not None:
+        try:
+            from pyclaw.storage.memory.factory import create_memory_store
+
+            memory_store = create_memory_store(
+                settings.storage,
+                settings.memory,
+                settings.embedding,
+                redis_client,
+            )
+        except Exception:
+            logger.exception("failed to create memory_store; agent will run without memory")
+            memory_store = None
+    app.state.memory_store = memory_store
+
+    runner_deps = await create_agent_runner_deps(
         settings, app.state.session_store,
         workspace_store=workspace_store,
         task_manager=task_manager,
+        memory_store=memory_store,
+        redis_client=redis_client,
     )
     app.state.runner_deps = runner_deps
+
+    # Task 10.5: expose workspace_base unconditionally for all channels
+    workspace_base = Path(settings.workspaces.default).expanduser()
+    app.state.workspace_base = workspace_base
 
     app.state.feishu_channel = None
     if settings.channels.feishu.enabled:
@@ -76,7 +98,6 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         dedup = FeishuDedup(redis_client=app.state.redis_client)
         feishu_client = FeishuClient(settings.channels.feishu)
-        workspace_base = Path(settings.workspaces.default).expanduser()
         feishu_channel = FeishuChannelPlugin(
             settings.channels.feishu,
             feishu_client,
@@ -85,6 +106,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             workspace_store,
             bootstrap_files=settings.workspaces.bootstrap_files,
             workspace_base=workspace_base,
+            memory_store=memory_store,
         )
         app.state.feishu_channel = feishu_channel
         await feishu_channel.start()
@@ -104,7 +126,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         session_router = SessionRouter(store=app.state.session_store)
         set_web_deps(store=app.state.session_store, session_router=session_router)
-        set_openai_deps(runner_deps, session_router)
+        set_openai_deps(runner_deps, session_router, workspace_base=workspace_base)
 
         worker_id = f"worker-{id(app)}"
         worker_registry = WorkerRegistry(
@@ -140,7 +162,15 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         report.total_duration_s,
     )
 
-    # Phase 3+4: Close storage and infrastructure
+    # Phase 3: Close memory_store (depends on redis; close before redis)
+    memory_store = getattr(app.state, "memory_store", None)
+    if memory_store is not None:
+        try:
+            await memory_store.close()
+        except Exception:
+            logger.warning("memory_store close failed", exc_info=True)
+
+    # Phase 4: Close storage and infrastructure
     if redis_client is not None:
         await close_client(redis_client)
 

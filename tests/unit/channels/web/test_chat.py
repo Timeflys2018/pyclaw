@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import tempfile
+from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -137,6 +139,14 @@ class TestSessionQueue:
         assert sq._consumer_running("nonexistent") is False
 
 
+def _make_mock_ws(workspace_base: Path | None = None) -> AsyncMock:
+    mock_ws = AsyncMock()
+    if workspace_base is None:
+        workspace_base = Path(tempfile.mkdtemp())
+    mock_ws.app.state.workspace_base = workspace_base
+    return mock_ws
+
+
 class TestEnqueueChat:
     @pytest.fixture(autouse=True)
     def _inject_task_manager(self) -> None:
@@ -145,7 +155,7 @@ class TestEnqueueChat:
 
     @pytest.mark.asyncio
     async def test_sends_delta_events(self) -> None:
-        mock_ws = AsyncMock()
+        mock_ws = _make_mock_ws()
         state = ConnectionState(ws=mock_ws, ws_session_id="s1", user_id="u1", authenticated=True)
         settings = WebSettings(jwt_secret="s", heartbeat_interval=60, pong_timeout=10)
         msg = ChatSendMessage(conversation_id="c1", content="hi")
@@ -165,7 +175,7 @@ class TestEnqueueChat:
 
     @pytest.mark.asyncio
     async def test_sends_tool_events(self) -> None:
-        mock_ws = AsyncMock()
+        mock_ws = _make_mock_ws()
         state = ConnectionState(ws=mock_ws, ws_session_id="s1", user_id="u1", authenticated=True)
         settings = WebSettings(jwt_secret="s", heartbeat_interval=60, pong_timeout=10)
         msg = ChatSendMessage(conversation_id="c1", content="run tool")
@@ -193,7 +203,7 @@ class TestEnqueueChat:
 
     @pytest.mark.asyncio
     async def test_sends_tool_approval_request(self) -> None:
-        mock_ws = AsyncMock()
+        mock_ws = _make_mock_ws()
         state = ConnectionState(ws=mock_ws, ws_session_id="s1", user_id="u1", authenticated=True)
         settings = WebSettings(jwt_secret="s", heartbeat_interval=60, pong_timeout=10)
         msg = ChatSendMessage(conversation_id="c1", content="write file")
@@ -212,7 +222,7 @@ class TestEnqueueChat:
 
     @pytest.mark.asyncio
     async def test_queued_notification(self) -> None:
-        mock_ws = AsyncMock()
+        mock_ws = _make_mock_ws()
         state = ConnectionState(ws=mock_ws, ws_session_id="s1", user_id="u1", authenticated=True)
         settings = WebSettings(jwt_secret="s", heartbeat_interval=60, pong_timeout=10)
 

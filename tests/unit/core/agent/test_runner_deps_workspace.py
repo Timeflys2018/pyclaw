@@ -23,24 +23,24 @@ def test_agent_runner_deps_workspace_store_default_none() -> None:
     assert deps.workspace_store is None
 
 
-def test_factory_passes_workspace_store_to_deps(tmp_path: Path) -> None:
+async def test_factory_passes_workspace_store_to_deps(tmp_path: Path) -> None:
     settings = Settings()
     store_ws = FileWorkspaceStore(base_dir=tmp_path)
-    deps = create_agent_runner_deps(settings, InMemorySessionStore(), workspace_store=store_ws)
+    deps = await create_agent_runner_deps(settings, InMemorySessionStore(), workspace_store=store_ws)
     assert deps.workspace_store is store_ws
 
 
-def test_factory_passes_workspace_store_to_engine(tmp_path: Path) -> None:
+async def test_factory_passes_workspace_store_to_engine(tmp_path: Path) -> None:
     settings = Settings()
     store_ws = FileWorkspaceStore(base_dir=tmp_path)
-    deps = create_agent_runner_deps(settings, InMemorySessionStore(), workspace_store=store_ws)
+    deps = await create_agent_runner_deps(settings, InMemorySessionStore(), workspace_store=store_ws)
     assert isinstance(deps.context_engine, DefaultContextEngine)
     assert deps.context_engine._workspace_store is store_ws
 
 
-def test_factory_without_workspace_store_engine_has_none() -> None:
+async def test_factory_without_workspace_store_engine_has_none() -> None:
     settings = Settings()
-    deps = create_agent_runner_deps(settings, InMemorySessionStore())
+    deps = await create_agent_runner_deps(settings, InMemorySessionStore())
     assert deps.workspace_store is None
     assert isinstance(deps.context_engine, DefaultContextEngine)
     assert deps.context_engine._workspace_store is None

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import tempfile
+from pathlib import Path
 from typing import Any, AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -44,7 +46,8 @@ def _make_app() -> tuple[FastAPI, InMemorySessionStore]:
 
     deps = MagicMock()
     deps.session_store = store
-    set_openai_deps(deps=deps, session_router=session_router)
+    workspace_base = Path(tempfile.mkdtemp())
+    set_openai_deps(deps=deps, session_router=session_router, workspace_base=workspace_base)
 
     app.include_router(auth_router)
     app.include_router(web_router)

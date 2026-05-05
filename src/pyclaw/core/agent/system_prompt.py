@@ -117,7 +117,7 @@ def _xml_escape(value: str) -> str:
     )
 
 
-_TRUNCATION_PRIORITY = ["skills", "bootstrap", "workspace"]
+_TRUNCATION_PRIORITY = ["skills", "bootstrap", "l1_snapshot", "workspace"]
 
 
 def enforce_system_budget(
@@ -171,7 +171,13 @@ def enforce_system_budget(
     return [s for s in result if s.text]
 
 
-def build_frozen_prefix(inputs: PromptInputs, budget: int | None = None) -> SystemPromptResult:
+def build_frozen_prefix(
+    inputs: PromptInputs,
+    budget: int | None = None,
+    *,
+    bootstrap: str | None = None,
+    l1_snapshot: str | None = None,
+) -> SystemPromptResult:
     sections: list[PromptSection] = []
 
     identity_text = identity_section(inputs)
@@ -189,6 +195,12 @@ def build_frozen_prefix(inputs: PromptInputs, budget: int | None = None) -> Syst
     ws_text = workspace_section(inputs)
     if ws_text:
         sections.append(PromptSection(name="workspace", text=ws_text, truncatable=True))
+
+    if bootstrap:
+        sections.append(PromptSection(name="bootstrap", text=bootstrap, truncatable=True))
+
+    if l1_snapshot:
+        sections.append(PromptSection(name="l1_snapshot", text=l1_snapshot, truncatable=True))
 
     if budget is not None:
         sections = enforce_system_budget(sections, budget)

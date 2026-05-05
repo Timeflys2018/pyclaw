@@ -14,39 +14,32 @@ def store(tmp_path: Path) -> FileWorkspaceStore:
 
 
 @pytest.mark.asyncio
-async def test_assemble_passthrough_without_workspace_store() -> None:
+async def test_get_bootstrap_none_without_workspace_store() -> None:
     engine = DefaultContextEngine()
-    messages = [{"role": "user", "content": "hello"}]
-    result = await engine.assemble(session_id="sess-1", messages=messages)
-    assert result.messages == messages
-    assert result.system_prompt_addition is None
+    assert await engine.get_bootstrap("sess-1") is None
 
 
 @pytest.mark.asyncio
-async def test_assemble_injects_agents_md_via_system_prompt_addition(
+async def test_get_bootstrap_returns_agents_md(
     store: FileWorkspaceStore,
 ) -> None:
     workspace_id = "feishu_cli_x_ou_abc"
     await store.put_file(workspace_id, "AGENTS.md", "你是一个专业的代码助手。")
     engine = DefaultContextEngine(workspace_store=store)
     session_id = "feishu:cli_x:ou_abc"
-    messages = [{"role": "user", "content": "hello"}]
-    result = await engine.assemble(session_id=session_id, messages=messages)
-    assert result.system_prompt_addition == "你是一个专业的代码助手。"
-    assert result.messages == messages
+    assert await engine.get_bootstrap(session_id) == "你是一个专业的代码助手。"
 
 
 @pytest.mark.asyncio
-async def test_assemble_returns_none_addition_when_no_files(
+async def test_get_bootstrap_returns_none_when_no_files(
     store: FileWorkspaceStore,
 ) -> None:
     engine = DefaultContextEngine(workspace_store=store)
-    result = await engine.assemble(session_id="feishu:cli_x:ou_abc", messages=[])
-    assert result.system_prompt_addition is None
+    assert await engine.get_bootstrap("feishu:cli_x:ou_abc") is None
 
 
 @pytest.mark.asyncio
-async def test_assemble_caches_bootstrap_per_session(
+async def test_get_bootstrap_caches_per_workspace(
     store: FileWorkspaceStore,
 ) -> None:
     workspace_id = "feishu_cli_x_ou_cache"
@@ -54,31 +47,31 @@ async def test_assemble_caches_bootstrap_per_session(
     engine = DefaultContextEngine(workspace_store=store)
     session_id = "feishu:cli_x:ou_cache"
 
-    result1 = await engine.assemble(session_id=session_id, messages=[])
-    assert result1.system_prompt_addition == "initial content"
+    result1 = await engine.get_bootstrap(session_id)
+    assert result1 == "initial content"
 
     await store.put_file(workspace_id, "AGENTS.md", "updated content")
-    result2 = await engine.assemble(session_id=session_id, messages=[])
-    assert result2.system_prompt_addition == "initial content"
+    result2 = await engine.get_bootstrap(session_id)
+    assert result2 == "initial content"
 
 
 @pytest.mark.asyncio
-async def test_assemble_different_sessions_independent_cache(
+async def test_get_bootstrap_different_sessions_independent(
     store: FileWorkspaceStore,
 ) -> None:
     await store.put_file("feishu_cli_x_ou_A", "AGENTS.md", "session A content")
     await store.put_file("feishu_cli_x_ou_B", "AGENTS.md", "session B content")
     engine = DefaultContextEngine(workspace_store=store)
 
-    result_a = await engine.assemble(session_id="feishu:cli_x:ou_A", messages=[])
-    result_b = await engine.assemble(session_id="feishu:cli_x:ou_B", messages=[])
+    result_a = await engine.get_bootstrap("feishu:cli_x:ou_A")
+    result_b = await engine.get_bootstrap("feishu:cli_x:ou_B")
 
-    assert result_a.system_prompt_addition == "session A content"
-    assert result_b.system_prompt_addition == "session B content"
+    assert result_a == "session A content"
+    assert result_b == "session B content"
 
 
 @pytest.mark.asyncio
-async def test_assemble_caches_by_workspace_id_not_session_id(
+async def test_get_bootstrap_caches_by_workspace_id_not_session_id(
     store: FileWorkspaceStore,
 ) -> None:
     await store.put_file("feishu_cli_x_ou_abc", "AGENTS.md", "shared workspace content")
@@ -87,21 +80,41 @@ async def test_assemble_caches_by_workspace_id_not_session_id(
     session_old = "feishu:cli_x:ou_abc:s:old12345"
     session_new = "feishu:cli_x:ou_abc:s:new67890"
 
-    result1 = await engine.assemble(session_id=session_old, messages=[])
-    assert result1.system_prompt_addition == "shared workspace content"
+    result1 = await engine.get_bootstrap(session_old)
+    assert result1 == "shared workspace content"
 
-    result2 = await engine.assemble(session_id=session_new, messages=[])
-    assert result2.system_prompt_addition == "shared workspace content"
+    result2 = await engine.get_bootstrap(session_new)
+    assert result2 == "shared workspace content"
 
     assert engine._bootstrap_cache.get("feishu_cli_x_ou_abc") == "shared workspace content"
     assert len(engine._bootstrap_cache) == 1
 
 
 @pytest.mark.asyncio
-async def test_assemble_empty_bootstrap_files_list(
+async def test_get_bootstrap_empty_files_list(
     store: FileWorkspaceStore,
 ) -> None:
     await store.put_file("feishu_cli_x_ou_abc", "AGENTS.md", "should not be read")
     engine = DefaultContextEngine(workspace_store=store, bootstrap_files=[])
-    result = await engine.assemble(session_id="feishu:cli_x:ou_abc", messages=[])
+    assert await engine.get_bootstrap("feishu:cli_x:ou_abc") is None
+
+
+@pytest.mark.asyncio
+async def test_assemble_without_memory_store_returns_none_addition() -> None:
+    engine = DefaultContextEngine()
+    messages = [{"role": "user", "content": "hello"}]
+    result = await engine.assemble(session_id="sess-1", messages=messages)
+    assert result.messages == messages
+    assert result.system_prompt_addition is None
+
+
+@pytest.mark.asyncio
+async def test_assemble_bootstrap_no_longer_in_system_prompt_addition(
+    store: FileWorkspaceStore,
+) -> None:
+    workspace_id = "feishu_cli_x_ou_abc"
+    await store.put_file(workspace_id, "AGENTS.md", "bootstrap content")
+    engine = DefaultContextEngine(workspace_store=store)
+    session_id = "feishu:cli_x:ou_abc"
+    result = await engine.assemble(session_id=session_id, messages=[])
     assert result.system_prompt_addition is None

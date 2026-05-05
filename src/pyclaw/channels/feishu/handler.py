@@ -183,13 +183,6 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
             return
 
     extra_system_parts: list[str] = []
-    if ctx.deps.workspace_store is None:
-        from pyclaw.core.context.bootstrap import load_bootstrap_context
-        bootstrap_ctx = await load_bootstrap_context(
-            workspace_id, ctx.workspace_store, ctx.bootstrap_files
-        )
-        if bootstrap_ctx:
-            extra_system_parts.append(bootstrap_ctx)
 
     if chat_type == "group" and ctx.settings.group_context == "recent":
         group_ctx = await build_group_context(ctx.feishu_client, chat_id, ctx.settings.group_context_size)
@@ -226,12 +219,20 @@ async def _dispatch_and_reply(
     workspace_path: Path,
     extra_system: str,
 ) -> None:
-    from pyclaw.channels.feishu.streaming import FeishuStreamingCard
+    from pyclaw.channels.feishu.streaming import FeishuStreamingCard, StreamingConfig
 
     async def _fallback(reply_text: str) -> None:
         await ctx.feishu_client.reply_text(message_id, reply_text)
 
-    card = FeishuStreamingCard(ctx.feishu_client._client, message_id)
+    sc = ctx.settings.streaming
+    streaming_config = StreamingConfig(
+        print_frequency_ms=sc.print_frequency_ms,
+        print_step=sc.print_step,
+        print_strategy=sc.print_strategy,
+        summary=sc.summary,
+        throttle_ms=sc.throttle_ms,
+    )
+    card = FeishuStreamingCard(ctx.feishu_client._client, message_id, streaming_config)
     try:
         await card.start()
         use_card = True

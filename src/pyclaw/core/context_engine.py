@@ -76,6 +76,8 @@ class DefaultContextEngine:
         chunk_token_budget: int = 8_000,
         workspace_store: WorkspaceStore | None = None,
         bootstrap_files: list[str] | None = None,
+        memory_store: Any = None,
+        memory_settings: Any = None,
     ) -> None:
         self._threshold = threshold
         self._keep_recent_tokens = keep_recent_tokens
@@ -85,6 +87,47 @@ class DefaultContextEngine:
         self._workspace_store = workspace_store
         self._bootstrap_files: list[str] = bootstrap_files if bootstrap_files is not None else ["AGENTS.md"]
         self._bootstrap_cache: dict[str, str] = {}
+        self._memory_store = memory_store
+        self._l1_cache: dict[str, list[Any]] = {}
+        if memory_settings is None:
+            from pyclaw.infra.settings import MemorySettings
+            memory_settings = MemorySettings()
+        self._memory_settings = memory_settings
+
+    def _derive_session_key(self, session_id: str) -> str:
+        idx = session_id.find(":s:")
+        return session_id[:idx] if idx != -1 else session_id
+
+    async def get_bootstrap(self, session_id: str) -> str | None:
+        if self._workspace_store is None:
+            return None
+        workspace_id = _derive_workspace_id(session_id)
+        if workspace_id in self._bootstrap_cache:
+            cached = self._bootstrap_cache[workspace_id]
+            return cached if cached else None
+        from pyclaw.core.context.bootstrap import load_bootstrap_context
+        bootstrap_str = await load_bootstrap_context(
+            workspace_id, self._workspace_store, self._bootstrap_files
+        )
+        self._bootstrap_cache[workspace_id] = bootstrap_str
+        return bootstrap_str if bootstrap_str else None
+
+    async def get_l1_snapshot(self, session_id: str) -> list[Any]:
+        if self._memory_store is None:
+            return []
+        if session_id in self._l1_cache:
+            return self._l1_cache[session_id]
+        session_key = self._derive_session_key(session_id)
+        try:
+            entries = await self._memory_store.index_get(session_key)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "L1 snapshot load failed for session %s", session_id, exc_info=True
+            )
+            entries = []
+        self._l1_cache[session_id] = entries
+        return entries
 
     async def assemble(
         self,
@@ -94,23 +137,48 @@ class DefaultContextEngine:
         token_budget: int | None = None,
         prompt: str | None = None,
     ) -> AssembleResult:
-        if self._workspace_store is None:
-            return AssembleResult(messages=list(messages), system_prompt_addition=None)
-
-        workspace_id = _derive_workspace_id(session_id)
-        if workspace_id in self._bootstrap_cache:
-            bootstrap_str = self._bootstrap_cache[workspace_id]
-        else:
-            from pyclaw.core.context.bootstrap import load_bootstrap_context
-            bootstrap_str = await load_bootstrap_context(
-                workspace_id, self._workspace_store, self._bootstrap_files
-            )
-            self._bootstrap_cache[workspace_id] = bootstrap_str
+        memory_context: str | None = None
+        if self._memory_store is not None and prompt:
+            try:
+                session_key = self._derive_session_key(session_id)
+                cfg = self._memory_settings
+                results = await self._memory_store.search(
+                    session_key, prompt,
+                    layers=["L2", "L3"],
+                    per_layer_limits={"L2": cfg.search_l2_quota, "L3": cfg.search_l3_quota},
+                )
+                if results:
+                    memory_context = self._format_memory_context(results)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "memory_store.search failed for session %s", session_id, exc_info=True
+                )
 
         return AssembleResult(
             messages=list(messages),
-            system_prompt_addition=bootstrap_str if bootstrap_str else None,
+            system_prompt_addition=memory_context,
         )
+
+    @staticmethod
+    def _format_memory_context(results: list[Any]) -> str | None:
+        l2_entries = [r for r in results if getattr(r, "layer", "") == "L2"]
+        l3_entries = [r for r in results if getattr(r, "layer", "") == "L3"]
+        if not l2_entries and not l3_entries:
+            return None
+        lines = ["<memory_context>"]
+        if l2_entries:
+            lines.append("<facts>")
+            for entry in l2_entries:
+                lines.append(f"- [{getattr(entry, 'type', 'general')}] {getattr(entry, 'content', '')}")
+            lines.append("</facts>")
+        if l3_entries:
+            lines.append("<procedures>")
+            for entry in l3_entries:
+                lines.append(f"- [{getattr(entry, 'type', 'general')}] {getattr(entry, 'content', '')}")
+            lines.append("</procedures>")
+        lines.append("</memory_context>")
+        return "\n".join(lines)
 
     async def ingest(self, session_id: str, message: dict[str, Any]) -> None:
         return None

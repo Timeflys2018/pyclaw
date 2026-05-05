@@ -82,13 +82,7 @@ async def handle_command(
                 channel="feishu",
             )
 
-            if ctx.deps.workspace_store is None:
-                from pyclaw.core.context.bootstrap import load_bootstrap_context
-                followup_extra_system = await load_bootstrap_context(
-                    workspace_id, ctx.workspace_store, ctx.bootstrap_files
-                )
-            else:
-                followup_extra_system = ""
+            followup_extra_system = ""
 
             async def _run_followup() -> None:
                 await _dispatch_and_reply(inbound, ctx, message_id, workspace_path, followup_extra_system)

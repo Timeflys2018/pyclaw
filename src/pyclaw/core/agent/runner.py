@@ -216,8 +216,28 @@ async def run_agent_stream(
         workspace_path=str(tool_workspace_path),
     )
 
+    bootstrap_text: str | None = None
+    l1_snapshot_text: str | None = None
+    get_bootstrap = getattr(deps.context_engine, "get_bootstrap", None)
+    if get_bootstrap is not None:
+        try:
+            bootstrap_text = await get_bootstrap(request.session_id)
+        except Exception:
+            logger.warning("get_bootstrap failed", exc_info=True)
+    get_l1 = getattr(deps.context_engine, "get_l1_snapshot", None)
+    if get_l1 is not None:
+        try:
+            l1_entries = await get_l1(request.session_id)
+            if l1_entries:
+                l1_snapshot_text = _format_l1_snapshot(l1_entries)
+        except Exception:
+            logger.warning("get_l1_snapshot failed", exc_info=True)
+
     frozen_result = build_frozen_prefix(
-        prompt_inputs, budget=deps.config.prompt_budget.system_zone_tokens
+        prompt_inputs,
+        budget=deps.config.prompt_budget.system_zone_tokens,
+        bootstrap=bootstrap_text,
+        l1_snapshot=l1_snapshot_text,
     )
 
     history_budget = deps.config.prompt_budget.compute_history_budget(
@@ -263,6 +283,19 @@ async def run_agent_stream(
         if request.extra_system:
             system_parts.append(request.extra_system)
         effective_system = "\n\n".join(system_parts)
+
+        if history_budget > 0 and estimate_messages_tokens(assembled.messages) > history_budget:
+            pretrim_outcome = await _try_compaction(
+                deps, tree, request, base_messages, history_budget, abort_event, force=True
+            )
+            if not pretrim_outcome.ok:
+                yield ErrorEvent(
+                    error_code=pretrim_outcome.error_code or "compaction_failed",
+                    message=pretrim_outcome.error_message or "compaction failed",
+                )
+                return
+            if pretrim_outcome.compacted:
+                continue
 
         remaining_run = _remaining_run_seconds(run_deadline_s, run_started)
         if remaining_run is not None and remaining_run <= 0:
@@ -319,59 +352,16 @@ async def run_agent_stream(
         except LLMError as exc:
             logger.error("LLM error: code=%s message=%s", exc.code, str(exc)[:500])
             if exc.code == "context_overflow":
-                compaction_ctx = CompactionContext(
-                    session_id=request.session_id,
-                    workspace_id=request.workspace_id,
-                    agent_id=request.agent_id,
-                    message_count=len(base_messages),
-                    tokens_before=estimate_messages_tokens(base_messages),
+                outcome = await _try_compaction(
+                    deps, tree, request, base_messages, history_budget, abort_event, force=True
                 )
-                checkpoint = take_checkpoint(tree)
-                await deps.hooks.notify_before_compaction(compaction_ctx)
-                try:
-                    compact_result = await deps.context_engine.compact(
-                        session_id=request.session_id,
-                        messages=base_messages,
-                        token_budget=history_budget,
-                        force=True,
-                        abort_event=abort_event,
-                        model=deps.config.compaction.model,
-                    )
-                except Exception as compact_exc:
-                    checkpoint.restore_into(tree)
+                if not outcome.ok:
                     yield ErrorEvent(
-                        error_code="compaction_failed",
-                        message=f"compaction raised {type(compact_exc).__name__}: {compact_exc}",
+                        error_code=outcome.error_code or "compaction_failed",
+                        message=outcome.error_message or "compaction failed",
                     )
                     return
-
-                compaction_ctx.tokens_before = compact_result.tokens_before
-                await deps.hooks.notify_after_compaction(compaction_ctx, compact_result)
-
-                if not compact_result.ok:
-                    checkpoint.restore_into(tree)
-                    yield ErrorEvent(
-                        error_code=compact_result.reason_code or "compaction_failed",
-                        message=compact_result.reason or "compaction failed",
-                    )
-                    return
-
-                if compact_result.compacted and compact_result.summary:
-                    from pyclaw.models import CompactionEntry
-
-                    comp_entry = CompactionEntry(
-                        id=generate_entry_id(set(tree.entries.keys())),
-                        parent_id=tree.leaf_id,
-                        summary=compact_result.summary,
-                        first_kept_entry_id=tree.leaf_id or "",
-                        tokens_before=compact_result.tokens_before,
-                    )
-                    tree.entries[comp_entry.id] = comp_entry
-                    tree.order.append(comp_entry.id)
-                    tree.leaf_id = comp_entry.id
-                    await deps.session_store.append_entry(
-                        tree.header.id, comp_entry, leaf_id=comp_entry.id
-                    )
+                if outcome.compacted:
                     continue
             yield ErrorEvent(error_code=exc.code, message=str(exc))
             return
@@ -389,15 +379,19 @@ async def run_agent_stream(
         total_output_tokens += response.usage.output_tokens
 
         frozen_tokens = sum(frozen_result.token_breakdown.values())
-        bootstrap_tokens = len(assembled.system_prompt_addition or "") // 4
+        bootstrap_tokens = frozen_result.token_breakdown.get("bootstrap", 0)
+        l1_tokens = frozen_result.token_breakdown.get("l1_snapshot", 0)
+        memory_context_tokens = len(assembled.system_prompt_addition or "") // 4
         per_turn_tokens = sum(per_turn_result.token_breakdown.values())
         history_tokens = estimate_messages_tokens(assembled.messages)
         logger.info(
-            "token_usage turn=%d frozen=%d bootstrap=%d per_turn=%d history=%d "
+            "token_usage turn=%d frozen=%d bootstrap=%d l1=%d memory_ctx=%d per_turn=%d history=%d "
             "input=%d output=%d budget_remaining=%d",
             iteration,
             frozen_tokens,
             bootstrap_tokens,
+            l1_tokens,
+            memory_context_tokens,
             per_turn_tokens,
             history_tokens,
             response.usage.input_tokens,
@@ -614,6 +608,101 @@ async def run_agent_stream(
         error_code="max_iterations",
         message=f"reached max_iterations={deps.config.max_iterations}",
     )
+
+
+@dataclass
+class _CompactionOutcome:
+    ok: bool
+    compacted: bool
+    error_code: str | None = None
+    error_message: str | None = None
+    result: Any = None
+
+
+async def _try_compaction(
+    deps: AgentRunnerDeps,
+    tree: SessionTree,
+    request: RunRequest,
+    base_messages: list[dict[str, Any]],
+    history_budget: int,
+    abort_event: asyncio.Event,
+    *,
+    force: bool,
+) -> _CompactionOutcome:
+    compaction_ctx = CompactionContext(
+        session_id=request.session_id,
+        workspace_id=request.workspace_id,
+        agent_id=request.agent_id,
+        message_count=len(base_messages),
+        tokens_before=estimate_messages_tokens(base_messages),
+    )
+    checkpoint = take_checkpoint(tree)
+    await deps.hooks.notify_before_compaction(compaction_ctx)
+
+    try:
+        compact_result = await deps.context_engine.compact(
+            session_id=request.session_id,
+            messages=base_messages,
+            token_budget=history_budget,
+            force=force,
+            abort_event=abort_event,
+            model=deps.config.compaction.model,
+        )
+    except Exception as compact_exc:
+        checkpoint.restore_into(tree)
+        return _CompactionOutcome(
+            ok=False,
+            compacted=False,
+            error_code="compaction_failed",
+            error_message=f"compaction raised {type(compact_exc).__name__}: {compact_exc}",
+        )
+
+    compaction_ctx.tokens_before = compact_result.tokens_before
+    await deps.hooks.notify_after_compaction(compaction_ctx, compact_result)
+
+    if not compact_result.ok:
+        checkpoint.restore_into(tree)
+        return _CompactionOutcome(
+            ok=False,
+            compacted=False,
+            error_code=compact_result.reason_code or "compaction_failed",
+            error_message=compact_result.reason or "compaction failed",
+            result=compact_result,
+        )
+
+    if compact_result.compacted and compact_result.summary:
+        from pyclaw.models import CompactionEntry
+
+        comp_entry = CompactionEntry(
+            id=generate_entry_id(set(tree.entries.keys())),
+            parent_id=tree.leaf_id,
+            summary=compact_result.summary,
+            first_kept_entry_id=tree.leaf_id or "",
+            tokens_before=compact_result.tokens_before,
+        )
+        tree.entries[comp_entry.id] = comp_entry
+        tree.order.append(comp_entry.id)
+        tree.leaf_id = comp_entry.id
+        await deps.session_store.append_entry(
+            tree.header.id, comp_entry, leaf_id=comp_entry.id
+        )
+        return _CompactionOutcome(ok=True, compacted=True, result=compact_result)
+
+    return _CompactionOutcome(ok=True, compacted=False, result=compact_result)
+
+
+def _format_l1_snapshot(entries: list[Any]) -> str:
+    if not entries:
+        return ""
+    lines = ["<memory_index>"]
+    for entry in entries:
+        content = getattr(entry, "content", None)
+        if content is None and isinstance(entry, dict):
+            content = entry.get("content", "")
+        if content:
+            lines.append(f"- {content}")
+    lines.append("</memory_index>")
+    return "\n".join(lines)
 
 
 def _remaining_run_seconds(run_deadline_s: float, run_started: float) -> float | None:

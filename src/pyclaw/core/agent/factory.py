@@ -12,15 +12,18 @@ from pyclaw.core.hooks import HookRegistry
 from pyclaw.infra.settings import Settings
 from pyclaw.infra.task_manager import TaskManager
 from pyclaw.models import AgentRunConfig, WorkspaceConfig
+from pyclaw.storage.memory.base import MemoryStore
 from pyclaw.storage.protocols import SessionStore
 from pyclaw.storage.workspace.base import WorkspaceStore
 
 
-def create_agent_runner_deps(
+async def create_agent_runner_deps(
     settings: Settings,
     session_store: SessionStore,
     workspace_store: WorkspaceStore | None = None,
     task_manager: TaskManager | None = None,
+    memory_store: MemoryStore | None = None,
+    redis_client=None,
 ) -> AgentRunnerDeps:
     api_key: str | None = None
     base_url: str | None = None
@@ -61,6 +64,8 @@ def create_agent_runner_deps(
     engine = DefaultContextEngine(
         workspace_store=workspace_store,
         bootstrap_files=bootstrap_files,
+        memory_store=memory_store,
+        memory_settings=settings.memory,
     )
 
     from pyclaw.skills.provider import DefaultSkillProvider
@@ -72,11 +77,31 @@ def create_agent_runner_deps(
 
         tools.register(SkillViewTool(skill_provider))
 
+    hooks = HookRegistry()
+
+    if memory_store is not None:
+        from pyclaw.core.agent.tools.memorize import MemorizeTool
+
+        tools.register(MemorizeTool(memory_store, session_store))
+
+        if redis_client is not None:
+            from pyclaw.core.agent.hooks.working_memory_hook import WorkingMemoryHook
+            from pyclaw.core.agent.tools.update_working_memory import (
+                UpdateWorkingMemoryTool,
+            )
+
+            tools.register(UpdateWorkingMemoryTool(redis_client))
+            hooks.register(WorkingMemoryHook(redis_client))
+
+        from pyclaw.core.agent.hooks.memory_nudge_hook import MemoryNudgeHook
+
+        hooks.register(MemoryNudgeHook(interval=10))
+
     return AgentRunnerDeps(
         llm=llm,
         tools=tools,
         context_engine=engine,
-        hooks=HookRegistry(),
+        hooks=hooks,
         session_store=session_store,
         config=config,
         workspace_store=workspace_store,

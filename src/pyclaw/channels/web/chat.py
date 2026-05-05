@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable, Coroutine
+from pathlib import Path
 from typing import Any
 
 from pyclaw.channels.web.protocol import (
@@ -165,7 +166,18 @@ async def _run_chat(
 ) -> None:
     abort_event = _session_queue.get_abort_event(msg.conversation_id)
 
-    session_id = msg.conversation_id if msg.conversation_id.startswith("web:") else f"web:{state.user_id}:{msg.conversation_id}"
+    # Task 10.1: enforce conversation_id ownership for "web:" prefixed ids
+    if msg.conversation_id.startswith("web:"):
+        expected_prefix = f"web:{state.user_id}:"
+        if not msg.conversation_id.startswith(expected_prefix):
+            await send_event(state, SERVER_ERROR, msg.conversation_id, {
+                "message": "Access denied: invalid conversation_id",
+            })
+            return
+        session_id = msg.conversation_id
+    else:
+        session_id = f"web:{state.user_id}:{msg.conversation_id}"
+
     request = RunRequest(
         session_id=session_id,
         workspace_id="default",
@@ -185,9 +197,14 @@ async def _run_chat(
         })
         return
 
+    # Task 10.2: per-user workspace isolation
+    workspace_base: Path = state.ws.app.state.workspace_base
+    user_workspace = workspace_base / f"web_{state.user_id}"
+    user_workspace.mkdir(parents=True, exist_ok=True)
+
     try:
         async for event in run_agent_stream(
-            request, deps, tool_workspace_path=".", abort=abort_event,
+            request, deps, tool_workspace_path=user_workspace, abort=abort_event,
         ):
             if isinstance(event, TextChunk):
                 await send_event(state, SERVER_CHAT_DELTA, msg.conversation_id, {

@@ -15,7 +15,9 @@ from pyclaw.channels.feishu.dedup import FeishuDedup
 from pyclaw.channels.feishu.handler import FeishuContext, handle_feishu_message
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.agent.runner import AgentRunnerDeps
+from pyclaw.core.memory_archive import archive_session_background
 from pyclaw.infra.settings import FeishuSettings
+from pyclaw.storage.memory.base import MemoryStore
 from pyclaw.storage.workspace.base import WorkspaceStore
 
 logger = logging.getLogger(__name__)
@@ -33,6 +35,7 @@ class FeishuChannelPlugin:
         workspace_store: WorkspaceStore,
         bootstrap_files: list[str] | None = None,
         workspace_base: Path | None = None,
+        memory_store: MemoryStore | None = None,
     ) -> None:
         self._settings = settings
         self._feishu_client = feishu_client
@@ -41,6 +44,7 @@ class FeishuChannelPlugin:
         self._workspace_store = workspace_store
         self._bootstrap_files: list[str] = bootstrap_files or ["AGENTS.md"]
         self._workspace_base: Path = workspace_base or Path.home() / ".pyclaw/workspaces"
+        self._memory_store = memory_store
         self._ws_client: lark.ws.Client | None = None
         self._main_loop: asyncio.AbstractEventLoop | None = None
         self._ws_loop: asyncio.AbstractEventLoop | None = None
@@ -70,9 +74,26 @@ class FeishuChannelPlugin:
 
         assert self._deps.task_manager is not None, "Feishu channel requires task_manager in AgentRunnerDeps"
         queue_registry = FeishuQueueRegistry(task_manager=self._deps.task_manager)
+
+        memory_store = self._memory_store
+        session_store = self._deps.session_store
+        task_manager = self._deps.task_manager
+
+        async def _on_rotated(old_session_id: str) -> None:
+            try:
+                await queue_registry.cleanup_session(old_session_id)
+            except Exception:
+                logger.warning("queue cleanup failed for %s", old_session_id, exc_info=True)
+            if memory_store is not None:
+                task_manager.spawn(
+                    f"archive:{old_session_id}",
+                    archive_session_background(memory_store, session_store, old_session_id),
+                    category="archive",
+                )
+
         session_router = SessionRouter(
             store=self._deps.session_store,
-            on_session_rotated=queue_registry.cleanup_session,
+            on_session_rotated=_on_rotated,
         )
         ctx = FeishuContext(
             settings=self._settings,

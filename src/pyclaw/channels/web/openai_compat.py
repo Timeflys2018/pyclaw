@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import secrets
 import time
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,12 +19,18 @@ openai_router = APIRouter(prefix="/v1", tags=["openai"])
 
 _deps: AgentRunnerDeps | None = None
 _session_router: SessionRouter | None = None
+_workspace_base: Path | None = None
 
 
-def set_openai_deps(deps: AgentRunnerDeps, session_router: SessionRouter) -> None:
-    global _deps, _session_router
+def set_openai_deps(
+    deps: AgentRunnerDeps,
+    session_router: SessionRouter,
+    workspace_base: Path | None = None,
+) -> None:
+    global _deps, _session_router, _workspace_base
     _deps = deps
     _session_router = session_router
+    _workspace_base = workspace_base
 
 
 class ChatMessage(BaseModel):
@@ -48,7 +55,8 @@ async def chat_completions(
     if _deps is None or _session_router is None:
         raise HTTPException(500, "OpenAI compat deps not configured")
 
-    session_key = f"openai:{body.user}" if body.user else f"openai:{user_id}"
+    # Task 10.3: ignore body.user to prevent session spoofing
+    session_key = f"openai:{user_id}"
 
     user_messages = [m for m in body.messages if m.role == "user"]
     if not user_messages:
@@ -68,17 +76,27 @@ async def chat_completions(
 
     if body.stream:
         return StreamingResponse(
-            _stream_sse(request, body.model),
+            _stream_sse(request, body.model, user_id),
             media_type="text/event-stream",
             headers={"X-Accel-Buffering": "no"},
         )
 
-    return await _complete_response(request, body.model)
+    return await _complete_response(request, body.model, user_id)
 
 
-async def _stream_sse(request: RunRequest, model: str):
+def _resolve_user_workspace(user_id: str) -> Path:
+    assert _workspace_base is not None, "workspace_base not configured"
+    user_workspace = _workspace_base / f"web_{user_id}"
+    user_workspace.mkdir(parents=True, exist_ok=True)
+    return user_workspace
+
+
+async def _stream_sse(request: RunRequest, model: str, user_id: str):
     assert _deps is not None
     completion_id = f"chatcmpl-{secrets.token_hex(12)}"
+
+    # Task 10.4: per-user workspace isolation
+    tool_workspace = _resolve_user_workspace(user_id)
 
     first_chunk = {
         "id": completion_id,
@@ -92,7 +110,7 @@ async def _stream_sse(request: RunRequest, model: str):
     yield f"data: {json.dumps(first_chunk)}\n\n"
 
     async for event in run_agent_stream(
-        request, _deps, tool_workspace_path="."
+        request, _deps, tool_workspace_path=tool_workspace
     ):
         if isinstance(event, TextChunk):
             chunk = {
@@ -125,14 +143,16 @@ async def _stream_sse(request: RunRequest, model: str):
     yield "data: [DONE]\n\n"
 
 
-async def _complete_response(request: RunRequest, model: str) -> dict[str, Any]:
+async def _complete_response(request: RunRequest, model: str, user_id: str) -> dict[str, Any]:
     assert _deps is not None
     completion_id = f"chatcmpl-{secrets.token_hex(12)}"
     collected_text: list[str] = []
     usage: dict[str, int] = {}
 
+    tool_workspace = _resolve_user_workspace(user_id)
+
     async for event in run_agent_stream(
-        request, _deps, tool_workspace_path="."
+        request, _deps, tool_workspace_path=tool_workspace
     ):
         if isinstance(event, TextChunk):
             collected_text.append(event.text)
