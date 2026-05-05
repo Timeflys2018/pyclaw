@@ -23,3 +23,5 @@ DailyWork/
 
 configs/pyclaw.json
 pyclaw.json
+web/.vite/
+node_modules/
