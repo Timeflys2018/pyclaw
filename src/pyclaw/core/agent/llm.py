@@ -77,6 +77,7 @@ class LLMClient:
         system: str | None = None,
         idle_seconds: float = 0.0,
         abort_event: asyncio.Event | None = None,
+        temperature: float | None = None,
     ) -> AsyncIterator[LLMStreamChunk]:
         from litellm import acompletion
 
@@ -94,6 +95,8 @@ class LLMClient:
             extra["api_key"] = self._api_key
         if self._api_base:
             extra["api_base"] = self._api_base
+        if temperature is not None:
+            extra["temperature"] = temperature
 
         try:
             stream = await acompletion(
@@ -140,6 +143,7 @@ class LLMClient:
         system: str | None = None,
         idle_seconds: float = 0.0,
         abort_event: asyncio.Event | None = None,
+        temperature: float | None = None,
     ) -> LLMResponse:
         text_parts: list[str] = []
         tool_calls_buffer: dict[int, dict[str, Any]] = {}
@@ -153,6 +157,7 @@ class LLMClient:
             system=system,
             idle_seconds=idle_seconds,
             abort_event=abort_event,
+            temperature=temperature,
         ):
             if chunk.text_delta:
                 text_parts.append(chunk.text_delta)
