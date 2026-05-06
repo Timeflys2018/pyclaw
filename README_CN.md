@@ -253,9 +253,9 @@ services:
 |------|------|------|
 | A1 | [从 TypeScript 单体到存算分离](https://mp.weixin.qq.com/s/p4AlkEqj1hBN1MdVOjz9BQ) | 为什么重写 OpenClaw — 三条原则 |
 | A2 | [从 6000 行包装到 645 行单循环：我如何重写 OpenClaw 的 Agent 内核](https://mp.weixin.qq.com/s/sGLHdPsMD1vj8CfUTd6PdQ) | 六大 Agent 框架源码级对比（Claude Code / OpenClaw / OpenCode / DeerFlow / GenericAgent / Hermes）|
-| C1 | [上下文工程的三个维度](https://mp.weixin.qq.com/s/CIQhWo88wUOfsAulEzxzKQ) | Bootstrap / Dynamic / Generation 三段式 |
 | D0 | [AI Agent 记忆系统的四种流派](https://mp.weixin.qq.com/s/1ldmhldoAhq25w-Ov0WhgQ) | Karpathy / 火山 / Shopify / YC 四家记忆思路对比 |
 | D1 | [你的 AI Agent 为什么总是"失忆"？](https://mp.weixin.qq.com/s/f_hUmwMpTFEPqstC7fBOww) | PyClaw 的 4 层记忆架构设计 |
+| D2 | [给 AI Agent 的记忆系统通上电](https://mp.weixin.qq.com/s/T15stlOpvfF1Jd5sQJ4B_g) | 工具设计 + Hook 驱动 + APSW/jieba FTS5 修复 |
 | E1 | [给 Agent 加一个"心脏起搏器"：TaskManager 设计](https://mp.weixin.qq.com/s/1q67jEmQzvFJ8Dd6Tq_Ujg) | 异步任务生命周期管理 |
 
 系列代号：**A**（项目认知）· **B**（竞品解析）· **C**（上下文）· **D**（记忆+进化）· **E**（架构+安全）· **F**（方法论）

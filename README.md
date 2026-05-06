@@ -257,8 +257,8 @@ Feishu native cluster mode handles message routing across replicas — no sticky
 | A2 | [从 6000 行包装到 645 行单循环](https://mp.weixin.qq.com/s/sGLHdPsMD1vj8CfUTd6PdQ) | Six-framework Agent Core comparison (Claude Code / OpenClaw / OpenCode / DeerFlow / GenericAgent / Hermes) |
 | D0 | [AI Agent 记忆系统的四种流派](https://mp.weixin.qq.com/s/1ldmhldoAhq25w-Ov0WhgQ) | Memory schools: Karpathy / 火山 / Shopify / YC |
 | D1 | [你的 AI Agent 为什么总是"失忆"？](https://mp.weixin.qq.com/s/f_hUmwMpTFEPqstC7fBOww) | The 4-layer memory architecture design |
+| D2 | [给 AI Agent 的记忆系统通上电](https://mp.weixin.qq.com/s/T15stlOpvfF1Jd5sQJ4B_g) | Memory system end-to-end: tool design + hooks + APSW/jieba FTS5 fix |
 | E1 | [给 Agent 加一个"心脏起搏器"：TaskManager 设计](https://mp.weixin.qq.com/s/1q67jEmQzvFJ8Dd6Tq_Ujg) | Async task lifecycle for agents |
-| C1 | [上下文工程的三个维度](https://mp.weixin.qq.com/s/CIQhWo88wUOfsAulEzxzKQ) | Context engineering: bootstrap / dynamic / generation |
 
 Series codes: **A** (project) · **B** (competitive) · **C** (context) · **D** (memory + evolution) · **E** (architecture + safety) · **F** (methodology)
 
