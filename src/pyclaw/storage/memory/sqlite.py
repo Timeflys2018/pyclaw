@@ -74,7 +74,7 @@ _SCHEMA_SQL_STATEMENTS = [
         INSERT INTO procedures_fts(procedures_fts, rowid, content)
             VALUES('delete', old.rowid, old.content);
     END""",
-    """CREATE TRIGGER IF NOT EXISTS procedures_au AFTER UPDATE ON procedures BEGIN
+    """CREATE TRIGGER IF NOT EXISTS procedures_au AFTER UPDATE OF content ON procedures BEGIN
         INSERT INTO procedures_fts(procedures_fts, rowid, content)
             VALUES('delete', old.rowid, old.content);
         INSERT INTO procedures_fts(rowid, content) VALUES (new.rowid, new.content);
@@ -146,7 +146,24 @@ class SqliteMemoryBackend:
                 conn.execute("INSERT INTO procedures_fts(procedures_fts) VALUES('rebuild')")
             except apsw.SQLError:
                 pass
+        self._migrate_procedures_trigger(conn)
         self._migrated.add(session_key)
+
+    def _migrate_procedures_trigger(self, conn: apsw.Connection) -> None:
+        """Migrate procedures_au trigger to only fire on content changes.
+
+        This prevents use_count/last_used_at UPDATEs from triggering
+        wasteful FTS5 re-indexing of unchanged content.
+        """
+        conn.execute("DROP TRIGGER IF EXISTS procedures_au")
+        conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS procedures_au "
+            "AFTER UPDATE OF content ON procedures BEGIN "
+            "INSERT INTO procedures_fts(procedures_fts, rowid, content) "
+            "VALUES('delete', old.rowid, old.content); "
+            "INSERT INTO procedures_fts(rowid, content) "
+            "VALUES (new.rowid, new.content); END"
+        )
 
     def _maybe_migrate_fts(self, conn: apsw.Connection) -> None:
         try:
@@ -330,7 +347,23 @@ class SqliteMemoryBackend:
                 "WHERE procedures_fts MATCH ? AND t.status = 'active' ORDER BY f.rank LIMIT ?",
                 (match_query, limit),
             )
-        return [_dict_row(cursor, row) for row in cursor]
+        rows = [_dict_row(cursor, row) for row in cursor]
+
+        # Activate lifecycle fields: bump use_count and update last_used_at
+        if rows:
+            ids = [r["id"] for r in rows]
+            placeholders = ",".join(["?"] * len(ids))
+            now = time.time()
+            conn.execute(
+                f"UPDATE procedures SET use_count = use_count + 1, "
+                f"last_used_at = ? WHERE id IN ({placeholders})",
+                (now, *ids),
+            )
+            for r in rows:
+                r["use_count"] = (r.get("use_count") or 0) + 1
+                r["last_used_at"] = now
+
+        return rows
 
     async def delete(self, session_key: str, entry_id: str) -> None:
         conn = await self._get_conn(session_key)
