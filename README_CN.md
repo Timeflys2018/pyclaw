@@ -1,12 +1,8 @@
+<a href="https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzY5ODI5NzUwNA==&action=getalbum&album_id=4503553062812516353"><img align="right" src="./docs/assets/Time留痕.jpg" width="140" alt="微信公众号: Time留痕" /></a>
+
 <div align="center">
 
 # 🐍 PyClaw
-
-</div>
-
-<table>
-<tr>
-<td width="80%" align="center" valign="middle">
 
 **生产级 Python AI Agent 框架 — 4 层持久化记忆 · Hook 驱动架构 · 存算分离**
 
@@ -20,15 +16,9 @@
 [![Channels](https://img.shields.io/badge/通道-飞书%20%2B%20Web-blue.svg?style=flat-square)]()
 [![OpenAI Compat](https://img.shields.io/badge/API-OpenAI%20兼容-412991.svg?style=flat-square&logo=openai&logoColor=white)]()
 
-</td>
-<td width="20%" align="right" valign="middle">
+</div>
 
-<a href="https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzY5ODI5NzUwNA==&action=getalbum&album_id=4503553062812516353"><img src="./docs/assets/Time留痕.jpg" width="140" alt="微信公众号: Time留痕" /></a><br/>
-<sub>📱 微信公众号<br/>Time留痕</sub>
-
-</td>
-</tr>
-</table>
+<br clear="all"/>
 
 ![PyClaw Web Channel](./docs/assets/web-channel-chat.png?v=2)
 
