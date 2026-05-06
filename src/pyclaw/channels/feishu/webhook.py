@@ -4,6 +4,7 @@ import asyncio
 import logging
 import threading
 from pathlib import Path
+from typing import Any
 
 import lark_oapi as lark
 import lark_oapi.ws.client as _ws_client_module
@@ -36,6 +37,8 @@ class FeishuChannelPlugin:
         bootstrap_files: list[str] | None = None,
         workspace_base: Path | None = None,
         memory_store: MemoryStore | None = None,
+        redis_client: Any = None,  # noqa: ANN401
+        evolution_settings: Any = None,  # noqa: ANN401
     ) -> None:
         self._settings = settings
         self._feishu_client = feishu_client
@@ -45,6 +48,8 @@ class FeishuChannelPlugin:
         self._bootstrap_files: list[str] = bootstrap_files or ["AGENTS.md"]
         self._workspace_base: Path = workspace_base or Path.home() / ".pyclaw/workspaces"
         self._memory_store = memory_store
+        self._redis_client = redis_client
+        self._evolution_settings = evolution_settings
         self._ws_client: lark.ws.Client | None = None
         self._main_loop: asyncio.AbstractEventLoop | None = None
         self._ws_loop: asyncio.AbstractEventLoop | None = None
@@ -79,6 +84,16 @@ class FeishuChannelPlugin:
         session_store = self._deps.session_store
         task_manager = self._deps.task_manager
 
+        redis_client = self._redis_client
+        llm_client = self._deps.llm
+        evolution_settings = self._evolution_settings
+        from pyclaw.core.agent.hooks.memory_nudge_hook import MemoryNudgeHook
+
+        nudge_hook = next(
+            (h for h in self._deps.hooks.hooks() if isinstance(h, MemoryNudgeHook)),
+            None,
+        )
+
         async def _on_rotated(old_session_id: str) -> None:
             try:
                 await queue_registry.cleanup_session(old_session_id)
@@ -90,6 +105,23 @@ class FeishuChannelPlugin:
                     archive_session_background(memory_store, session_store, old_session_id),
                     category="archive",
                 )
+                if (
+                    redis_client is not None
+                    and evolution_settings is not None
+                    and getattr(evolution_settings, "enabled", False)
+                ):
+                    from pyclaw.core.sop_extraction import maybe_spawn_extraction
+
+                    await maybe_spawn_extraction(
+                        task_manager=task_manager,
+                        memory_store=memory_store,
+                        session_store=session_store,
+                        redis_client=redis_client,
+                        llm_client=llm_client,
+                        session_id=old_session_id,
+                        settings=evolution_settings,
+                        nudge_hook=nudge_hook,
+                    )
 
         session_router = SessionRouter(
             store=self._deps.session_store,
@@ -106,6 +138,10 @@ class FeishuChannelPlugin:
             workspace_base=self._workspace_base,
             bootstrap_files=self._bootstrap_files,
             queue_registry=queue_registry,
+            redis_client=redis_client,
+            memory_store=memory_store,
+            evolution_settings=evolution_settings,
+            nudge_hook=nudge_hook,
         )
 
         def _sync_handler(event: P2ImMessageReceiveV1) -> None:

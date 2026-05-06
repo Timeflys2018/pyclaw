@@ -37,6 +37,11 @@ class FeishuContext:
     workspace_base: Path = field(default_factory=lambda: Path.home() / ".pyclaw/workspaces")
     bootstrap_files: list[str] = field(default_factory=lambda: ["AGENTS.md"])
     queue_registry: FeishuQueueRegistry | None = None
+    # Self-evolution deps (optional)
+    redis_client: Any = None
+    memory_store: Any = None
+    evolution_settings: Any = None
+    nudge_hook: Any = None
 
 
 def build_session_key(app_id: str, event: Any, scope: str) -> str:

@@ -24,6 +24,14 @@ class MemoryNudgeHook:
         self._interval = interval
         self._counts: dict[str, int] = {}
 
+    def reset_counter(self, session_id: str) -> None:
+        """Reset (clear) the nudge counter for a session.
+
+        Removes the entry entirely (not just zeroes it) to prevent
+        unbounded dict growth over a long-running process.
+        """
+        self._counts.pop(session_id, None)
+
     async def before_prompt_build(self, context: PromptBuildContext) -> PromptBuildResult | None:
         session_id = context.session_id
         self._counts[session_id] = self._counts.get(session_id, 0) + 1

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -50,7 +50,11 @@ async def handle_command(
 
     lower = stripped.lower()
 
-    for prefix in ("/new", "/reset", "/status", "/whoami", "/history", "/help", "/idle"):
+    _known = (
+        "/new", "/reset", "/status", "/whoami", "/history",
+        "/help", "/idle", "/extract", "/learn",
+    )
+    for prefix in _known:
         if lower == prefix or lower.startswith(prefix + " "):
             break
     else:
@@ -115,6 +119,19 @@ async def handle_command(
         args = stripped[5:].strip()
         reply = await _cmd_idle(args, session_id, ctx)
         await ctx.feishu_client.reply_text(message_id, reply)
+        return True
+
+    if lower.startswith("/extract") or lower.startswith("/learn"):
+        try:
+            await _cmd_extract(session_id, message_id, ctx)
+        except Exception:
+            logger.exception("/extract command failed for session %s", session_id)
+            try:
+                await ctx.feishu_client.reply_text(
+                    message_id, "⚠️ 命令执行失败，请稍后重试。"
+                )
+            except Exception:
+                logger.exception("reply_text fallback also failed for %s", message_id)
         return True
 
     return False
@@ -201,3 +218,65 @@ async def _cmd_idle(args: str, session_id: str, ctx: FeishuContext) -> str:
     else:
         unit = f"{minutes // 60} 小时 {minutes % 60} 分钟"
     return f"✅ 空闲超时已设置为 {unit}。"
+
+
+_EXTRACT_TIMEOUT_SECONDS = 15.0
+
+
+async def _cmd_extract(
+    session_id: str,
+    message_id: str,
+    ctx: FeishuContext,
+) -> None:
+    redis = ctx.redis_client
+    memory_store = ctx.memory_store
+    evolution_settings = ctx.evolution_settings
+    llm_client = ctx.deps.llm
+    session_store = ctx.deps.session_store
+
+    if (
+        redis is None
+        or memory_store is None
+        or evolution_settings is None
+        or llm_client is None
+        or session_store is None
+    ):
+        await ctx.feishu_client.reply_text(message_id, "⚠️ 自我进化功能未启用。")
+        return
+
+    from pyclaw.core.sop_extraction import (
+        _check_user_ratelimit,
+        _derive_session_key,
+        extract_sops_sync,
+        format_extraction_result_zh,
+    )
+
+    session_key = _derive_session_key(session_id)
+    if not await _check_user_ratelimit(redis, session_key):
+        await ctx.feishu_client.reply_text(
+            message_id, "⏱ 学习触发过于频繁，请 1 分钟后再试。"
+        )
+        return
+
+    try:
+        result = await asyncio.wait_for(
+            extract_sops_sync(
+                memory_store=memory_store,
+                session_store=session_store,
+                redis_client=redis,
+                llm_client=llm_client,
+                session_id=session_id,
+                settings=evolution_settings,
+                min_tool_calls=1,
+                nudge_hook=ctx.nudge_hook,
+            ),
+            timeout=_EXTRACT_TIMEOUT_SECONDS,
+        )
+        await ctx.feishu_client.reply_text(
+            message_id, format_extraction_result_zh(result)
+        )
+    except TimeoutError:
+        await ctx.feishu_client.reply_text(
+            message_id,
+            "⏳ 学习超时（>15 秒）已中止，候选数据已保留，1 分钟后可再次 /extract。",
+        )

@@ -95,7 +95,21 @@ async def create_agent_runner_deps(
 
         from pyclaw.core.agent.hooks.memory_nudge_hook import MemoryNudgeHook
 
-        hooks.register(MemoryNudgeHook(interval=10))
+        nudge_hook = MemoryNudgeHook(interval=10)
+        hooks.register(nudge_hook)
+
+        if redis_client is not None and settings.evolution.enabled:
+            from pyclaw.core.agent.hooks.sop_tracker_hook import SopCandidateTracker
+
+            hooks.register(SopCandidateTracker(
+                redis_client,
+                settings.evolution,
+                task_manager=task_manager,
+                memory_store=memory_store,
+                session_store=session_store,
+                llm_client=llm,
+                nudge_hook=nudge_hook,
+            ))
 
     return AgentRunnerDeps(
         llm=llm,

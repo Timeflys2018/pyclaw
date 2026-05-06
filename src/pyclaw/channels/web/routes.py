@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import logging
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -9,16 +13,45 @@ from pyclaw.channels.web.auth import get_current_user
 from pyclaw.models.session import MessageEntry, SessionTree
 from pyclaw.storage.session.base import SessionStore
 
+logger = logging.getLogger(__name__)
+
 web_router = APIRouter(prefix="/api", tags=["web"])
 
+# TODO: Module-level globals are set once via set_web_deps() at lifespan startup.
+# Production-safe (single-process per uvicorn worker), but causes flakiness in
+# pytest-xdist parallel test runs. Future: refactor to FastAPI app.state DI.
+# Tracked in: harden-self-evolution-extraction (deferred — architectural smell, no production bug).
 _store: SessionStore | None = None
 _session_router: SessionRouter | None = None
+_memory_store: Any = None
+_task_manager: Any = None
+_redis_client: Any = None
+_llm_client: Any = None
+_evolution_settings: Any = None
+_nudge_hook: Any = None
 
 
-def set_web_deps(store: SessionStore, session_router: SessionRouter) -> None:
-    global _store, _session_router
+def set_web_deps(
+    store: SessionStore,
+    session_router: SessionRouter,
+    *,
+    memory_store: Any = None,
+    task_manager: Any = None,
+    redis_client: Any = None,
+    llm_client: Any = None,
+    evolution_settings: Any = None,
+    nudge_hook: Any = None,
+) -> None:
+    global _store, _session_router, _memory_store, _task_manager
+    global _redis_client, _llm_client, _evolution_settings, _nudge_hook
     _store = store
     _session_router = session_router
+    _memory_store = memory_store
+    _task_manager = task_manager
+    _redis_client = redis_client
+    _llm_client = llm_client
+    _evolution_settings = evolution_settings
+    _nudge_hook = nudge_hook
 
 
 def _get_store() -> SessionStore:
@@ -44,6 +77,11 @@ class SessionListItem(BaseModel):
 
 class CreateSessionResponse(BaseModel):
     session_id: str
+
+
+class ExtractResponse(BaseModel):
+    spawned: bool
+    message: str
 
 
 async def _load_and_verify(
@@ -146,3 +184,82 @@ async def delete_session(
 ) -> Response:
     await _load_and_verify(session_id, user_id)
     return Response(status_code=204)
+
+
+@web_router.post("/extract", response_model=ExtractResponse)
+async def trigger_extract(
+    user_id: str = Depends(get_current_user),
+) -> ExtractResponse:
+    return await _do_extract(user_id)
+
+
+@web_router.post("/learn", response_model=ExtractResponse)
+async def trigger_learn(
+    user_id: str = Depends(get_current_user),
+) -> ExtractResponse:
+    return await _do_extract(user_id)
+
+
+_EXTRACT_TIMEOUT_SECONDS = 15.0
+
+
+async def _do_extract(user_id: str) -> ExtractResponse:
+    try:
+        router = _get_router()
+        session_key = f"web:{user_id}"
+        session_id = await router.store.get_current_session_id(session_key)
+        if session_id is None:
+            return ExtractResponse(
+                spawned=False,
+                message="当前会话没有可学习的工具调用模式。",
+            )
+
+        if (
+            _redis_client is None
+            or _memory_store is None
+            or _evolution_settings is None
+            or _llm_client is None
+        ):
+            return ExtractResponse(spawned=False, message="⚠️ 自我进化功能未启用。")
+
+        from pyclaw.core.sop_extraction import (
+            _check_user_ratelimit,
+            extract_sops_sync,
+            format_extraction_result_zh,
+        )
+
+        if not await _check_user_ratelimit(_redis_client, session_key):
+            return ExtractResponse(
+                spawned=False,
+                message="⏱ 学习触发过于频繁，请 1 分钟后再试。",
+            )
+
+        try:
+            result = await asyncio.wait_for(
+                extract_sops_sync(
+                    memory_store=_memory_store,
+                    session_store=router.store,
+                    redis_client=_redis_client,
+                    llm_client=_llm_client,
+                    session_id=session_id,
+                    settings=_evolution_settings,
+                    min_tool_calls=1,
+                    nudge_hook=_nudge_hook,
+                ),
+                timeout=_EXTRACT_TIMEOUT_SECONDS,
+            )
+            return ExtractResponse(
+                spawned=result.spawned and result.skip_reason is None,
+                message=format_extraction_result_zh(result),
+            )
+        except TimeoutError:
+            return ExtractResponse(
+                spawned=False,
+                message="⏳ 学习超时（>15 秒）已中止，候选数据已保留，1 分钟后可再次 /extract。",
+            )
+    except Exception:
+        logger.exception("extract endpoint failed for user %s", user_id)
+        return ExtractResponse(
+            spawned=False,
+            message="⚠️ 命令执行失败，请稍后重试。",
+        )

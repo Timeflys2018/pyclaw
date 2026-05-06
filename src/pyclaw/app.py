@@ -107,6 +107,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             bootstrap_files=settings.workspaces.bootstrap_files,
             workspace_base=workspace_base,
             memory_store=memory_store,
+            redis_client=redis_client,
+            evolution_settings=settings.evolution if settings.evolution.enabled else None,
         )
         app.state.feishu_channel = feishu_channel
         await feishu_channel.start()
@@ -124,8 +126,54 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         app.state.web_settings = settings.channels.web
 
-        session_router = SessionRouter(store=app.state.session_store)
-        set_web_deps(store=app.state.session_store, session_router=session_router)
+        from pyclaw.core.agent.hooks.memory_nudge_hook import MemoryNudgeHook
+
+        web_nudge_hook = next(
+            (h for h in runner_deps.hooks.hooks() if isinstance(h, MemoryNudgeHook)),
+            None,
+        )
+
+        async def _web_on_rotated(old_session_id: str) -> None:
+            if memory_store is None:
+                return
+            from pyclaw.core.memory_archive import archive_session_background
+
+            task_manager.spawn(
+                f"archive:{old_session_id}",
+                archive_session_background(memory_store, app.state.session_store, old_session_id),
+                category="archive",
+            )
+            if redis_client is not None and settings.evolution.enabled:
+                from pyclaw.core.sop_extraction import maybe_spawn_extraction
+
+                await maybe_spawn_extraction(
+                    task_manager=task_manager,
+                    memory_store=memory_store,
+                    session_store=app.state.session_store,
+                    redis_client=redis_client,
+                    llm_client=runner_deps.llm,
+                    session_id=old_session_id,
+                    settings=settings.evolution,
+                    nudge_hook=web_nudge_hook,
+                )
+
+        # TODO: Web channel does not currently support idle-reset session rotation.
+        # Sessions only rotate on explicit POST /sessions.
+        # Self-evolution will only fire when user creates a new session.
+        session_router = SessionRouter(
+            store=app.state.session_store,
+            on_session_rotated=_web_on_rotated,
+        )
+        set_web_deps(
+            store=app.state.session_store,
+            session_router=session_router,
+            memory_store=memory_store,
+            task_manager=task_manager,
+            redis_client=redis_client,
+            llm_client=runner_deps.llm,
+            evolution_settings=settings.evolution if settings.evolution.enabled else None,
+            nudge_hook=web_nudge_hook,
+        )
         set_openai_deps(runner_deps, session_router, workspace_base=workspace_base)
 
         worker_id = f"worker-{id(app)}"

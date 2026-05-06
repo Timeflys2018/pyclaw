@@ -75,6 +75,25 @@ class MemorySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PYCLAW_MEMORY_")
 
 
+class EvolutionSettings(BaseSettings):
+    """Self-evolution SOP extraction configuration."""
+
+    enabled: bool = True
+    extraction_model: str | None = None
+    max_candidates: int = 100
+    min_tool_calls_for_extraction: int = Field(2, alias="minToolCallsForExtraction")
+    dedup_overlap_threshold: float = Field(0.6, alias="dedupOverlapThreshold")
+    max_sops_per_extraction: int = Field(5, alias="maxSopsPerExtraction")
+    description_max_chars: int = Field(150, alias="descriptionMaxChars")
+    procedure_max_chars: int = Field(5000, alias="procedureMaxChars")
+
+    model_config = SettingsConfigDict(
+        env_prefix="PYCLAW_EVOLUTION_",
+        populate_by_name=True,
+        extra="ignore",
+    )
+
+
 class EmbeddingSettings(BaseSettings):
     model: str = ""
     api_key: str = Field("", alias="apiKey")
@@ -221,6 +240,7 @@ class Settings(BaseSettings):
     channels: ChannelsSettings = Field(default_factory=ChannelsSettings)
     workspaces: WorkspaceSettings = Field(default_factory=WorkspaceSettings)
     skills: SkillSettings = Field(default_factory=SkillSettings)
+    evolution: EvolutionSettings = Field(default_factory=EvolutionSettings)
     # Graceful shutdown timeout in seconds.  Matches the default K8s
     # SIGTERM→SIGKILL window (30 s) so that TaskManager drain completes
     # before the orchestrator force-kills the process.

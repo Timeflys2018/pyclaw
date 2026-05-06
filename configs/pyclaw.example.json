@@ -73,6 +73,16 @@
     "maxSkillsLoadedPerSource": 200,
     "progressiveDisclosure": true
   },
+  "evolution": {
+    "enabled": true,
+    "extraction_model": null,
+    "max_candidates": 100,
+    "minToolCallsForExtraction": 2,
+    "dedupOverlapThreshold": 0.6,
+    "maxSopsPerExtraction": 5,
+    "descriptionMaxChars": 150,
+    "procedureMaxChars": 5000
+  },
   "channels": {
     "feishu": {
       "enabled": false,
