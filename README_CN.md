@@ -1,226 +1,443 @@
-# PyClaw
+<div align="center">
 
-[English](./README.md)
+# 🐍 PyClaw
 
-<a href="#关注我们"><img align="right" src="./docs/assets/Time留痕.jpg" width="120" alt="微信公众号: Time留痕" /></a>
+</div>
 
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
-[![Python](https://img.shields.io/badge/python-3.12%2B-green.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-599%20passed-brightgreen.svg)]()
+<table>
+<tr>
+<td width="80%" align="center" valign="middle">
 
-基于 [OpenClaw](https://github.com/openclaw/openclaw) 重新设计的 Python 实现，从零构建，核心目标：**存算分离**、**水平扩展**、**模块化架构**。
+**生产级 Python AI Agent 框架 — 4 层持久化记忆 · Hook 驱动架构 · 存算分离**
 
-## 为什么做 PyClaw？
+[English](./README.md) · [中文文档](./README_CN.md) · [📚 公众号 Time留痕 文章合集 →](https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzY5ODI5NzUwNA==&action=getalbum&album_id=4503553062812516353)
 
-OpenClaw 是一个优秀的多通道 AI 助手 — 但它的 TypeScript 单体架构（17,000+ 文件）将计算和存储紧密耦合，难以在单机之外扩展。PyClaw 吸取 OpenClaw 的精华，用生产级架构重新构建：
+[![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](./LICENSE)
+[![Python](https://img.shields.io/badge/python-3.12%2B-3776ab.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![Tests](https://img.shields.io/badge/tests-890%20passed-brightgreen.svg?style=flat-square)]()
+[![Memory](https://img.shields.io/badge/记忆-4%20层架构%20%E2%9C%93-blueviolet.svg?style=flat-square)]()
+[![FTS5](https://img.shields.io/badge/FTS5-jieba%20分词-orange.svg?style=flat-square)]()
+[![Channels](https://img.shields.io/badge/通道-飞书%20%2B%20Web-blue.svg?style=flat-square)]()
+[![OpenAI Compat](https://img.shields.io/badge/API-OpenAI%20兼容-412991.svg?style=flat-square&logo=openai&logoColor=white)]()
 
-**存算分离** — 核心计算层完全无状态。Session 数据存在 Redis，配置存在文件或 Redis。启动 N 个实例放在负载均衡后面即可工作。
+</td>
+<td width="20%" align="right" valign="middle">
 
-**水平扩展** — 飞书原生集群模式（最多 50 连接）、Redis 分布式写锁、Worker 心跳注册。
+<a href="https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzY5ODI5NzUwNA==&action=getalbum&album_id=4503553062812516353"><img src="./docs/assets/Time留痕.jpg" width="140" alt="微信公众号: Time留痕" /></a><br/>
+<sub>📱 微信公众号<br/>Time留痕</sub>
 
-**模块化设计** — 每一层都是 Python Protocol 接口。开发时用内存存储，生产时切 Redis — 改配置，不改代码。
-
-## 当前状态
-
-| 模块 | 状态 |
-|------|------|
-| **Agent Core** | ✅ LLM 循环、工具（bash/read/write/edit）、压缩、超时、重试 |
-| **会话存储** | ✅ Redis（生产）+ InMemory（开发），SessionKey/SessionId 分离 |
-| **飞书渠道** | ✅ WebSocket、流式 CardKit 卡片、斜杠命令（/new /status /history） |
-| **工作区存储** | ✅ FileWorkspaceStore + RedisWorkspaceStore，Bootstrap 注入 |
-| **上下文引擎** | ✅ Phase 1（压缩 + Bootstrap 注入），Phase 2 规划中（记忆/RAG） |
-| **Skill Hub** | ✅ ClawHub 完整兼容：解析、发现、资格检查、Prompt 注入、安装 CLI |
-| **Web 渠道** | ✅ 多路复用 WebSocket、JWT 认证、流式聊天、Tool Approval、OpenAI 兼容 SSE、React SPA |
-| **记忆系统** | 🔲 规划中（sqlite-vec / pgvector） |
-
-## Web 渠道预览
+</td>
+</tr>
+</table>
 
 ![PyClaw Web Channel](./docs/assets/web-channel-chat.png?v=2)
 
-## 核心特性
+---
 
-| 特性 | 说明 |
-|------|------|
-| **Agent 循环** | 单循环设计：组装 → LLM → 工具 → 重复。流式输出、中止、重试、压缩 |
-| **会话轮转** | `/new` 创建新会话，旧的归档。SessionKey（稳定）/ SessionId（可轮换）|
-| **飞书 WebSocket** | 长连接模式，无需公网 IP，自动重连，原生集群（多实例）|
-| **CardKit 流式** | 160ms 节流流式卡片，自动文本回退 |
-| **Redis 会话** | DAG 树状会话模型，分布式写锁，滑动 TTL |
-| **Skill Hub** | ClawHub 兼容：SKILL.md 解析、5 层目录发现、资格检查、预算控制 Prompt 注入、`pyclaw-skill` CLI |
-| **Web 渠道** | 多路复用 WebSocket、JWT 认证、流式聊天、Tool Approval、OpenAI `/v1/chat/completions` SSE、React SPA、集群观测 |
-| **多实例** | 飞书原生集群模式（最多 50 worker），分布式去重 + 锁 |
+## ✨ 为什么做 PyClaw？
 
-## 项目结构
+OpenClaw 是一个优秀的多通道 AI 助手 — 但它的 TypeScript 单体（17,000+ 文件）将计算和存储紧耦合，且缺少生产级的记忆系统。PyClaw 用 Python 从头重写，定位 **记忆优先 · Hook 驱动 · 水平可扩展**：
 
-```
-src/pyclaw/
-├── core/                 # 计算层（无状态）
-│   ├── agent/            # LLM 循环、工具、系统提示词、压缩、工厂
-│   ├── context/          # Bootstrap 上下文加载器
-│   ├── context_engine.py # ContextEngine Protocol + DefaultContextEngine
-│   └── hooks.py          # 插件 Hook Protocol（含 ToolApprovalHook）
-├── channels/             # 通道层
-│   ├── feishu/           # 飞书（WS receiver、client、命令、流式、handler）
-│   ├── web/              # Web 渠道（WebSocket、REST、OpenAI 兼容、认证）
-│   ├── session_router.py # SessionKey → SessionId 路由
-│   └── web/              # Web 渠道
-├── skills/               # Skill Hub（ClawHub 兼容）
-│   ├── parser.py         # SKILL.md YAML frontmatter + body 解析
-│   ├── discovery.py      # 5 层目录扫描 + 去重
-│   ├── eligibility.py    # 运行时资格检查（bins、env、OS）
-│   ├── prompt.py         # XML Prompt 注入 + 预算控制
-│   ├── clawhub_client.py # ClawHub REST API 客户端
-│   └── installer.py      # ZIP 提取 + lockfile 管理
-├── cli/                  # CLI 工具
-│   └── skills.py         # pyclaw-skill CLI（list、search、install、check）
-├── gateway/              # 集群网关
-│   └── worker_registry.py # Worker 心跳注册
-├── storage/              # 存储层（可插拔后端）
-│   ├── session/          # Redis + InMemory 会话存储
-│   ├── workspace/        # File + Redis 工作区存储
-│   └── lock/             # Redis 分布式锁
-├── infra/                # Redis 客户端、配置、日志
-├── models/               # 共享数据模型（Pydantic）
-└── app.py                # FastAPI 入口 + 生命周期
-```
+- 🧠 **4 层记忆系统** — L1 Redis 热索引 → L2 事实 → L3 流程 → L4 向量归档。生产级，已完整集成到 Agent 主循环。
+- 🪝 **Hook 驱动架构** — 记忆注入、Working Memory、Nudge 提醒、工具审批 — 全部以 Hook 形式接入。可自定义扩展，不动核心。
+- ☁️ **存算分离** — 计算层完全无状态，可水平扩展。Session 在 Redis，记忆在 SQLite/Redis，向量经 litellm。
+- 🌐 **多渠道接入** — 飞书 WebSocket 集群 + Web 渠道（React SPA + OpenAI 兼容 `/v1/chat/completions` SSE）。
+- 🇨🇳 **中文优化** — FTS5 + jieba 分词，支持中文全文检索。停用词过滤，trigram → jieba 自动迁移。
+- 🎯 **Prompt 预算工程** — Frozen Prefix（可缓存）+ Per-Turn Suffix（动态）+ Dynamic Zone（按 prompt 检索）。Prompt 缓存命中率 90%+。
 
-## 快速开始
+---
+
+## 🚀 快速开始
+
+### 作为飞书机器人 — 2 分钟
 
 ```bash
-# 克隆
-git clone https://github.com/Timeflys2018/pyclaw.git
-cd pyclaw
+git clone https://github.com/Timeflys2018/pyclaw.git && cd pyclaw
+python3.12 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 
-# 安装（需要 Python 3.12+）
-pip install -e ".[dev]"
-
-# 启动（一键 — 自动构建前端、检测 Redis）
+# 在 configs/pyclaw.json 配置飞书 App 凭证
 ./scripts/start.sh
-
-# 或手动：
-.venv/bin/uvicorn pyclaw.app:create_app --factory --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 前端热更新开发
+### 作为 Web Agent — 2 分钟
 
 ```bash
-./scripts/start.sh           # 终端 1: 后端 (port 8000)
-./scripts/dev-frontend.sh    # 终端 2: Vite HMR (port 5173, API 代理到 8000)
+./scripts/start.sh                # 启动后端 + 自动构建 React 前端
+open http://localhost:8000        # 登录（默认 admin / changeme）
 ```
 
-### 仅构建前端
+Web 渠道开箱即用：流式聊天 · 工具审批 UI · OpenAI 兼容 API（可对接第三方客户端）。
+
+### 作为库使用
+
+```python
+from pyclaw.core.agent.factory import build_agent_runner
+from pyclaw.infra.settings import load_settings
+
+settings = load_settings("configs/pyclaw.json")
+runner = build_agent_runner(settings)
+
+async for event in runner.run("帮我看一下这个 Python 报错..."):
+    print(event)
+```
+
+---
+
+## 🧠 记忆系统（核心特性）
+
+记忆系统是一个 **4 层流水线**，集成到每一次 Prompt 拼装：
+
+```mermaid
+flowchart LR
+    User["用户提问"] --> L1["L1: Redis<br/>Working Memory<br/>(按 session)"]
+    User --> L2["L2: SQLite + FTS5<br/>事实<br/>(jieba 分词)"]
+    User --> L3["L3: SQLite + FTS5<br/>流程 / SOP"]
+    User --> L4["L4: SQLite + sqlite-vec<br/>会话归档"]
+
+    L1 -.snapshot.-> Prompt["Frozen Prefix"]
+    L2 -.facts ≤3.-> Dynamic["Dynamic Zone"]
+    L3 -.procedures ≤2.-> Dynamic
+    L4 -.语义检索.-> Dynamic
+
+    Prompt --> Agent[Agent 主循环]
+    Dynamic --> Agent
+
+    style L1 fill:#fff3e0,stroke:#e65100
+    style L2 fill:#e8f5e9,stroke:#2e7d32
+    style L3 fill:#e8f5e9,stroke:#2e7d32
+    style L4 fill:#e3f2fd,stroke:#1565c0
+```
+
+**驱动它的 Hook**（不修改 LLM 侧）：
+
+| Hook | 作用 |
+|------|------|
+| `WorkingMemoryHook` | 每轮注入 `<working_memory>` XML（按 session 的 Redis KV）|
+| `MemoryNudgeHook` | 每 10 轮提醒 Agent："考虑使用 `memorize`"。使用后计数器归零 |
+| `archive_session_background` | `/new` 时把旧 session 异步归档到 L4 + 向量化（不阻塞）|
+| `ContextEngine.assemble` | 按用户提问检索 L2/L3，注入 Top-K 事实 + 流程 |
+
+**Agent 自己调用的工具**：
+
+- `memorize` — 持久化到 L2（事实）或 L3（流程）。"无执行不写入"原则。
+- `update_working_memory` — 按 session 的临时记事本（1024 字符上限，7 天 TTL，FIFO 淘汰）。
+- `skill_view` — 渐进式披露：按需加载完整 SKILL.md 内容。
+
+---
+
+## 🏛 架构图
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  计算层（无状态 worker）                                                  │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │  Agent Runner（770 行单循环）                                       │ │
+│  │  ├─ Frozen Prefix  (identity + tools + skills_index + L1 + boot)  │ │
+│  │  ├─ Per-Turn Suffix (hooks_prepend + runtime + hooks_append)      │ │
+│  │  └─ Prompt 预算引擎（优先级截断、history 预算自动推导）             │ │
+│  ├────────────────────────────────────────────────────────────────────┤ │
+│  │  工具：bash · read · write · edit · memorize ·                     │ │
+│  │       update_working_memory · skill_view                          │ │
+│  ├────────────────────────────────────────────────────────────────────┤ │
+│  │  Hook：WorkingMemoryHook · MemoryNudgeHook · ToolApprovalHook     │ │
+│  ├────────────────────────────────────────────────────────────────────┤ │
+│  │  Context Engine：assemble（含记忆检索）/ compact / bootstrap      │ │
+│  ├────────────────────────────────────────────────────────────────────┤ │
+│  │  通道：飞书（WS + CardKit）/ Web（WS + OpenAI SSE）                │ │
+│  ├────────────────────────────────────────────────────────────────────┤ │
+│  │  基础设施：TaskManager（spawn/cancel/drain）/ Settings / Redis    │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────┬────────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  存储层                                                                  │
+│  ┌──────────────┐  ┌─────────────────────────────────────────────────┐ │
+│  │    Redis     │  │  Memory Store（4 层）                            │ │
+│  │  Sessions    │  │  L1: Redis Hash         (热索引，30 条)         │ │
+│  │  分布式锁    │  │  L2: SQLite FTS5+jieba  (事实)                  │ │
+│  │  Working Mem │  │  L3: SQLite FTS5+jieba  (流程)                  │ │
+│  │  L1 索引     │  │  L4: SQLite + sqlite-vec (会话归档)             │ │
+│  └──────────────┘  └─────────────────────────────────────────────────┘ │
+│  ┌──────────────┐  ┌──────────────────────┐                            │
+│  │ Workspace    │  │  Embedding API       │                            │
+│  │ (File/Redis) │  │  (litellm，模型无关) │                            │
+│  └──────────────┘  └──────────────────────┘                            │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📊 当前状态
+
+| 模块 | 状态 | 亮点 |
+|------|------|------|
+| **Agent Core** | ✅ | 770 行单循环、7 个工具、Hook 系统、5 文件压缩子系统 |
+| **记忆系统** | ✅ | 4 层（L1/L2/L3/L4）、FTS5 + jieba、sqlite-vec、trigram → jieba 自动迁移 |
+| **上下文引擎** | ✅ | Frozen/Per-Turn 拆分、记忆检索、L1 snapshot、Prompt 预算 |
+| **会话存储** | ✅ | Redis（生产）+ InMemory（开发）、SessionKey/SessionId 轮换、DAG 树 |
+| **飞书渠道** | ✅ | WebSocket 集群（最多 50 worker）、CardKit 流式、斜杠命令 |
+| **Web 渠道** | ✅ | 多路复用 WebSocket、JWT 认证、OpenAI 兼容 SSE、React SPA、工具审批 |
+| **Skill Hub** | ✅ | ClawHub 兼容、渐进式披露、5 层目录发现、`pyclaw-skill` CLI |
+| **Prompt 工程** | ✅ | `PromptBudgetConfig`、Frozen 缓存、优先级截断 |
+| **TaskManager** | ✅ | 集中式异步任务生命周期、K8s 级优雅关闭 |
+| **Dreaming 引擎** | 🔲 | 规划中：Light/Deep/REM 三阶段记忆整理 |
+| **Session 亲和网关** | 🔲 | 规划中：多实例消息路由 |
+
+**测试统计：** 890 单元/集成测试 + 6 真实 LLM E2E · ~10K 行 Python · 99 个源文件
+
+---
+
+## 🎬 特性详解
+
+### 4 层记忆 + 中文 FTS5
+
+```python
+# L2/L3 检索命中 → 注入到 Prompt 的 Dynamic Zone 作为 <facts> / <procedures> XML
+# 每轮 4 层都被检索，结果按优先级混合
+
+# 中文查询直接可用
+agent.run("帮我看一下飞书 streaming 模块的 token 限流策略")
+# → FTS5 通过 jieba.cut_for_search 匹配 "飞书"+"streaming"+"token"+"限流"
+# → Top procedures 被注入 Prompt
+```
+
+### Hook 驱动的记忆流水线
+
+```python
+class MyCustomHook(AgentHook):
+    async def before_prompt_build(self, ctx):
+        ctx.append_dynamic("<custom>...自定义内容...</custom>")
+    async def after_response(self, ctx, response):
+        # 每次回复后自动抽取事实
+        ...
+
+agent.hooks.register(MyCustomHook())
+```
+
+### Frozen / Per-Turn 三段式 Prompt
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ ❄️ FROZEN PREFIX（被 LLM provider 缓存，命中率 90%+）   │
+│   identity · tools · skills_index · workspace · L1 snap │
+├─────────────────────────────────────────────────────────┤
+│ 🔄 PER-TURN SUFFIX（每轮重建）                          │
+│   runtime · <working_memory> · <nudge>                   │
+├─────────────────────────────────────────────────────────┤
+│ 🔍 DYNAMIC ZONE（记忆检索结果）                         │
+│   <facts> · <procedures>                                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+### OpenAI 兼容 API
 
 ```bash
-./scripts/build-frontend.sh  # 构建 web/dist/（由后端静态托管）
+curl http://localhost:8000/v1/chat/completions \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"model":"pyclaw","messages":[{"role":"user","content":"hi"}],"stream":true}'
 ```
 
-## 配置
+可对接 OpenWebUI / Lobe / NextChat 等任意 OpenAI 兼容客户端。
+
+### 多实例生产部署
+
+```yaml
+# docker-compose.yml
+services:
+  pyclaw:
+    deploy: { replicas: 3 }      # 3 个无状态 worker
+  redis:
+    image: redis:7-alpine        # 共享状态
+```
+
+飞书原生集群模式自动处理跨副本的消息路由 — 无需 sticky session。
+
+---
+
+## 📚 深度文章（公众号 Time留痕）
+
+> 📖 **[完整文章合集 →](https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzY5ODI5NzUwNA==&action=getalbum&album_id=4503553062812516353)**
+
+| 系列 | 标题 | 主题 |
+|------|------|------|
+| A1 | [从 TypeScript 单体到存算分离](https://mp.weixin.qq.com/s/p4AlkEqj1hBN1MdVOjz9BQ) | 为什么重写 OpenClaw — 三条原则 |
+| A2 | [从 6000 行包装到 645 行单循环：我如何重写 OpenClaw 的 Agent 内核](https://mp.weixin.qq.com/s/sGLHdPsMD1vj8CfUTd6PdQ) | 六大 Agent 框架源码级对比（Claude Code / OpenClaw / OpenCode / DeerFlow / GenericAgent / Hermes）|
+| C1 | [上下文工程的三个维度](https://mp.weixin.qq.com/s/CIQhWo88wUOfsAulEzxzKQ) | Bootstrap / Dynamic / Generation 三段式 |
+| D0 | [AI Agent 记忆系统的四种流派](https://mp.weixin.qq.com/s/1ldmhldoAhq25w-Ov0WhgQ) | Karpathy / 火山 / Shopify / YC 四家记忆思路对比 |
+| D1 | [你的 AI Agent 为什么总是"失忆"？](https://mp.weixin.qq.com/s/f_hUmwMpTFEPqstC7fBOww) | PyClaw 的 4 层记忆架构设计 |
+| E1 | [给 Agent 加一个"心脏起搏器"：TaskManager 设计](https://mp.weixin.qq.com/s/1q67jEmQzvFJ8Dd6Tq_Ujg) | 异步任务生命周期管理 |
+
+系列代号：**A**（项目认知）· **B**（竞品解析）· **C**（上下文）· **D**（记忆+进化）· **E**（架构+安全）· **F**（方法论）
+
+---
+
+## ⚙️ 配置
 
 ```json
 {
   "server": { "host": "0.0.0.0", "port": 8000 },
   "storage": { "session_backend": "redis" },
   "redis": { "host": "localhost", "port": 6379 },
+  "memory": {
+    "enabled": true,
+    "base_dir": "~/.pyclaw/memory",
+    "fts_tokenizer": "jieba",
+    "l1_max_entries": 30,
+    "l1_ttl_days": 30
+  },
+  "embedding": {
+    "model": "text-embedding-3-small",
+    "api_key": "sk-..."
+  },
   "agent": {
     "default_model": "anthropic/claude-sonnet-4-20250514",
-    "providers": { "anthropic": { "apiKey": "sk-...", "baseURL": "..." } }
-  },
-  "skills": {
-    "workspaceSkillsDir": "skills",
-    "managedSkillsDir": "~/.openclaw/skills",
-    "clawhubBaseUrl": "https://clawhub.ai"
+    "providers": { "anthropic": { "apiKey": "sk-...", "baseURL": "..." } },
+    "prompt_budget": {
+      "system_zone_tokens": 12000,
+      "dynamic_zone_tokens": 4000,
+      "output_reserve_ratio": 0.15
+    }
   },
   "channels": {
     "feishu": { "enabled": true, "appId": "cli_...", "appSecret": "..." },
-    "web": {
-      "enabled": true,
-      "jwtSecret": "change-me",
-      "users": [{"id": "admin", "password": "changeme"}]
-    }
+    "web": { "enabled": true, "jwtSecret": "change-me" }
   }
 }
 ```
 
-## Docker 部署（可选）
+完整配置见 [`configs/pyclaw.example.json`](./configs/pyclaw.example.json)。
+
+---
+
+## 🛠 CLI 工具
 
 ```bash
-# 适用于需要容器化部署的场景
-docker compose up
+# Skill 管理
+pyclaw-skill list                    # 列出已发现的技能
+pyclaw-skill search github           # 搜索 ClawHub 市场
+pyclaw-skill install github          # 安装技能
+pyclaw-skill check                   # 资格检查（bins / env / OS）
 
-# 访问 http://localhost:8000
+# 实时记忆观测
+.venv/bin/python scripts/verify_memory_live.py   # L1/L2/L3/L4 实时监控
 ```
 
-## 测试
+---
+
+## 🧪 测试
 
 ```bash
-# 单元/集成测试（无需外部依赖）
+# 单元 + 集成（无外部依赖）
 .venv/bin/pytest tests/ --ignore=tests/e2e
 
-# E2E（需要真实 LLM API Key）
+# 含真实 Redis
+PYCLAW_TEST_REDIS_HOST=localhost .venv/bin/pytest tests/integration/
+
+# 真实 LLM E2E
 PYCLAW_LLM_API_KEY=sk-... .venv/bin/pytest tests/e2e/
 ```
 
-599 个单元/集成测试 + 6 个真实 LLM E2E 测试。
+890 单元/集成测试 · 6 真实 LLM E2E · ~10K 行代码 · 99 个源文件。
 
-## 技能管理 CLI
+---
 
-```bash
-# 搜索 ClawHub 技能市场
-pyclaw-skill search github
+## 📁 项目结构
 
-# 安装技能
-pyclaw-skill install github
-
-# 列出已发现的技能
-pyclaw-skill list
-
-# 检查技能资格
-pyclaw-skill check
+```
+src/pyclaw/
+├── core/                     # 计算层（无状态）
+│   ├── agent/
+│   │   ├── runner.py         # 770 行单循环
+│   │   ├── system_prompt.py  # Frozen + Per-Turn 构建器
+│   │   ├── tools/            # bash, read, write, edit, memorize, update_working_memory, skill_view
+│   │   ├── hooks/            # WorkingMemoryHook, MemoryNudgeHook
+│   │   ├── compaction/       # 压缩子系统（planning, dedup, hardening, checkpoint, reasons）
+│   │   └── factory.py        # 自动装配记忆工具 + Hook
+│   ├── context_engine.py     # Bootstrap + 记忆检索 + assemble
+│   ├── memory_archive.py     # /new 时后台 L4 归档
+│   └── hooks.py              # AgentHook / ToolApprovalHook / SkillProvider Protocol
+├── storage/
+│   ├── memory/               # 4 层记忆（composite, sqlite, redis_index, jieba_tokenizer, embedding）
+│   ├── session/              # Redis + InMemory session
+│   ├── workspace/            # File + Redis workspace
+│   └── lock/                 # Redis 分布式锁
+├── channels/
+│   ├── feishu/               # WS receiver、CardKit 流式、斜杠命令
+│   ├── web/                  # WebSocket + REST + OpenAI SSE + React SPA + admin
+│   └── session_router.py     # SessionKey → SessionId 路由
+├── skills/                   # Skill Hub（parser, discovery, eligibility, prompt, clawhub_client, installer）
+├── infra/
+│   ├── task_manager.py       # 集中式异步生命周期（spawn/cancel/drain）
+│   ├── settings.py           # MemorySettings, EmbeddingSettings, PromptBudgetConfig
+│   └── redis_client.py
+├── cli/skills.py             # pyclaw-skill CLI
+└── app.py                    # FastAPI 入口 + lifespan
 ```
 
-## 安全与隔离
+---
 
-PyClaw 定位为**个人/小团队助手**，非多租户 SaaS。Session 数据、Redis 键、飞书 Workspace 按用户完全隔离。Web 渠道为信任用户设计（Tool Approval Hook 管控高风险操作）。
+## 🛡 安全与隔离
+
+PyClaw 定位为**个人/小团队助手**，非多租户 SaaS。Session 数据、Redis 键、飞书 Workspace、记忆存储按用户完全隔离。Web 渠道为信任用户设计（Tool Approval Hook 管控高风险操作）。
 
 详见 [D26: 用户隔离模型](./docs/zh/architecture-decisions.md) — 隔离边界、已知限制、多租户升级路径。
 
-## 文档
+---
 
-- [架构决策（D1-D26）](./docs/zh/architecture-decisions.md)
-- [会话系统设计](./docs/zh/session-design.md)
-- [上下文引擎](./docs/zh/context-engine.md)
-- [Skill Hub 兼容性](./docs/zh/skill-hub-compatibility.md)
+## 📖 文档
+
+- [架构决策（D1–D26）](./docs/zh/architecture-decisions.md) — 全部设计选择与理由
+- [会话系统设计](./docs/zh/session-design.md) — SessionKey/SessionId、命令、空闲重置
+- [上下文引擎](./docs/zh/context-engine.md) — assemble/ingest/compact Protocol
+- [Skill Hub 兼容性](./docs/zh/skill-hub-compatibility.md) — ClawHub 集成
 - [开发路线图](./docs/zh/roadmap.md)
 
-English docs: [docs/en/](./docs/en/)
+英文文档：[docs/en/](./docs/en/)
 
-## 路线图
+---
 
-主要剩余项目：
+## 🗺 路线图
 
-- **记忆系统** — SQLite-vec（开发）+ PostgreSQL+pgvector（生产）
-- **Dreaming 引擎** — Light/Deep/REM 三阶段记忆整理
-- ~~**Skill Hub**~~ — ✅ 已完成
-- ~~**Web 渠道**~~ — ✅ 已完成
-- **UI 优化** — 对话居中、简洁气泡、时间分组（参考 DeepSeek）
-- **Session 亲和网关** — 多实例消息路由（按需）
+- ✅ ~~记忆存储 — 4 层 SQLite-vec + FTS5 + jieba~~
+- ✅ ~~Web 渠道 — 多路复用 WebSocket、OpenAI 兼容 SSE、React SPA~~
+- ✅ ~~Skill Hub — ClawHub SKILL.md 解析、渐进式披露~~
+- ✅ ~~TaskManager — 集中式异步任务生命周期~~
+- 🔲 **Dreaming 引擎** — Light/Deep/REM 三阶段记忆整理（提取 → 聚类 → 图谱）
+- 🔲 **自我进化** — 从会话模式自动生成 SOP
+- 🔲 **Session 亲和网关** — 多实例消息路由
+- 🔲 **PostgreSQL+pgvector** — 生产级记忆后端
 
-## 与 OpenClaw 的关系
+完整路线图见 [`openspec/`](./openspec/)。
 
-PyClaw 受 [OpenClaw](https://github.com/openclaw/openclaw) 启发，并设计为与其技能生态兼容。PyClaw 是**独立的 Python 重新实现**，不是 fork。它继承了领域模型（Session、Memory、Channel、Skill），但为存算分离重新设计了架构。
+---
 
-## 关注我们
+## 🤝 与 OpenClaw 的关系
 
-微信公众号 **Time留痕** — 持续分享 PyClaw 开发历程、AI Agent 架构设计、技术洞察。
+PyClaw 受 [OpenClaw](https://github.com/openclaw/openclaw) 启发，并设计为与其技能生态兼容。PyClaw 是**独立的 Python 重新实现**，不是 fork。它继承了领域模型（Session、Channel、Skill），但以**记忆为一等公民**重新设计了架构。
 
-<img src="./docs/assets/Time留痕.jpg" width="200" alt="微信公众号 Time留痕" />
+---
 
-**最新文章：** [从 6000 行包装到 645 行单循环：我如何重写 OpenClaw 的 Agent 内核](https://mp.weixin.qq.com/s/sGLHdPsMD1vj8CfUTd6PdQ) — 六大 Agent 框架源码级对比（Claude Code / OpenClaw / OpenCode / DeerFlow / GenericAgent / Hermes）
+## 📡 关注我们
 
-## 参与贡献
+**微信公众号：Time留痕** — 持续分享 PyClaw 开发历程、AI Agent 架构设计、记忆系统、上下文工程。
 
-欢迎 PR。项目使用 `openspec/` 目录管理架构规范和任务分解。
+<div align="center">
 
-## 许可证
+<img src="./docs/assets/Time留痕.jpg" width="180" alt="微信公众号 Time留痕" />
+
+📚 **[完整文章合集 →](https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzY5ODI5NzUwNA==&action=getalbum&album_id=4503553062812516353)**
+
+</div>
+
+---
+
+## 🤝 参与贡献
+
+欢迎 PR。`openspec/` 目录跟踪所有架构变更 — 提交大型 PR 前请阅读活跃的提案。小型 PR（拼写、bug 修复）随时欢迎。
+
+---
+
+## 📜 许可证
 
 [MIT License](./LICENSE) — 自由使用、修改、分发，包括商业用途。
