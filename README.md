@@ -181,19 +181,19 @@ graph TB
 
     subgraph Compute["☁️ Compute Layer — Stateless Workers"]
         direction TB
-        Runner["**Agent Runner** (770-line single loop)<br/>Frozen Prefix · Per-Turn Suffix · Prompt Budget"]
-        Tools["**Tools**: bash · read · write · edit · memorize · forget<br/>update_working_memory · skill_view"]
-        Hooks["**Hooks**: WorkingMemory · MemoryNudge · ToolApproval · SopTracker"]
-        CE["**Context Engine**: assemble + memory search + compact"]
-        Infra["**Infra**: TaskManager · Curator · Skill Graduation · Settings"]
+        Runner["Agent Runner · 770-line loop<br/>Frozen Prefix · Per-Turn Suffix · Prompt Budget"]
+        Tools["Tools: bash · read · write · edit · memorize · forget<br/>update_working_memory · skill_view"]
+        Hooks["Hooks: WorkingMemory · MemoryNudge · ToolApproval · SopTracker"]
+        CE["Context Engine: assemble + memory search + compact"]
+        Infra["Infra: TaskManager · Curator · Skill Graduation · Settings"]
     end
 
     subgraph Storage["💾 Storage Layer"]
         direction TB
-        Redis[("**Redis**<br/>Sessions · Locks · L1 Index<br/>Working Memory")]
-        Memory[("**SQLite + FTS5 + jieba**<br/>L2 Facts · L3 Procedures")]
-        Vec[("**sqlite-vec**<br/>L4 Session Archives")]
-        Embed["Embedding API (litellm)"]
+        Redis[("Redis<br/>Sessions · Locks · L1 Index · Working Memory")]
+        Memory[("SQLite + FTS5 + jieba<br/>L2 Facts · L3 Procedures")]
+        Vec[("sqlite-vec<br/>L4 Session Archives")]
+        Embed["Embedding API · litellm"]
     end
 
     CH --> Runner

@@ -177,19 +177,19 @@ graph TB
 
     subgraph Compute["☁️ 计算层 — 无状态 Worker"]
         direction TB
-        Runner["**Agent Runner**（770 行单循环）<br/>Frozen Prefix · Per-Turn Suffix · Prompt 预算"]
-        Tools["**工具**: bash · read · write · edit · memorize · forget<br/>update_working_memory · skill_view"]
-        Hooks["**Hook**: WorkingMemory · MemoryNudge · ToolApproval · SopTracker"]
-        CE["**Context Engine**: assemble + 记忆检索 + compact"]
-        Infra["**基础设施**: TaskManager · Curator · Skill Graduation · Settings"]
+        Runner["Agent Runner · 770 行单循环<br/>Frozen Prefix · Per-Turn Suffix · Prompt 预算"]
+        Tools["工具: bash · read · write · edit · memorize · forget<br/>update_working_memory · skill_view"]
+        Hooks["Hook: WorkingMemory · MemoryNudge · ToolApproval · SopTracker"]
+        CE["Context Engine: assemble + 记忆检索 + compact"]
+        Infra["基础设施: TaskManager · Curator · Skill Graduation · Settings"]
     end
 
     subgraph Storage["💾 存储层"]
         direction TB
-        Redis[("**Redis**<br/>Sessions · 分布式锁 · L1 索引<br/>Working Memory")]
-        Memory[("**SQLite + FTS5 + jieba**<br/>L2 事实 · L3 流程")]
-        Vec[("**sqlite-vec**<br/>L4 会话归档")]
-        Embed["Embedding API (litellm)"]
+        Redis[("Redis<br/>Sessions · 分布式锁 · L1 索引 · Working Memory")]
+        Memory[("SQLite + FTS5 + jieba<br/>L2 事实 · L3 流程")]
+        Vec[("sqlite-vec<br/>L4 会话归档")]
+        Embed["Embedding API · litellm"]
     end
 
     CH --> Runner
