@@ -174,32 +174,24 @@ flowchart LR
 ## 🏛 Architecture
 
 ```mermaid
-graph TB
-    subgraph Compute["☁️ Compute Layer (Stateless Workers)"]
-        Runner["Agent Runner<br/>single 770-line loop"]
-        Tools["Tools: bash, read, write, edit,<br/>memorize, forget, update_working_memory, skill_view"]
-        Hooks["Hooks: WorkingMemory, MemoryNudge,<br/>ToolApproval, SopTracker"]
-        Context["Context Engine:<br/>assemble + memory search + compact"]
-        Channels["Channels: Feishu WS + Web WS + OpenAI SSE"]
-        Infra["TaskManager + Curator + Settings"]
+graph LR
+    subgraph Compute["☁️ Compute (Stateless)"]
+        Runner[Agent Runner] --> Tools[8 Tools]
+        Runner --> Hooks[4 Hooks]
+        Runner --> CE[Context Engine]
     end
 
-    subgraph Storage["💾 Storage Layer"]
-        Redis["Redis<br/>Sessions · Locks · L1 Index · Working Memory"]
-        Memory["Memory Store (4-Layer)<br/>L1: Redis Hash (hot index)<br/>L2: SQLite FTS5+jieba (facts)<br/>L3: SQLite FTS5+jieba (procedures)<br/>L4: SQLite + sqlite-vec (archives)"]
-        Workspace["Workspace<br/>File / Redis"]
-        Embedding["Embedding API<br/>litellm, any model"]
+    subgraph Storage["💾 Storage"]
+        Redis[(Redis)]
+        SQLite[(SQLite)]
+        Vec[(sqlite-vec)]
     end
 
-    Runner --> Tools
-    Runner --> Hooks
-    Runner --> Context
-    Context --> Memory
-    Channels --> Runner
-    Infra --> Runner
+    Channels[Feishu WS · Web · OpenAI SSE] --> Runner
+    CE --> SQLite
+    CE --> Vec
     Hooks --> Redis
-    Memory --> Redis
-    Context --> Embedding
+    Runner --> Redis
 
     style Compute fill:#f3e5f5,stroke:#6a1b9a
     style Storage fill:#e8f5e9,stroke:#2e7d32
@@ -258,21 +250,22 @@ agent.hooks.register(MyCustomHook())
 ### Frozen / Per-Turn Prompt Architecture
 
 ```mermaid
-block-beta
-    columns 1
-    block:frozen["❄️ FROZEN PREFIX (cached by LLM provider, 90%+ hit)"]
-        A["identity · tools · skills_index · workspace · L1 snapshot"]
+graph LR
+    subgraph Frozen["❄️ Frozen Prefix (cached, 90%+ hit)"]
+        F[identity · tools · skills · L1 snapshot]
     end
-    block:suffix["🔄 PER-TURN SUFFIX (rebuilt every turn)"]
-        B["runtime · &lt;working_memory&gt; · &lt;nudge&gt;"]
+    subgraph Suffix["🔄 Per-Turn Suffix"]
+        S[runtime · working_memory · nudge]
     end
-    block:dynamic["🔍 DYNAMIC ZONE (memory-search results)"]
-        C["&lt;facts&gt; · &lt;procedures&gt; with entry_id"]
+    subgraph Dynamic["🔍 Dynamic Zone"]
+        D[facts · procedures with entry_id]
     end
 
-    style frozen fill:#e3f2fd,stroke:#1565c0
-    style suffix fill:#fff3e0,stroke:#e65100
-    style dynamic fill:#e8f5e9,stroke:#2e7d32
+    Frozen ~~~ Suffix ~~~ Dynamic
+
+    style Frozen fill:#e3f2fd,stroke:#1565c0
+    style Suffix fill:#fff3e0,stroke:#e65100
+    style Dynamic fill:#e8f5e9,stroke:#2e7d32
 ```
 
 ### OpenAI-Compatible API

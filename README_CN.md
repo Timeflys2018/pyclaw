@@ -169,43 +169,28 @@ flowchart LR
 
 ## 🏛 架构图
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  计算层（无状态 worker）                                                  │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │  Agent Runner（770 行单循环）                                       │ │
-│  │  ├─ Frozen Prefix  (identity + tools + skills_index + L1 + boot)  │ │
-│  │  ├─ Per-Turn Suffix (hooks_prepend + runtime + hooks_append)      │ │
-│  │  └─ Prompt 预算引擎（优先级截断、history 预算自动推导）             │ │
-│  ├────────────────────────────────────────────────────────────────────┤ │
-│  │  工具：bash · read · write · edit · memorize · forget ·           │ │
-│  │       update_working_memory · skill_view                          │ │
-│  ├────────────────────────────────────────────────────────────────────┤ │
-│  │  Hook：WorkingMemoryHook · MemoryNudgeHook · ToolApprovalHook     │ │
-│  ├────────────────────────────────────────────────────────────────────┤ │
-│  │  Context Engine：assemble（含记忆检索）/ compact / bootstrap      │ │
-│  ├────────────────────────────────────────────────────────────────────┤ │
-│  │  通道：飞书（WS + CardKit）/ Web（WS + OpenAI SSE）                │ │
-│  ├────────────────────────────────────────────────────────────────────┤ │
-│  │  基础设施：TaskManager（spawn/cancel/drain）/ Settings / Redis    │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-└────────────────────────────┬────────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  存储层                                                                  │
-│  ┌──────────────┐  ┌─────────────────────────────────────────────────┐ │
-│  │    Redis     │  │  Memory Store（4 层）                            │ │
-│  │  Sessions    │  │  L1: Redis Hash         (热索引，30 条)         │ │
-│  │  分布式锁    │  │  L2: SQLite FTS5+jieba  (事实)                  │ │
-│  │  Working Mem │  │  L3: SQLite FTS5+jieba  (流程)                  │ │
-│  │  L1 索引     │  │  L4: SQLite + sqlite-vec (会话归档)             │ │
-│  └──────────────┘  └─────────────────────────────────────────────────┘ │
-│  ┌──────────────┐  ┌──────────────────────┐                            │
-│  │ Workspace    │  │  Embedding API       │                            │
-│  │ (File/Redis) │  │  (litellm，模型无关) │                            │
-│  └──────────────┘  └──────────────────────┘                            │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    subgraph Compute["☁️ 计算层（无状态）"]
+        Runner[Agent Runner] --> Tools[8 个工具]
+        Runner --> Hooks[4 个 Hook]
+        Runner --> CE[Context Engine]
+    end
+
+    subgraph Storage["💾 存储层"]
+        Redis[(Redis)]
+        SQLite[(SQLite)]
+        Vec[(sqlite-vec)]
+    end
+
+    Channels[飞书 WS · Web · OpenAI SSE] --> Runner
+    CE --> SQLite
+    CE --> Vec
+    Hooks --> Redis
+    Runner --> Redis
+
+    style Compute fill:#f3e5f5,stroke:#6a1b9a
+    style Storage fill:#e8f5e9,stroke:#2e7d32
 ```
 
 ---
@@ -260,17 +245,23 @@ agent.hooks.register(MyCustomHook())
 
 ### Frozen / Per-Turn 三段式 Prompt
 
-```
-┌─────────────────────────────────────────────────────────┐
-│ ❄️ FROZEN PREFIX（被 LLM provider 缓存，命中率 90%+）   │
-│   identity · tools · skills_index · workspace · L1 snap │
-├─────────────────────────────────────────────────────────┤
-│ 🔄 PER-TURN SUFFIX（每轮重建）                          │
-│   runtime · <working_memory> · <nudge>                   │
-├─────────────────────────────────────────────────────────┤
-│ 🔍 DYNAMIC ZONE（记忆检索结果）                         │
-│   <facts> · <procedures>                                 │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    subgraph Frozen["❄️ Frozen Prefix（缓存，命中率 90%+）"]
+        F[identity · tools · skills · L1 snapshot]
+    end
+    subgraph Suffix["🔄 Per-Turn Suffix（每轮重建）"]
+        S[runtime · working_memory · nudge]
+    end
+    subgraph Dynamic["🔍 Dynamic Zone（记忆检索）"]
+        D[facts · procedures with entry_id]
+    end
+
+    Frozen ~~~ Suffix ~~~ Dynamic
+
+    style Frozen fill:#e3f2fd,stroke:#1565c0
+    style Suffix fill:#fff3e0,stroke:#e65100
+    style Dynamic fill:#e8f5e9,stroke:#2e7d32
 ```
 
 ### OpenAI 兼容 API
