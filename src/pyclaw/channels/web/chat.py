@@ -159,6 +159,101 @@ async def enqueue_chat(
         })
 
 
+_EXTRACT_TIMEOUT_SECONDS = 15.0
+
+
+async def _try_slash_command(
+    state: ConnectionState,
+    msg: ChatSendMessage,
+    session_id: str,
+) -> bool:
+    """Return True if the message was handled as a slash command."""
+    lower = (msg.content or "").strip().lower()
+
+    if lower.startswith("/new") or lower.startswith("/reset"):
+        from pyclaw.channels.web.routes import _get_router
+
+        router = _get_router()
+        await router.rotate(
+            f"web:{state.user_id}", "default",
+        )
+        await send_event(state, SERVER_CHAT_DONE, msg.conversation_id, {
+            "final_message": "✨ 新会话已开始，之前的对话已归档。",
+            "usage": {},
+            "aborted": False,
+        })
+        return True
+
+    if lower.startswith("/extract") or lower.startswith("/learn"):
+        from pyclaw.channels.web.routes import (
+            _redis_client,
+            _memory_store,
+            _evolution_settings,
+            _llm_client,
+            _nudge_hook,
+            _get_router,
+        )
+
+        router = _get_router()
+        redis_client = _redis_client
+        memory_store = _memory_store
+        evolution_settings = _evolution_settings
+        llm_client = _llm_client
+        session_store = router.store
+        nudge_hook = _nudge_hook
+
+        if not all([redis_client, memory_store, evolution_settings, llm_client, session_store]):
+            await send_event(state, SERVER_CHAT_DONE, msg.conversation_id, {
+                "final_message": "⚠️ 自我进化功能未启用。",
+                "usage": {},
+                "aborted": False,
+            })
+            return True
+
+        from pyclaw.core.sop_extraction import (
+            _check_user_ratelimit,
+            _derive_session_key,
+            extract_sops_sync,
+            format_extraction_result_zh,
+        )
+
+        session_key = _derive_session_key(session_id)
+        if not await _check_user_ratelimit(redis_client, session_key):
+            await send_event(state, SERVER_CHAT_DONE, msg.conversation_id, {
+                "final_message": "⏱ 学习触发过于频繁，请 1 分钟后再试。",
+                "usage": {},
+                "aborted": False,
+            })
+            return True
+
+        try:
+            result = await asyncio.wait_for(
+                extract_sops_sync(
+                    memory_store=memory_store,
+                    session_store=session_store,
+                    redis_client=redis_client,
+                    llm_client=llm_client,
+                    session_id=session_id,
+                    settings=evolution_settings,
+                    min_tool_calls=1,
+                    nudge_hook=nudge_hook,
+                ),
+                timeout=_EXTRACT_TIMEOUT_SECONDS,
+            )
+            reply = format_extraction_result_zh(result)
+        except TimeoutError:
+            reply = "⏳ 学习超时（>15 秒）已中止，候选数据已保留，1 分钟后可再次 /extract。"
+
+        await send_event(state, SERVER_CHAT_DONE, msg.conversation_id, {
+            "final_message": reply,
+            "usage": {},
+            "aborted": False,
+        })
+        return True
+
+    return False
+
+
 async def _run_chat(
     state: ConnectionState,
     msg: ChatSendMessage,
@@ -177,6 +272,9 @@ async def _run_chat(
         session_id = msg.conversation_id
     else:
         session_id = f"web:{state.user_id}:{msg.conversation_id}"
+
+    if await _try_slash_command(state, msg, session_id):
+        return
 
     request = RunRequest(
         session_id=session_id,
