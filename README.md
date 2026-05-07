@@ -461,11 +461,11 @@ Chinese docs: [docs/zh/](./docs/zh/)
 
 ## 🗺 Roadmap
 
-- ✅ ~~Memory Store — 4-layer SQLite-vec + FTS5 + jieba~~
-- ✅ ~~Web Channel — multiplexed WebSocket, OpenAI-compat SSE, React SPA~~
-- ✅ ~~Skill Hub — ClawHub SKILL.md parsing, progressive disclosure~~
-- ✅ ~~TaskManager — centralized async task lifecycle~~
-- ✅ ~~Self-Evolution — SOP extraction + Curator lifecycle + ForgetTool~~
+- ✅ Memory Store — 4-layer SQLite-vec + FTS5 + jieba
+- ✅ Web Channel — multiplexed WebSocket, OpenAI-compat SSE, React SPA
+- ✅ Skill Hub — ClawHub SKILL.md parsing, progressive disclosure
+- ✅ TaskManager — centralized async task lifecycle
+- ✅ Self-Evolution — SOP extraction + Curator lifecycle + ForgetTool
 - 🔲 **Skill Graduation** — High-frequency SOPs → SKILL.md (progressive disclosure)
 - 🔲 **Dreaming Engine** — Light/Deep/REM memory consolidation (extract → cluster → graph)
 - 🔲 **Session Affinity Gateway** — multi-instance message routing
