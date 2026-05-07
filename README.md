@@ -1,5 +1,3 @@
-<a href="https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzY5ODI5NzUwNA==&action=getalbum&album_id=4503553062812516353"><img align="right" src="./docs/assets/Time留痕.jpg" width="140" alt="WeChat: Time留痕" /></a>
-
 <div align="center">
 
 # 🐍 PyClaw
