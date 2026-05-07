@@ -150,6 +150,19 @@ def graduate_single_sop(
         logger.debug("SKILL.md already exists at %s, skipping", skill_file)
         return False, None
 
+    # Cross-layer collision check: skip if skill name exists from another source
+    from pyclaw.skills.discovery import discover_skills
+
+    try:
+        existing_skills = discover_skills(workspace_path)
+        if any(s.name == name for s in existing_skills):
+            logger.info(
+                "Skill '%s' already exists from another source, skipping graduation", name
+            )
+            return False, None
+    except Exception:
+        pass  # Discovery failure should not block graduation
+
     skill_content = generate_skill_md_template(name, description, procedure, session_key)
     try:
         skill_dir.mkdir(parents=True, exist_ok=True)

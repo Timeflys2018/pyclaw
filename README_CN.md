@@ -122,28 +122,25 @@ flowchart LR
 PyClaw 的 Agent 能**自我改进** — 无需微调、无需重训：
 
 ```mermaid
-flowchart TD
-    subgraph Extract["阶段一：提取"]
-        A[用户任务] --> B[SOP Tracker Hook<br/>per-turn 候选追踪]
-        B --> C{Session 边界<br/>到达？}
-        C -->|是 + 阈值满足| D[LLM 提取 SOPs<br/>strict rejection bias]
-        D --> E[FTS5 + Jaccard 去重]
-        E --> F[写入 L3 procedures]
+flowchart LR
+    subgraph Extract["1. 提取"]
+        A[任务] --> B[Tracker Hook]
+        B --> C{Session 结束?}
+        C -->|阈值满足| D[LLM 提取]
+        D --> E[去重 + 写入 L3]
     end
 
-    subgraph Curate["阶段二：维护"]
-        F --> G[Search 命中 → 递增<br/>use_count + last_used_at]
-        G --> H{30 天未用?}
-        H -->|CLI 标记 stale| I[仍注入 prompt]
-        I --> J{90 天未用?}
-        J -->|Curator 归档| K[status → archived<br/>不再注入]
-        L[Agent 调用 forget] --> K
+    subgraph Curate["2. 维护"]
+        E --> F[Search 命中<br/>递增计数]
+        F --> G{90天未用?}
+        G -->|是| H[归档]
+        I[forget 工具] --> H
     end
 
-    subgraph Graduate["阶段三：毕业"]
-        G --> M{use_count ≥ 5?}
-        M -->|双门控满足| N[生成 SKILL.md]
-        N --> O[渐进式披露<br/>通过 skill_view 加载]
+    subgraph Graduate["3. 毕业"]
+        F --> J{计数 ≥ 5<br/>存活 ≥ 7天?}
+        J -->|是| K[SKILL.md]
+        K --> L[skill_view]
     end
 
     style Extract fill:#e8f5e9,stroke:#2e7d32

@@ -126,28 +126,25 @@ flowchart LR
 PyClaw's agent **improves itself** over time — no fine-tuning, no retraining:
 
 ```mermaid
-flowchart TD
-    subgraph Extract["Phase 1: Extract"]
-        A[User Task] --> B[SOP Tracker Hook<br/>per-turn candidate tracking]
-        B --> C{Session boundary<br/>reached?}
-        C -->|Yes + threshold met| D[LLM extracts SOPs<br/>strict rejection bias]
-        D --> E[Dedup via FTS5 + Jaccard]
-        E --> F[Write to L3 procedures]
+flowchart LR
+    subgraph Extract["1. Extract"]
+        A[Task] --> B[Tracker Hook]
+        B --> C{Session end?}
+        C -->|threshold met| D[LLM extract]
+        D --> E[Dedup + Write L3]
     end
 
-    subgraph Curate["Phase 2: Curate"]
-        F --> G[Search hit → bump<br/>use_count + last_used_at]
-        G --> H{30d unused?}
-        H -->|CLI shows as stale| I[Still injected in prompt]
-        I --> J{90d unused?}
-        J -->|Curator archives| K[Status → archived<br/>Not injected anymore]
-        L[Agent calls forget] --> K
+    subgraph Curate["2. Curate"]
+        E --> F[Search hit<br/>bump count]
+        F --> G{90d unused?}
+        G -->|yes| H[archived]
+        I[forget tool] --> H
     end
 
-    subgraph Graduate["Phase 3: Graduate (Planned)"]
-        G --> M{use_count ≥ 5?}
-        M -->|LLM review: promote| N[Generate SKILL.md]
-        N --> O[Progressive disclosure<br/>via skill_view tool]
+    subgraph Graduate["3. Graduate"]
+        F --> J{count ≥ 5<br/>age ≥ 7d?}
+        J -->|yes| K[SKILL.md]
+        K --> L[skill_view]
     end
 
     style Extract fill:#e8f5e9,stroke:#2e7d32

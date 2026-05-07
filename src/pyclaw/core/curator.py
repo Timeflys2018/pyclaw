@@ -62,6 +62,19 @@ async def create_curator_loop(
     llm_client: Any = None,
 ) -> None:
 
+    try:
+        archive_days = int(getattr(settings, "archive_after_days", 90))
+        promo_days = int(getattr(settings, "promotion_min_days", 7))
+        if archive_days <= promo_days:
+            logger.warning(
+                "archiveAfterDays (%d) <= promotionMinDays (%d): "
+                "SOPs may be archived before graduation eligibility",
+                archive_days,
+                promo_days,
+            )
+    except (TypeError, ValueError):
+        pass
+
     existing = await redis_client.get(CURATOR_LAST_RUN_KEY)
     if existing is None:
         await redis_client.set(CURATOR_LAST_RUN_KEY, str(time.time()))
