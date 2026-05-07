@@ -81,7 +81,24 @@
     "dedupOverlapThreshold": 0.6,
     "maxSopsPerExtraction": 5,
     "descriptionMaxChars": 150,
-    "procedureMaxChars": 5000
+    "procedureMaxChars": 5000,
+    "curator": {
+      "enabled": true,
+      "checkIntervalSeconds": 3600,
+      "intervalSeconds": 604800,
+      "staleAfterDays": 30,
+      "archiveAfterDays": 90,
+      "graduationEnabled": true,
+      "graduationMode": "template",
+      "graduationModel": null,
+      "promotionMinUseCount": 5,
+      "promotionMinDays": 7,
+      "llmReviewEnabled": false,
+      "llmReviewModel": null,
+      "llmReviewIntervalSeconds": 1209600,
+      "llmReviewActions": ["promote"],
+      "llmReviewMaxBatch": 20
+    }
   },
   "channels": {
     "feishu": {

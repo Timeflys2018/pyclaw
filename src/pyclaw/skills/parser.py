@@ -111,4 +111,8 @@ def parse_skill_file(path: str | Path) -> SkillManifest:
         always=always,
         emoji=emoji,
         disable_model_invocation=disable_model_invocation,
+        auto_generated=bool(frontmatter.get("auto_generated", False)),
+        lifecycle=frontmatter.get("lifecycle", "active"),
+        generated_at=frontmatter.get("generated_at"),
+        source_session=frontmatter.get("source_session"),
     )

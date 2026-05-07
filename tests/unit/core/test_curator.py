@@ -83,7 +83,7 @@ class TestScanSingleDb:
         l1_index = AsyncMock()
         l1_index.index_remove = AsyncMock()
 
-        archived_count = await _scan_single_db(db_file, archive_days=90, l1_index=l1_index)
+        archived_count, _graduated = await _scan_single_db(db_file, archive_days=90, l1_index=l1_index)
 
         assert archived_count == 1
         l1_index.index_remove.assert_awaited_once_with("sk_1", "proc_1")
@@ -120,7 +120,7 @@ class TestScanSingleDb:
         l1_index = AsyncMock()
         l1_index.index_remove = AsyncMock()
 
-        archived_count = await _scan_single_db(db_file, archive_days=90, l1_index=l1_index)
+        archived_count, _graduated = await _scan_single_db(db_file, archive_days=90, l1_index=l1_index)
 
         assert archived_count == 0
         l1_index.index_remove.assert_not_awaited()
@@ -156,7 +156,7 @@ class TestScanSingleDb:
         l1_index = AsyncMock()
         l1_index.index_remove = AsyncMock()
 
-        archived_count = await _scan_single_db(db_file, archive_days=90, l1_index=l1_index)
+        archived_count, _graduated = await _scan_single_db(db_file, archive_days=90, l1_index=l1_index)
 
         assert archived_count == 1
         l1_index.index_remove.assert_awaited_once_with("sk_2", "proc_null_lu")
@@ -411,4 +411,4 @@ class TestRunCuratorScan:
             memory_base_dir=tmp_path, archive_days=90, l1_index=l1_index
         )
 
-        assert report == CuratorReport(total_scanned=0, total_archived=0, errors=[])
+        assert report == CuratorReport(total_scanned=0, total_archived=0, total_graduated=0, errors=[])

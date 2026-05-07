@@ -7,6 +7,7 @@ Usage:
     pyclaw-skill check [--workspace PATH]
     pyclaw-skill curator list [--auto | --stale | --archived]
     pyclaw-skill curator restore ENTRY_ID
+    pyclaw-skill curator graduate [--preview | --id ENTRY_ID]
 """
 
 from __future__ import annotations
@@ -248,6 +249,130 @@ def cmd_curator_list(args: argparse.Namespace) -> None:
     print()
 
 
+def cmd_curator_graduate(args: argparse.Namespace) -> None:
+    from pyclaw.core.skill_graduation import graduate_single_sop
+    from pyclaw.infra.settings import load_settings
+
+    settings = load_settings()
+    db_paths = _get_memory_dbs()
+    if not db_paths:
+        print("No memory databases found.")
+        return
+
+    workspace_base = Path(settings.workspaces.default).expanduser()
+    min_use = settings.evolution.curator.promotion_min_use_count
+    min_days = settings.evolution.curator.promotion_min_days
+    now = int(time.time())
+    preview = getattr(args, "preview", False)
+    target_id = getattr(args, "id", None)
+
+    if target_id:
+        # Force-graduate specific entry (skip thresholds)
+        pattern = f"{target_id}%"
+        sql = (
+            "SELECT id, session_key, content, use_count, created_at "
+            "FROM procedures WHERE id LIKE ? AND status='active' AND type='auto_sop'"
+        )
+        graduated = 0
+        for db_path in db_paths:
+            conn = _open_db(db_path)
+            try:
+                rows = conn.execute(sql, (pattern,)).fetchall()
+                for row in rows:
+                    eid, skey, content, use_count, created_at = row
+                    ok, skill_path = graduate_single_sop(
+                        entry_id=eid,
+                        content=content,
+                        session_key=skey,
+                        workspace_base_dir=workspace_base,
+                        mode=settings.evolution.curator.graduation_mode,
+                    )
+                    if ok:
+                        conn.execute(
+                            "UPDATE procedures SET status='graduated' WHERE id=?",
+                            (eid,),
+                        )
+                        print(f"Graduated {eid[:8]} → {skill_path}")
+                        graduated += 1
+                    else:
+                        print(f"Failed to graduate {eid[:8]} (content may be unparseable)")
+            except Exception:
+                continue
+            finally:
+                conn.close()
+
+        if graduated == 0:
+            print(f"No active auto_sop entry found matching '{target_id}'.")
+            sys.exit(1)
+        return
+
+    # Candidate query with thresholds
+    threshold_ts = now - min_days * 86400
+    sql = (
+        "SELECT id, session_key, content, use_count, created_at "
+        "FROM procedures "
+        "WHERE type='auto_sop' AND status='active' "
+        "AND use_count >= ? AND created_at <= ?"
+    )
+
+    candidates: list[tuple] = []
+    candidate_dbs: list[tuple[Path, tuple]] = []
+
+    for db_path in db_paths:
+        conn = _open_db(db_path)
+        try:
+            rows = conn.execute(sql, (min_use, threshold_ts)).fetchall()
+            for row in rows:
+                candidates.append(row)
+                candidate_dbs.append((db_path, row))
+        except Exception:
+            continue
+        finally:
+            conn.close()
+
+    if not candidates:
+        print("No graduation candidates found.")
+        return
+
+    if preview:
+        headers = ("id      ", "content                                            ", "use_cnt", "age_days")
+        rows_fmt: list[tuple[str, ...]] = []
+        for row in candidates:
+            eid, skey, content, use_count, created_at = row
+            age_days = int((now - created_at) / 86400)
+            content_short = (content or "")[:50].replace("\n", " ")
+            rows_fmt.append((eid[:8], content_short, str(use_count), str(age_days)))
+        print(f"\nGraduation candidates ({len(rows_fmt)}):")
+        print(_format_table(rows_fmt, headers))
+        print()
+        return
+
+    # Execute graduation
+    graduated = 0
+    for db_path, row in candidate_dbs:
+        eid, skey, content, use_count, created_at = row
+        ok, skill_path = graduate_single_sop(
+            entry_id=eid,
+            content=content,
+            session_key=skey,
+            workspace_base_dir=workspace_base,
+            mode=settings.evolution.curator.graduation_mode,
+        )
+        if ok:
+            conn = _open_db(db_path)
+            try:
+                conn.execute(
+                    "UPDATE procedures SET status='graduated' WHERE id=?",
+                    (eid,),
+                )
+            finally:
+                conn.close()
+            print(f"Graduated {eid[:8]} → {skill_path}")
+            graduated += 1
+
+    print(f"\n{graduated} SOP(s) graduated to SKILL.md.")
+
+
 def cmd_curator_restore(args: argparse.Namespace) -> None:
     entry_id = args.entry_id
     db_paths = _get_memory_dbs()
@@ -312,6 +437,10 @@ def main() -> None:
     p_cur_restore = curator_sub.add_parser("restore", help="Restore an archived procedure")
     p_cur_restore.add_argument("entry_id", help="Entry ID (or prefix) to restore")
 
+    p_cur_graduate = curator_sub.add_parser("graduate", help="Graduate SOPs to SKILL.md")
+    p_cur_graduate.add_argument("--preview", action="store_true", help="List candidates without executing")
+    p_cur_graduate.add_argument("--id", dest="id", help="Force-graduate a specific entry (skip thresholds)")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -325,6 +454,7 @@ def main() -> None:
         curator_commands = {
             "list": cmd_curator_list,
             "restore": cmd_curator_restore,
+            "graduate": cmd_curator_graduate,
         }
         try:
             curator_commands[args.curator_command](args)

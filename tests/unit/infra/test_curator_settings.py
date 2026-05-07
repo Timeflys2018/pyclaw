@@ -78,3 +78,45 @@ class TestEvolutionSettingsNestedCurator:
             "unknownField": "ignored",
         })
         assert s.enabled is True
+
+
+class TestCuratorGraduationSettings:
+    def test_graduation_defaults(self):
+        s = CuratorSettings()
+        assert s.graduation_enabled is True
+        assert s.graduation_mode == "template"
+        assert s.graduation_model is None
+        assert s.promotion_min_use_count == 5
+        assert s.promotion_min_days == 7
+
+    def test_graduation_alias_parsing(self):
+        s = CuratorSettings.model_validate({
+            "graduationEnabled": False,
+            "graduationMode": "enrich",
+            "promotionMinUseCount": 10,
+            "promotionMinDays": 14,
+        })
+        assert s.graduation_enabled is False
+        assert s.graduation_mode == "enrich"
+        assert s.promotion_min_use_count == 10
+        assert s.promotion_min_days == 14
+
+
+class TestCuratorLLMReviewSettings:
+    def test_llm_review_defaults(self):
+        s = CuratorSettings()
+        assert s.llm_review_enabled is False
+        assert s.llm_review_model is None
+        assert s.llm_review_interval_seconds == 1209600
+        assert s.llm_review_actions == ["promote"]
+        assert s.llm_review_max_batch == 20
+
+    def test_llm_review_alias_parsing(self):
+        s = CuratorSettings.model_validate({
+            "llmReviewEnabled": True,
+            "llmReviewActions": ["promote", "archive"],
+            "llmReviewMaxBatch": 10,
+        })
+        assert s.llm_review_enabled is True
+        assert s.llm_review_actions == ["promote", "archive"]
+        assert s.llm_review_max_batch == 10

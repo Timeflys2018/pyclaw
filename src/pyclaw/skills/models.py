@@ -33,6 +33,11 @@ class SkillManifest(BaseModel):
     always: bool = False
     emoji: str | None = None
     disable_model_invocation: bool = False
+    # Auto-generated skill metadata (from SOP graduation)
+    auto_generated: bool = False
+    lifecycle: str = "active"
+    generated_at: str | None = None
+    source_session: str | None = None
 
 
 class SkillParseError(Exception):

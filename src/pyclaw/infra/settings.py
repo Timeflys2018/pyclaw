@@ -84,6 +84,18 @@ class CuratorSettings(BaseSettings):
     stale_after_days: int = Field(30, alias="staleAfterDays")
     archive_after_days: int = Field(90, alias="archiveAfterDays")
 
+    graduation_enabled: bool = Field(True, alias="graduationEnabled")
+    graduation_mode: str = Field("template", alias="graduationMode")
+    graduation_model: str | None = Field(None, alias="graduationModel")
+    promotion_min_use_count: int = Field(5, alias="promotionMinUseCount")
+    promotion_min_days: int = Field(7, alias="promotionMinDays")
+
+    llm_review_enabled: bool = Field(False, alias="llmReviewEnabled")
+    llm_review_model: str | None = Field(None, alias="llmReviewModel")
+    llm_review_interval_seconds: int = Field(1209600, alias="llmReviewIntervalSeconds")
+    llm_review_actions: list[str] = Field(default_factory=lambda: ["promote"], alias="llmReviewActions")
+    llm_review_max_batch: int = Field(20, alias="llmReviewMaxBatch")
+
     model_config = SettingsConfigDict(
         env_prefix="PYCLAW_CURATOR_",
         populate_by_name=True,

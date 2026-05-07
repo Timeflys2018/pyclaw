@@ -9,7 +9,7 @@ from unittest.mock import patch
 import apsw
 import pytest
 
-from pyclaw.cli.skills import cmd_curator_list, cmd_curator_restore
+from pyclaw.cli.skills import cmd_curator_graduate, cmd_curator_list, cmd_curator_restore
 
 
 _SCHEMA = """
@@ -236,3 +236,131 @@ class TestCuratorRestore:
 
         output = capsys.readouterr().out
         assert "No archived entry found" in output
+
+
+class TestCuratorGraduate:
+    def _make_sop_content(self, name: str = "deploy-staging") -> str:
+        return f"{name}\nDeploy to staging environment\nStep 1: run deploy\nStep 2: verify"
+
+    def _make_settings(self, workspace_base: Path):
+        class FakeWorkspaces:
+            default = str(workspace_base)
+
+        class FakeCurator:
+            promotion_min_use_count = 5
+            promotion_min_days = 7
+            graduation_mode = "template"
+
+        class FakeEvolution:
+            curator = FakeCurator()
+
+        class FakeMemory:
+            base_dir = "~/.pyclaw/memory"
+
+        class FakeSettings:
+            workspaces = FakeWorkspaces()
+            evolution = FakeEvolution()
+            memory = FakeMemory()
+
+        return FakeSettings()
+
+    def test_graduate_preview(self, memory_dir: Path, tmp_path: Path, capsys):
+        db_path = _create_test_db(memory_dir)
+        old_ts = time.time() - 30 * 86400
+        proc_id = _insert_procedure(
+            db_path,
+            content=self._make_sop_content(),
+            use_count=10,
+            created_at=old_ts,
+        )
+
+        workspace_base = tmp_path / "workspaces"
+        workspace_base.mkdir()
+        settings = self._make_settings(workspace_base)
+
+        with patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]), \
+             patch("pyclaw.infra.settings.load_settings", return_value=settings):
+            args = argparse.Namespace(preview=True, id=None)
+            cmd_curator_graduate(args)
+
+        output = capsys.readouterr().out
+        assert proc_id[:8] in output
+        assert "deploy-staging" in output
+
+    def test_graduate_execute(self, memory_dir: Path, tmp_path: Path, capsys):
+        db_path = _create_test_db(memory_dir)
+        old_ts = time.time() - 30 * 86400
+        proc_id = _insert_procedure(
+            db_path,
+            content=self._make_sop_content(),
+            use_count=10,
+            created_at=old_ts,
+        )
+
+        workspace_base = tmp_path / "workspaces"
+        workspace_base.mkdir()
+        settings = self._make_settings(workspace_base)
+
+        with patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]), \
+             patch("pyclaw.infra.settings.load_settings", return_value=settings):
+            args = argparse.Namespace(preview=False, id=None)
+            cmd_curator_graduate(args)
+
+        output = capsys.readouterr().out
+        assert "Graduated" in output
+        assert "SKILL.md" in output
+
+        conn = apsw.Connection(str(db_path))
+        row = conn.execute("SELECT status FROM procedures WHERE id=?", (proc_id,)).fetchone()
+        conn.close()
+        assert row[0] == "graduated"
+
+        skill_file = workspace_base / "user1" / "skills" / "deploy-staging" / "SKILL.md"
+        assert skill_file.exists()
+
+    def test_graduate_by_id(self, memory_dir: Path, tmp_path: Path, capsys):
+        db_path = _create_test_db(memory_dir)
+        proc_id = _insert_procedure(
+            db_path,
+            content=self._make_sop_content("force-grad"),
+            use_count=1,
+            created_at=time.time(),
+        )
+
+        workspace_base = tmp_path / "workspaces"
+        workspace_base.mkdir()
+        settings = self._make_settings(workspace_base)
+
+        with patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]), \
+             patch("pyclaw.infra.settings.load_settings", return_value=settings):
+            args = argparse.Namespace(preview=False, id=proc_id[:8])
+            cmd_curator_graduate(args)
+
+        output = capsys.readouterr().out
+        assert "Graduated" in output
+
+        conn = apsw.Connection(str(db_path))
+        row = conn.execute("SELECT status FROM procedures WHERE id=?", (proc_id,)).fetchone()
+        conn.close()
+        assert row[0] == "graduated"
+
+    def test_graduate_no_candidates(self, memory_dir: Path, tmp_path: Path, capsys):
+        db_path = _create_test_db(memory_dir)
+        _insert_procedure(
+            db_path,
+            content=self._make_sop_content(),
+            use_count=1,
+            created_at=time.time(),
+        )
+
+        workspace_base = tmp_path / "workspaces"
+        workspace_base.mkdir()
+        settings = self._make_settings(workspace_base)
+
+        with patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]), \
+             patch("pyclaw.infra.settings.load_settings", return_value=settings):
+            args = argparse.Namespace(preview=False, id=None)
+            cmd_curator_graduate(args)
+
+        output = capsys.readouterr().out
+        assert "No graduation candidates found" in output

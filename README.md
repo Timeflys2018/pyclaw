@@ -370,6 +370,9 @@ pyclaw-skill curator list --auto     # Active auto-extracted SOPs
 pyclaw-skill curator list --stale    # SOPs unused for 30+ days
 pyclaw-skill curator list --archived # Archived SOPs (with reason)
 pyclaw-skill curator restore <id>    # Restore an archived SOP
+pyclaw-skill curator graduate --preview  # Preview graduation candidates
+pyclaw-skill curator graduate            # Execute graduation
+pyclaw-skill curator graduate --id <id>  # Force-graduate specific SOP
 
 # Live memory inspection
 .venv/bin/python scripts/verify_memory_live.py   # Real-time L1/L2/L3/L4 watcher

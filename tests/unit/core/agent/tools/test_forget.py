@@ -159,3 +159,26 @@ class TestForgetToolMissingFields:
 
         assert result.is_error
         assert "reason" in result.content[0].text
+
+
+class TestForgetGraduatedExcluded:
+    """Graduated entries should not be found by ForgetTool (SQL filters status='active')."""
+
+    @pytest.mark.asyncio
+    async def test_graduated_entry_invisible(self, tool: ForgetTool, context: ToolContext):
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value = []
+        tool._memory_store._sqlite = MagicMock()
+        tool._memory_store._sqlite._get_conn = AsyncMock(return_value=mock_conn)
+
+        mock_tree = MagicMock()
+        tool._session_store.load = AsyncMock(return_value=mock_tree)
+
+        with patch.object(ForgetTool, "_has_non_error_tool_use", return_value=True):
+            result = await tool.execute(
+                _make_args(entry_id="graduated_id", reason="test graduated"),
+                context,
+            )
+
+        assert result.is_error
+        assert "未找到" in result.content[0].text

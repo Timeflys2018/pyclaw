@@ -208,6 +208,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
                     memory_base_dir=memory_base_dir,
                     redis_client=redis_client,
                     l1_index=_l1_index,
+                    workspace_base_dir=workspace_base,
+                    llm_client=runner_deps.llm,
                 ),
                 category="curator",
             )

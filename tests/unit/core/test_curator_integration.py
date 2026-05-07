@@ -83,8 +83,7 @@ async def test_full_lifecycle_archive_removes_from_search(tmp_path: Path) -> Non
     l1_index = AsyncMock()
     l1_index.index_remove = AsyncMock()
 
-    # Run curator scan (archive_days=90 < 100 days old → should archive)
-    archived_count = await _scan_single_db(db_path, archive_days=90, l1_index=l1_index)
+    archived_count, _graduated = await _scan_single_db(db_path, archive_days=90, l1_index=l1_index)
     assert archived_count == 1
 
     # Verify L1 index_remove was called
@@ -268,10 +267,8 @@ async def test_null_last_used_at_uses_created_at(tmp_path: Path) -> None:
     l1_index = AsyncMock()
     l1_index.index_remove = AsyncMock()
 
-    # Run curator scan with archive_days=90
-    archived_count = await _scan_single_db(db_path, archive_days=90, l1_index=l1_index)
+    archived_count, _graduated = await _scan_single_db(db_path, archive_days=90, l1_index=l1_index)
 
-    # Only proc_old (100 days > 90) should be archived; proc_young (50 days < 90) stays
     assert archived_count == 1
 
     # Verify proc_young is still active
