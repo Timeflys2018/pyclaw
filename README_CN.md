@@ -170,25 +170,39 @@ flowchart LR
 ## 🏛 架构图
 
 ```mermaid
-graph LR
-    subgraph Compute["☁️ 计算层（无状态）"]
-        Runner[Agent Runner] --> Tools[8 个工具]
-        Runner --> Hooks[4 个 Hook]
-        Runner --> CE[Context Engine]
+graph TB
+    subgraph Channels["🌐 通道"]
+        CH[飞书 WebSocket · Web WS · OpenAI SSE]
+    end
+
+    subgraph Compute["☁️ 计算层 — 无状态 Worker"]
+        direction TB
+        Runner["**Agent Runner**（770 行单循环）<br/>Frozen Prefix · Per-Turn Suffix · Prompt 预算"]
+        Tools["**工具**: bash · read · write · edit · memorize · forget<br/>update_working_memory · skill_view"]
+        Hooks["**Hook**: WorkingMemory · MemoryNudge · ToolApproval · SopTracker"]
+        CE["**Context Engine**: assemble + 记忆检索 + compact"]
+        Infra["**基础设施**: TaskManager · Curator · Skill Graduation · Settings"]
     end
 
     subgraph Storage["💾 存储层"]
-        Redis[(Redis)]
-        SQLite[(SQLite)]
-        Vec[(sqlite-vec)]
+        direction TB
+        Redis[("**Redis**<br/>Sessions · 分布式锁 · L1 索引<br/>Working Memory")]
+        Memory[("**SQLite + FTS5 + jieba**<br/>L2 事实 · L3 流程")]
+        Vec[("**sqlite-vec**<br/>L4 会话归档")]
+        Embed["Embedding API (litellm)"]
     end
 
-    Channels[飞书 WS · Web · OpenAI SSE] --> Runner
-    CE --> SQLite
-    CE --> Vec
+    CH --> Runner
+    Runner --> Tools
+    Runner --> Hooks
+    Runner --> CE
     Hooks --> Redis
-    Runner --> Redis
+    CE --> Memory
+    CE --> Vec
+    CE --> Embed
+    Infra --> Redis
 
+    style Channels fill:#e3f2fd,stroke:#1565c0
     style Compute fill:#f3e5f5,stroke:#6a1b9a
     style Storage fill:#e8f5e9,stroke:#2e7d32
 ```

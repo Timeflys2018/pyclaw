@@ -174,25 +174,39 @@ flowchart LR
 ## 🏛 Architecture
 
 ```mermaid
-graph LR
-    subgraph Compute["☁️ Compute (Stateless)"]
-        Runner[Agent Runner] --> Tools[8 Tools]
-        Runner --> Hooks[4 Hooks]
-        Runner --> CE[Context Engine]
+graph TB
+    subgraph Channels["🌐 Channels"]
+        CH[Feishu WebSocket · Web WS · OpenAI SSE]
     end
 
-    subgraph Storage["💾 Storage"]
-        Redis[(Redis)]
-        SQLite[(SQLite)]
-        Vec[(sqlite-vec)]
+    subgraph Compute["☁️ Compute Layer — Stateless Workers"]
+        direction TB
+        Runner["**Agent Runner** (770-line single loop)<br/>Frozen Prefix · Per-Turn Suffix · Prompt Budget"]
+        Tools["**Tools**: bash · read · write · edit · memorize · forget<br/>update_working_memory · skill_view"]
+        Hooks["**Hooks**: WorkingMemory · MemoryNudge · ToolApproval · SopTracker"]
+        CE["**Context Engine**: assemble + memory search + compact"]
+        Infra["**Infra**: TaskManager · Curator · Skill Graduation · Settings"]
     end
 
-    Channels[Feishu WS · Web · OpenAI SSE] --> Runner
-    CE --> SQLite
-    CE --> Vec
+    subgraph Storage["💾 Storage Layer"]
+        direction TB
+        Redis[("**Redis**<br/>Sessions · Locks · L1 Index<br/>Working Memory")]
+        Memory[("**SQLite + FTS5 + jieba**<br/>L2 Facts · L3 Procedures")]
+        Vec[("**sqlite-vec**<br/>L4 Session Archives")]
+        Embed["Embedding API (litellm)"]
+    end
+
+    CH --> Runner
+    Runner --> Tools
+    Runner --> Hooks
+    Runner --> CE
     Hooks --> Redis
-    Runner --> Redis
+    CE --> Memory
+    CE --> Vec
+    CE --> Embed
+    Infra --> Redis
 
+    style Channels fill:#e3f2fd,stroke:#1565c0
     style Compute fill:#f3e5f5,stroke:#6a1b9a
     style Storage fill:#e8f5e9,stroke:#2e7d32
 ```
