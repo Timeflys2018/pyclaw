@@ -175,7 +175,11 @@ class DefaultContextEngine:
         if l3_entries:
             lines.append("<procedures>")
             for entry in l3_entries:
-                lines.append(f"- [{getattr(entry, 'type', 'general')}] {getattr(entry, 'content', '')}")
+                entry_id = getattr(entry, 'id', '')[:8]
+                lines.append(
+                    f"- [{getattr(entry, 'type', 'general')}|{entry_id}] "
+                    f"{getattr(entry, 'content', '')}"
+                )
             lines.append("</procedures>")
         lines.append("</memory_context>")
         return "\n".join(lines)

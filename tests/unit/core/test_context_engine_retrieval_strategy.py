@@ -106,7 +106,7 @@ async def test_format_memory_context_partitions_by_layer() -> None:
     procedures_end = output.index("</procedures>")
     procedures_block = output[procedures_start:procedures_end]
     assert "deploy: tag then push" in procedures_block
-    assert "[workflow]" in procedures_block
+    assert "[workflow|" in procedures_block
     assert "user prefers concise answers" not in procedures_block
 
     assert facts_end < procedures_start

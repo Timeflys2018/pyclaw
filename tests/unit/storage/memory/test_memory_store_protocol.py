@@ -41,6 +41,11 @@ class _StubMemoryStore:
     ) -> list[ArchiveEntry]:
         return []
 
+    async def archive_entry(
+        self, session_key: str, entry_id: str, *, reason: str = ""
+    ) -> bool:
+        return False
+
     async def close(self) -> None:
         pass
 

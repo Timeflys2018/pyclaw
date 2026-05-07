@@ -80,9 +80,11 @@ async def create_agent_runner_deps(
     hooks = HookRegistry()
 
     if memory_store is not None:
+        from pyclaw.core.agent.tools.forget import ForgetTool
         from pyclaw.core.agent.tools.memorize import MemorizeTool
 
         tools.register(MemorizeTool(memory_store, session_store))
+        tools.register(ForgetTool(memory_store, session_store))
 
         if redis_client is not None:
             from pyclaw.core.agent.hooks.working_memory_hook import WorkingMemoryHook

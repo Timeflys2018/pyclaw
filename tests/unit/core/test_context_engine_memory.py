@@ -146,7 +146,7 @@ async def test_assemble_searches_memory_store_when_prompt_provided() -> None:
     assert "<procedures>" in result.system_prompt_addition
     assert "prefers short answers" in result.system_prompt_addition
     assert "[user_preference]" in result.system_prompt_addition
-    assert "[workflow]" in result.system_prompt_addition
+    assert "[workflow|" in result.system_prompt_addition
 
 
 @pytest.mark.asyncio

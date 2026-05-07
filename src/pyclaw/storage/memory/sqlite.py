@@ -147,7 +147,19 @@ class SqliteMemoryBackend:
             except apsw.SQLError:
                 pass
         self._migrate_procedures_trigger(conn)
+        self._migrate_add_archived_at(conn)
         self._migrated.add(session_key)
+
+    def _migrate_add_archived_at(self, conn: apsw.Connection) -> None:
+        """Add archived_at and archive_reason columns for curator lifecycle."""
+        try:
+            conn.execute("ALTER TABLE procedures ADD COLUMN archived_at REAL")
+        except apsw.SQLError:
+            pass  # Column already exists
+        try:
+            conn.execute("ALTER TABLE procedures ADD COLUMN archive_reason TEXT")
+        except apsw.SQLError:
+            pass  # Column already exists
 
     def _migrate_procedures_trigger(self, conn: apsw.Connection) -> None:
         """Migrate procedures_au trigger to only fire on content changes.

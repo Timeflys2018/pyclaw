@@ -696,6 +696,12 @@ def _format_l1_snapshot(entries: list[Any]) -> str:
         return ""
     lines = ["<memory_index>"]
     for entry in entries:
+        # 防御性过滤：跳过非 active 状态的条目（L1 evict 失败时的兜底）
+        status = getattr(entry, "status", "active")
+        if isinstance(entry, dict):
+            status = entry.get("status", "active")
+        if status != "active":
+            continue
         content = getattr(entry, "content", None)
         if content is None and isinstance(entry, dict):
             content = entry.get("content", "")

@@ -194,6 +194,25 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         logger.info("Web channel enabled (worker=%s)", worker_id)
 
+    # Curator background loop
+    if settings.evolution.enabled and settings.evolution.curator.enabled and redis_client is not None:
+        from pyclaw.core.curator import create_curator_loop
+
+        memory_base_dir = Path(settings.memory.base_dir).expanduser()
+        _l1_index = getattr(memory_store, '_l1', None) if memory_store else None
+        if _l1_index is not None:
+            task_manager.spawn(
+                "curator",
+                create_curator_loop(
+                    settings=settings.evolution.curator,
+                    memory_base_dir=memory_base_dir,
+                    redis_client=redis_client,
+                    l1_index=_l1_index,
+                ),
+                category="curator",
+            )
+            logger.info("Curator background loop started")
+
     yield
 
     # Phase 1: Stop accepting new work

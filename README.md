@@ -10,7 +10,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776ab.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-890%20passed-brightgreen.svg?style=flat-square)]()
+[![Tests](https://img.shields.io/badge/tests-1047%20passed-brightgreen.svg?style=flat-square)]()
 [![Memory](https://img.shields.io/badge/memory-4--layer%20%E2%9C%93-blueviolet.svg?style=flat-square)]()
 [![FTS5](https://img.shields.io/badge/FTS5-jieba%20tokenizer-orange.svg?style=flat-square)]()
 [![Channels](https://img.shields.io/badge/channels-Feishu%20%2B%20Web-blue.svg?style=flat-square)]()
@@ -29,6 +29,7 @@
 OpenClaw is a powerful multi-channel AI assistant — but its TypeScript monolith (17,000+ files) tightly couples compute and storage, and lacks production-grade memory. PyClaw rebuilds it from scratch in Python with a **memory-first, hooks-driven, horizontally scalable** architecture:
 
 - 🧠 **4-Layer Memory System** — L1 Redis hot index → L2 facts → L3 procedures → L4 vector archives. Production-ready, fully integrated into the agent loop.
+- 🔄 **Self-Evolution** — Auto-extracts SOPs from sessions, curates lifecycle (30d stale / 90d archive), agent can actively forget outdated procedures. No fine-tuning needed.
 - 🪝 **Hooks-Driven Architecture** — Memory injection, working memory, nudges, tool approval — all built as pluggable hooks. Add your own without touching core.
 - ☁️ **Compute-Storage Separation** — Stateless workers behind any load balancer. Sessions in Redis, memory in SQLite/Redis, embeddings via litellm.
 - 🌐 **Multi-Channel** — Feishu (Lark) WebSocket cluster + Web channel with React SPA + OpenAI-compatible `/v1/chat/completions` SSE.
@@ -114,50 +115,97 @@ flowchart LR
 **Tools the agent calls itself**:
 
 - `memorize` — Persist to L2 (facts) or L3 (procedures). "No execution, no memory" guard.
+- `forget` — Archive outdated/failed SOPs. Agent-initiated lifecycle management.
 - `update_working_memory` — Per-session scratchpad (1024 char cap, 7-day TTL, FIFO eviction).
 - `skill_view` — Progressive disclosure: load full SKILL.md content on demand.
 
 ---
 
+## 🔄 Self-Evolution (New!)
+
+PyClaw's agent **improves itself** over time — no fine-tuning, no retraining:
+
+```mermaid
+flowchart TD
+    subgraph Extract["Phase 1: Extract"]
+        A[User Task] --> B[SOP Tracker Hook<br/>per-turn candidate tracking]
+        B --> C{Session boundary<br/>reached?}
+        C -->|Yes + threshold met| D[LLM extracts SOPs<br/>strict rejection bias]
+        D --> E[Dedup via FTS5 + Jaccard]
+        E --> F[Write to L3 procedures]
+    end
+
+    subgraph Curate["Phase 2: Curate"]
+        F --> G[Search hit → bump<br/>use_count + last_used_at]
+        G --> H{30d unused?}
+        H -->|CLI shows as stale| I[Still injected in prompt]
+        I --> J{90d unused?}
+        J -->|Curator archives| K[Status → archived<br/>Not injected anymore]
+        L[Agent calls forget] --> K
+    end
+
+    subgraph Graduate["Phase 3: Graduate (Planned)"]
+        G --> M{use_count ≥ 5?}
+        M -->|LLM review: promote| N[Generate SKILL.md]
+        N --> O[Progressive disclosure<br/>via skill_view tool]
+    end
+
+    style Extract fill:#e8f5e9,stroke:#2e7d32
+    style Curate fill:#fff3e0,stroke:#e65100
+    style Graduate fill:#e3f2fd,stroke:#1565c0
+```
+
+**The timeline:**
+
+| Day | What happens |
+|-----|-------------|
+| Day 1 | Agent follows instructions normally |
+| Day 7 | Extracts reusable SOPs from successful sessions |
+| Day 30 | Unused SOPs flagged as stale (still active, CLI visible) |
+| Day 60 | Agent actively forgets outdated SOPs via `forget` tool |
+| Day 90 | Curator auto-archives remaining unused SOPs |
+| Day 90+ | *(Planned)* High-frequency SOPs graduate to SKILL.md |
+
+**Key design decisions:**
+- **Strict rejection bias** — better to miss a valid SOP than learn a bad one
+- **Stale is computed, not stored** — active SOPs remain searchable; "stale" is a CLI view, not a DB state
+- **Deterministic + Agent-driven** — Curator handles time decay; `forget` tool handles quality judgment
+- **Distributed-safe** — Redis SETNX lock ensures only one Curator instance runs across workers
+
+---
+
 ## 🏛 Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Compute Layer (Stateless Workers)                                       │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │  Agent Runner (single 770-line loop)                              │ │
-│  │  ├─ Frozen Prefix  (identity + tools + skills_index + L1 + boot) │ │
-│  │  ├─ Per-Turn Suffix (hooks_prepend + runtime + hooks_append)     │ │
-│  │  └─ Prompt Budget Engine (priority truncation, history budget)   │ │
-│  ├────────────────────────────────────────────────────────────────────┤ │
-│  │  Tools: bash, read, write, edit, memorize,                        │ │
-│  │         update_working_memory, skill_view                         │ │
-│  ├────────────────────────────────────────────────────────────────────┤ │
-│  │  Hooks: WorkingMemoryHook, MemoryNudgeHook, ToolApprovalHook      │ │
-│  ├────────────────────────────────────────────────────────────────────┤ │
-│  │  Context Engine: assemble (+memory search) / compact / bootstrap  │ │
-│  ├────────────────────────────────────────────────────────────────────┤ │
-│  │  Channels: Feishu (WS+CardKit) / Web (WS+OpenAI SSE)              │ │
-│  ├────────────────────────────────────────────────────────────────────┤ │
-│  │  Infra: TaskManager (spawn/cancel/drain), Settings, Redis client  │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-└────────────────────────────┬────────────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Storage Layer                                                           │
-│  ┌──────────────┐  ┌─────────────────────────────────────────────────┐ │
-│  │    Redis     │  │  Memory Store (4-Layer)                          │ │
-│  │  Sessions    │  │  L1: Redis Hash      (hot index, 30 entries)    │ │
-│  │  Locks       │  │  L2: SQLite FTS5+jieba (facts)                  │ │
-│  │  Working Mem │  │  L3: SQLite FTS5+jieba (procedures)             │ │
-│  │  L1 Index    │  │  L4: SQLite + sqlite-vec (archives)             │ │
-│  └──────────────┘  └─────────────────────────────────────────────────┘ │
-│  ┌──────────────┐  ┌──────────────────────┐                            │
-│  │ Workspace    │  │  Embedding API       │                            │
-│  │ (File/Redis) │  │  (litellm, any model)│                            │
-│  └──────────────┘  └──────────────────────┘                            │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Compute["☁️ Compute Layer (Stateless Workers)"]
+        Runner["Agent Runner<br/>single 770-line loop"]
+        Tools["Tools: bash, read, write, edit,<br/>memorize, forget, update_working_memory, skill_view"]
+        Hooks["Hooks: WorkingMemory, MemoryNudge,<br/>ToolApproval, SopTracker"]
+        Context["Context Engine:<br/>assemble + memory search + compact"]
+        Channels["Channels: Feishu WS + Web WS + OpenAI SSE"]
+        Infra["TaskManager + Curator + Settings"]
+    end
+
+    subgraph Storage["💾 Storage Layer"]
+        Redis["Redis<br/>Sessions · Locks · L1 Index · Working Memory"]
+        Memory["Memory Store (4-Layer)<br/>L1: Redis Hash (hot index)<br/>L2: SQLite FTS5+jieba (facts)<br/>L3: SQLite FTS5+jieba (procedures)<br/>L4: SQLite + sqlite-vec (archives)"]
+        Workspace["Workspace<br/>File / Redis"]
+        Embedding["Embedding API<br/>litellm, any model"]
+    end
+
+    Runner --> Tools
+    Runner --> Hooks
+    Runner --> Context
+    Context --> Memory
+    Channels --> Runner
+    Infra --> Runner
+    Hooks --> Redis
+    Memory --> Redis
+    Context --> Embedding
+
+    style Compute fill:#f3e5f5,stroke:#6a1b9a
+    style Storage fill:#e8f5e9,stroke:#2e7d32
 ```
 
 ---
@@ -175,10 +223,11 @@ flowchart LR
 | **Skill Hub** | ✅ | ClawHub-compatible, progressive disclosure, 5-layer discovery, `pyclaw-skill` CLI |
 | **Prompt Engineering** | ✅ | `PromptBudgetConfig`, frozen prefix caching, priority truncation |
 | **TaskManager** | ✅ | Centralized async lifecycle, K8s-grade graceful shutdown |
+| **Self-Evolution** | ✅ | SOP extraction + Curator lifecycle (30d/90d) + ForgetTool + CLI audit |
 | **Dreaming Engine** | 🔲 | Planned: Light/Deep/REM memory consolidation |
 | **Session Affinity Gateway** | 🔲 | Planned: multi-instance message routing |
 
-**Test stats:** 890 unit/integration tests + 6 real-LLM E2E tests · ~10K lines Python · 99 source files
+**Test stats:** 1047 unit/integration tests + 10 real-LLM E2E tests · ~11K lines Python · 105 source files
 
 ---
 
@@ -211,17 +260,22 @@ agent.hooks.register(MyCustomHook())
 
 ### Frozen / Per-Turn Prompt Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│ ❄️ FROZEN PREFIX (cached by LLM provider, 90%+ hit)    │
-│   identity · tools · skills_index · workspace · L1 snap │
-├─────────────────────────────────────────────────────────┤
-│ 🔄 PER-TURN SUFFIX (rebuilt every turn)                  │
-│   runtime · <working_memory> · <nudge>                   │
-├─────────────────────────────────────────────────────────┤
-│ 🔍 DYNAMIC ZONE (memory-search results)                  │
-│   <facts> · <procedures>                                 │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+block-beta
+    columns 1
+    block:frozen["❄️ FROZEN PREFIX (cached by LLM provider, 90%+ hit)"]
+        A["identity · tools · skills_index · workspace · L1 snapshot"]
+    end
+    block:suffix["🔄 PER-TURN SUFFIX (rebuilt every turn)"]
+        B["runtime · &lt;working_memory&gt; · &lt;nudge&gt;"]
+    end
+    block:dynamic["🔍 DYNAMIC ZONE (memory-search results)"]
+        C["&lt;facts&gt; · &lt;procedures&gt; with entry_id"]
+    end
+
+    style frozen fill:#e3f2fd,stroke:#1565c0
+    style suffix fill:#fff3e0,stroke:#e65100
+    style dynamic fill:#e8f5e9,stroke:#2e7d32
 ```
 
 ### OpenAI-Compatible API
@@ -311,6 +365,12 @@ pyclaw-skill search github           # Search ClawHub marketplace
 pyclaw-skill install github          # Install from ClawHub
 pyclaw-skill check                   # Eligibility check (bins/env/OS)
 
+# SOP lifecycle (Curator)
+pyclaw-skill curator list --auto     # Active auto-extracted SOPs
+pyclaw-skill curator list --stale    # SOPs unused for 30+ days
+pyclaw-skill curator list --archived # Archived SOPs (with reason)
+pyclaw-skill curator restore <id>    # Restore an archived SOP
+
 # Live memory inspection
 .venv/bin/python scripts/verify_memory_live.py   # Real-time L1/L2/L3/L4 watcher
 ```
@@ -330,7 +390,7 @@ PYCLAW_TEST_REDIS_HOST=localhost .venv/bin/pytest tests/integration/
 PYCLAW_LLM_API_KEY=sk-... .venv/bin/pytest tests/e2e/
 ```
 
-890 unit/integration tests · 6 real-LLM E2E · ~10K LOC across 99 source files.
+1047 unit/integration tests · 10 E2E tests · ~11K LOC across 105 source files.
 
 ---
 
@@ -342,11 +402,13 @@ src/pyclaw/
 │   ├── agent/
 │   │   ├── runner.py         # Single 770-line agent loop
 │   │   ├── system_prompt.py  # Frozen + per-turn builders
-│   │   ├── tools/            # bash, read, write, edit, memorize, update_working_memory, skill_view
-│   │   ├── hooks/            # WorkingMemoryHook, MemoryNudgeHook
+│   │   ├── tools/            # bash, read, write, edit, memorize, forget, update_working_memory, skill_view
+│   │   ├── hooks/            # WorkingMemoryHook, MemoryNudgeHook, SopTrackerHook
 │   │   ├── compaction/       # 5-file subsystem (planning, dedup, hardening, checkpoint, reasons)
 │   │   └── factory.py        # Auto-wires memory tools + hooks
 │   ├── context_engine.py     # Bootstrap + memory search + assemble
+│   ├── curator.py            # Background SOP lifecycle (scan → stale → archive)
+│   ├── sop_extraction.py     # LLM-based SOP extraction from sessions
 │   ├── memory_archive.py     # Background L4 archival on /new
 │   └── hooks.py              # AgentHook / ToolApprovalHook / SkillProvider Protocols
 ├── storage/
@@ -396,8 +458,9 @@ Chinese docs: [docs/zh/](./docs/zh/)
 - ✅ ~~Web Channel — multiplexed WebSocket, OpenAI-compat SSE, React SPA~~
 - ✅ ~~Skill Hub — ClawHub SKILL.md parsing, progressive disclosure~~
 - ✅ ~~TaskManager — centralized async task lifecycle~~
+- ✅ ~~Self-Evolution — SOP extraction + Curator lifecycle + ForgetTool~~
+- 🔲 **Skill Graduation** — High-frequency SOPs → SKILL.md (progressive disclosure)
 - 🔲 **Dreaming Engine** — Light/Deep/REM memory consolidation (extract → cluster → graph)
-- 🔲 **Self-Evolution** — SOP auto-generation from session patterns
 - 🔲 **Session Affinity Gateway** — multi-instance message routing
 - 🔲 **PostgreSQL+pgvector** — production-grade memory backend
 

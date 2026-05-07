@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -63,6 +64,34 @@ class CompositeMemoryStore:
     async def delete(self, session_key: str, entry_id: str) -> None:
         await self._sqlite.delete(session_key, entry_id)
         await self._l1.index_remove(session_key, entry_id)
+
+    async def archive_entry(
+        self, session_key: str, entry_id: str, *, reason: str = ""
+    ) -> bool:
+        """Soft-archive: UPDATE status='archived' + evict from L1."""
+        import time as _time
+
+        conn = await self._sqlite._get_conn(session_key)
+
+        def _archive_sync() -> bool:
+            now = _time.time()
+            cursor = conn.execute(
+                "UPDATE procedures SET status='archived', archived_at=?, archive_reason=? "
+                "WHERE id=? AND status='active'",
+                (now, reason or None, entry_id),
+            )
+            # apsw cursor doesn't have rowcount; check via changes()
+            return conn.changes() > 0
+
+        changed = await asyncio.to_thread(_archive_sync)
+        if changed:
+            try:
+                await self._l1.index_remove(session_key, entry_id)
+            except Exception:
+                logger.warning(
+                    "L1 evict failed for %s:%s", session_key, entry_id, exc_info=True
+                )
+        return changed
 
     async def archive_session(
         self, session_key: str, session_id: str, summary: str

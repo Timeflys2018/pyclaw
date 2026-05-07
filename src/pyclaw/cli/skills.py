@@ -5,6 +5,8 @@ Usage:
     pyclaw-skill search QUERY
     pyclaw-skill install SLUG [--version VERSION] [--workspace PATH]
     pyclaw-skill check [--workspace PATH]
+    pyclaw-skill curator list [--auto | --stale | --archived]
+    pyclaw-skill curator restore ENTRY_ID
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+import time
 from pathlib import Path
 
 
@@ -153,6 +156,130 @@ def cmd_check(args: argparse.Namespace) -> None:
     print()
 
 
+def _get_memory_dbs() -> list[Path]:
+    from pyclaw.infra.settings import load_settings
+
+    settings = load_settings()
+    base_dir = Path(settings.memory.base_dir).expanduser()
+    if not base_dir.is_dir():
+        return []
+    return sorted(base_dir.glob("*.db"))
+
+
+def _open_db(path: Path):
+    import apsw
+
+    from pyclaw.storage.memory.jieba_tokenizer import register_jieba_tokenizer
+
+    conn = apsw.Connection(str(path))
+    register_jieba_tokenizer(conn)
+    return conn
+
+
+def _format_table(rows: list[tuple[str, ...]], headers: tuple[str, ...]) -> str:
+    if not rows:
+        return "  (no entries)"
+    lines: list[str] = []
+    lines.append("  " + " | ".join(headers))
+    lines.append("  " + "-+-".join("-" * len(h) for h in headers))
+    for row in rows:
+        lines.append("  " + " | ".join(str(c) for c in row))
+    return "\n".join(lines)
+
+
+def cmd_curator_list(args: argparse.Namespace) -> None:
+    from pyclaw.infra.settings import load_settings
+
+    settings = load_settings()
+    db_paths = _get_memory_dbs()
+    if not db_paths:
+        print("No memory databases found.")
+        return
+
+    if args.auto:
+        sql = (
+            "SELECT id, content, use_count, last_used_at "
+            "FROM procedures WHERE type='auto_sop' AND status='active'"
+        )
+        headers = ("id      ", "content                                                     ", "use_cnt", "last_used_at    ")
+    elif args.stale:
+        stale_days = settings.evolution.curator.stale_after_days
+        threshold = int(time.time()) - stale_days * 86400
+        sql = (
+            "SELECT id, content, use_count, last_used_at "
+            "FROM procedures WHERE status='active' "
+            f"AND COALESCE(last_used_at, created_at) < {threshold}"
+        )
+        headers = ("id      ", "content                                                     ", "use_cnt", "last_used_at    ")
+    elif args.archived:
+        sql = (
+            "SELECT id, content, archived_at, archive_reason "
+            "FROM procedures WHERE status='archived'"
+        )
+        headers = ("id      ", "content                                                     ", "archived_at     ", "reason          ")
+    else:
+        print("Specify one of: --auto, --stale, --archived")
+        sys.exit(1)
+
+    for db_path in db_paths:
+        conn = _open_db(db_path)
+        try:
+            cursor = conn.execute(sql)
+            rows_raw = cursor.fetchall()
+        except Exception:
+            continue
+        finally:
+            conn.close()
+
+        if not rows_raw:
+            continue
+
+        rows: list[tuple[str, ...]] = []
+        for row in rows_raw:
+            entry_id = str(row[0])[:8]
+            content = str(row[1] or "")[:60]
+            col3 = str(row[2]) if row[2] is not None else ""
+            col4 = str(row[3]) if row[3] is not None else ""
+            rows.append((entry_id, content, col3, col4))
+
+        print(f"\n[{db_path.stem}]")
+        print(_format_table(rows, headers))
+
+    print()
+
+
+def cmd_curator_restore(args: argparse.Namespace) -> None:
+    entry_id = args.entry_id
+    db_paths = _get_memory_dbs()
+    if not db_paths:
+        print("No memory databases found.")
+        return
+
+    pattern = f"{entry_id}%"
+    restored = False
+
+    for db_path in db_paths:
+        conn = _open_db(db_path)
+        try:
+            conn.execute(
+                "UPDATE procedures SET status='active', archived_at=NULL, archive_reason=NULL "
+                "WHERE id LIKE ? AND status='archived'",
+                (pattern,),
+            )
+            changes = conn.changes()
+            if changes > 0:
+                print(f"Restored {changes} entry(ies) from [{db_path.stem}]")
+                restored = True
+        except Exception:
+            continue
+        finally:
+            conn.close()
+
+    if not restored:
+        print(f"No archived entry found matching '{entry_id}'.")
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="pyclaw-skill",
@@ -174,11 +301,41 @@ def main() -> None:
     p_check = subparsers.add_parser("check", help="Check skill eligibility")
     p_check.add_argument("--workspace", "-w", help="Workspace path (default: cwd)")
 
+    p_curator = subparsers.add_parser("curator", help="Manage memory procedures (SOPs)")
+    curator_sub = p_curator.add_subparsers(dest="curator_command")
+
+    p_cur_list = curator_sub.add_parser("list", help="List procedures")
+    p_cur_list.add_argument("--auto", action="store_true", help="Show active auto-generated SOPs")
+    p_cur_list.add_argument("--stale", action="store_true", help="Show stale entries")
+    p_cur_list.add_argument("--archived", action="store_true", help="Show archived entries")
+
+    p_cur_restore = curator_sub.add_parser("restore", help="Restore an archived procedure")
+    p_cur_restore.add_argument("entry_id", help="Entry ID (or prefix) to restore")
+
     args = parser.parse_args()
 
     if args.command is None:
         parser.print_help()
         sys.exit(1)
+
+    if args.command == "curator":
+        if getattr(args, "curator_command", None) is None:
+            p_curator.print_help()
+            sys.exit(1)
+        curator_commands = {
+            "list": cmd_curator_list,
+            "restore": cmd_curator_restore,
+        }
+        try:
+            curator_commands[args.curator_command](args)
+        except KeyboardInterrupt:
+            sys.exit(130)
+        except SystemExit:
+            raise
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        return
 
     commands = {
         "list": cmd_list,

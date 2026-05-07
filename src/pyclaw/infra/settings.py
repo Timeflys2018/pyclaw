@@ -75,6 +75,22 @@ class MemorySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PYCLAW_MEMORY_")
 
 
+class CuratorSettings(BaseSettings):
+    """Curator 生命周期管理配置。"""
+
+    enabled: bool = True
+    check_interval_seconds: int = Field(3600, alias="checkIntervalSeconds")
+    interval_seconds: int = Field(604800, alias="intervalSeconds")
+    stale_after_days: int = Field(30, alias="staleAfterDays")
+    archive_after_days: int = Field(90, alias="archiveAfterDays")
+
+    model_config = SettingsConfigDict(
+        env_prefix="PYCLAW_CURATOR_",
+        populate_by_name=True,
+        extra="ignore",
+    )
+
+
 class EvolutionSettings(BaseSettings):
     """Self-evolution SOP extraction configuration."""
 
@@ -86,6 +102,7 @@ class EvolutionSettings(BaseSettings):
     max_sops_per_extraction: int = Field(5, alias="maxSopsPerExtraction")
     description_max_chars: int = Field(150, alias="descriptionMaxChars")
     procedure_max_chars: int = Field(5000, alias="procedureMaxChars")
+    curator: CuratorSettings = Field(default_factory=CuratorSettings)
 
     model_config = SettingsConfigDict(
         env_prefix="PYCLAW_EVOLUTION_",
