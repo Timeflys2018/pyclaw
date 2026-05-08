@@ -128,7 +128,7 @@ async def _stream_sse(request: RunRequest, model: str, user_id: str):
             }
             yield f"data: {json.dumps(chunk)}\n\n"
         elif isinstance(event, Done):
-            final = {
+            final: dict[str, Any] = {
                 "id": completion_id,
                 "object": "chat.completion.chunk",
                 "created": int(time.time()),
@@ -137,6 +137,8 @@ async def _stream_sse(request: RunRequest, model: str, user_id: str):
                     {"index": 0, "delta": {}, "finish_reason": "stop"}
                 ],
             }
+            if event.usage:
+                final["usage"] = _format_openai_usage(event.usage)
             yield f"data: {json.dumps(final)}\n\n"
             break
 
@@ -175,7 +177,19 @@ async def _complete_response(request: RunRequest, model: str, user_id: str) -> d
                 "finish_reason": "stop",
             }
         ],
-        "usage": usage,
+        "usage": _format_openai_usage(usage),
+    }
+
+
+def _format_openai_usage(done_usage: dict[str, int]) -> dict[str, Any]:
+    input_tokens = done_usage.get("input", 0)
+    output_tokens = done_usage.get("output", 0)
+    cache_read = done_usage.get("cache_read", 0)
+    return {
+        "prompt_tokens": input_tokens,
+        "completion_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+        "prompt_tokens_details": {"cached_tokens": cache_read},
     }
 
 
