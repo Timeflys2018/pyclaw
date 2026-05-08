@@ -36,20 +36,8 @@ class ToolApproveMessage:
 
 
 @dataclass
-class ResumeMessage:
-    type: Literal["resume"] = "resume"
-    ws_session_id: str = ""
-    last_seq: int = 0
-
-
-@dataclass
 class PongMessage:
     type: Literal["pong"] = "pong"
-
-
-@dataclass
-class SessionCreateMessage:
-    type: Literal["session.create"] = "session.create"
 
 
 ClientMessage = (
@@ -57,9 +45,7 @@ ClientMessage = (
     | ChatSendMessage
     | ChatAbortMessage
     | ToolApproveMessage
-    | ResumeMessage
     | PongMessage
-    | SessionCreateMessage
 )
 
 SERVER_HELLO = "hello"
@@ -70,9 +56,6 @@ SERVER_CHAT_TOOL_END = "chat.tool_end"
 SERVER_CHAT_DONE = "chat.done"
 SERVER_CHAT_QUEUED = "chat.queued"
 SERVER_TOOL_APPROVE_REQUEST = "tool.approve_request"
-SERVER_SESSION_LIST_UPDATE = "session.list_update"
-SERVER_RESUMED = "resumed"
-SERVER_RECONNECT_FULL = "reconnect_full"
 SERVER_PING = "ping"
 SERVER_ERROR = "error"
 
@@ -81,9 +64,7 @@ _CLIENT_MESSAGE_MAP: dict[str, type[ClientMessage]] = {
     "chat.send": ChatSendMessage,
     "chat.abort": ChatAbortMessage,
     "tool.approve": ToolApproveMessage,
-    "resume": ResumeMessage,
     "pong": PongMessage,
-    "session.create": SessionCreateMessage,
 }
 
 

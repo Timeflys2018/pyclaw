@@ -175,8 +175,9 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         session_id, _ = await ctx.session_router.rotate(session_key, workspace_id)
 
     if text is not None and text.startswith("/"):
-        from pyclaw.channels.feishu.commands import handle_command
-        handled = await handle_command(
+        from pyclaw.channels.feishu.command_adapter import FeishuCommandAdapter
+        adapter = FeishuCommandAdapter()
+        handled = await adapter.handle(
             text=text,
             session_key=session_key,
             session_id=session_id,

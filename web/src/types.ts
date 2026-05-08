@@ -55,17 +55,12 @@ export interface WSClientPong {
   type: 'pong'
 }
 
-export interface WSClientSessionCreate {
-  type: 'session.create'
-}
-
 export type WSClientMessage =
   | WSClientIdentify
   | WSClientChatSend
   | WSClientChatAbort
   | WSClientToolApprove
   | WSClientPong
-  | WSClientSessionCreate
 
 // Server → Client
 export interface WSServerHello {
