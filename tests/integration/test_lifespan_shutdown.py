@@ -56,13 +56,14 @@ async def test_heartbeat_task_appears_when_web_channel_enabled() -> None:
             pass
 
     task_manager.spawn("worker-heartbeat", _fake_heartbeat(), category="heartbeat")
+    await asyncio.sleep(0)
 
     heartbeat_tasks = task_manager.list_tasks(category="heartbeat")
     assert len(heartbeat_tasks) == 1
     assert heartbeat_tasks[0].name == "worker-heartbeat"
     assert heartbeat_tasks[0].state == "running"
 
-    await task_manager.shutdown(grace_s=1.0)
+    await task_manager.shutdown(grace_s=2.0)
 
 
 # --- 11.5 ---
@@ -105,6 +106,7 @@ async def test_shutdown_phase_ordering(caplog: pytest.LogCaptureFixture) -> None
             pass
 
     task_manager.spawn("short-task", _short_task(), category="generic")
+    await asyncio.sleep(0)
 
     logger = logging.getLogger("pyclaw.app")
 

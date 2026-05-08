@@ -47,7 +47,12 @@ def _redis(tool_calls_per_turn=None, lock_held=False):
 
 def _task_manager():
     tm = MagicMock()
-    tm.spawn = MagicMock(return_value="t000001")
+
+    def _spawn(name, coro, **kwargs):
+        coro.close()
+        return "t000001"
+
+    tm.spawn = MagicMock(side_effect=_spawn)
     return tm
 
 

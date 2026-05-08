@@ -398,6 +398,8 @@ class TestSelfEvolutionE2E:
 
         def fake_spawn(name: str, coro: object, **kwargs: object) -> str:
             spawned.append((name, kwargs.get("category")))
+            if hasattr(coro, "close"):
+                coro.close()
             return "t000001"
 
         task_manager.spawn = fake_spawn

@@ -271,14 +271,18 @@ async def test_closed_error_message_contains_task_name(tm: TaskManager) -> None:
 @pytest.mark.asyncio
 async def test_two_tasks_same_name_different_ids(tm: TaskManager) -> None:
     async def hang() -> None:
-        await asyncio.sleep(10)
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            pass
 
     id1 = tm.spawn("dup", hang())
     id2 = tm.spawn("dup", hang())
     assert id1 != id2
     tasks = tm.list_tasks()
     assert len(tasks) == 2
-    await tm.shutdown(grace_s=0.1)
+    await asyncio.sleep(0)
+    await tm.shutdown(grace_s=2.0)
 
 
 # 2.19
