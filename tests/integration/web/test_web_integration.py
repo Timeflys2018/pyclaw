@@ -127,7 +127,10 @@ class TestOpenAICompatIntegration:
 
         async def _fake_stream(*args: Any, **kwargs: Any) -> AsyncIterator[Any]:
             yield TextChunk(text="Hello from PyClaw!")
-            yield Done(final_message="Hello from PyClaw!", usage={"prompt_tokens": 5, "completion_tokens": 4})
+            yield Done(
+                final_message="Hello from PyClaw!",
+                usage={"input": 5, "output": 4, "cache_creation": 0, "cache_read": 0},
+            )
 
         mock_stream.side_effect = _fake_stream
 

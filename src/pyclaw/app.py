@@ -90,6 +90,20 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     workspace_base = Path(settings.workspaces.default).expanduser()
     app.state.workspace_base = workspace_base
 
+    from pyclaw.core.commands.builtin import register_builtin_commands
+    from pyclaw.core.commands.registry import get_default_registry, reset_default_registry
+
+    reset_default_registry()
+    command_registry = get_default_registry()
+    register_builtin_commands(command_registry)
+    app.state.command_registry = command_registry
+
+    from pyclaw.channels.web import chat as _web_chat
+    from pyclaw.channels.web.websocket import registry as _ws_registry
+
+    _web_chat._session_queue.reset()
+    _ws_registry.clear()
+
     app.state.feishu_channel = None
     if settings.channels.feishu.enabled:
         from pyclaw.channels.feishu.client import FeishuClient
@@ -184,6 +198,28 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         app.state.worker_registry = worker_registry
         set_admin_registry(worker_registry)
+
+        from pyclaw.channels.web.chat import SessionQueue
+        from pyclaw.channels.web.deps import WebDeps
+        from pyclaw.channels.web.websocket import ConnectionRegistry
+
+        web_session_queue = SessionQueue(task_manager=task_manager)
+        web_connection_registry = ConnectionRegistry()
+        app.state.web_deps = WebDeps(
+            session_store=app.state.session_store,
+            session_router=session_router,
+            workspace_base=workspace_base,
+            runner_deps=runner_deps,
+            session_queue=web_session_queue,
+            connection_registry=web_connection_registry,
+            redis_client=redis_client,
+            memory_store=memory_store,
+            task_manager=task_manager,
+            evolution_settings=settings.evolution if settings.evolution.enabled else None,
+            nudge_hook=web_nudge_hook,
+            llm_client=runner_deps.llm,
+            worker_registry=worker_registry,
+        )
 
         await worker_registry.register()
         task_manager.spawn(

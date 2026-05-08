@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -200,9 +199,6 @@ async def trigger_learn(
     return await _do_extract(user_id)
 
 
-_EXTRACT_TIMEOUT_SECONDS = 15.0
-
-
 async def _do_extract(user_id: str) -> ExtractResponse:
     try:
         router = _get_router()
@@ -214,49 +210,36 @@ async def _do_extract(user_id: str) -> ExtractResponse:
                 message="当前会话没有可学习的工具调用模式。",
             )
 
-        if (
-            _redis_client is None
-            or _memory_store is None
-            or _evolution_settings is None
-            or _llm_client is None
-        ):
-            return ExtractResponse(spawned=False, message="⚠️ 自我进化功能未启用。")
+        from pyclaw.core.commands._helpers import run_extract
+        from pyclaw.core.sop_extraction import format_extraction_result_zh
 
-        from pyclaw.core.sop_extraction import (
-            _check_user_ratelimit,
-            extract_sops_sync,
-            format_extraction_result_zh,
+        result = await run_extract(
+            redis_client=_redis_client,
+            memory_store=_memory_store,
+            session_store=router.store,
+            llm_client=_llm_client,
+            session_id=session_id,
+            settings=_evolution_settings,
+            nudge_hook=_nudge_hook,
         )
 
-        if not await _check_user_ratelimit(_redis_client, session_key):
+        if result is None:
+            return ExtractResponse(
+                spawned=False,
+                message="⏳ 学习超时（>15 秒）已中止，候选数据已保留，1 分钟后可再次 /extract。",
+            )
+        if result.skip_reason == "disabled":
+            return ExtractResponse(spawned=False, message="⚠️ 自我进化功能未启用。")
+        if result.skip_reason == "rate_limited":
             return ExtractResponse(
                 spawned=False,
                 message="⏱ 学习触发过于频繁，请 1 分钟后再试。",
             )
 
-        try:
-            result = await asyncio.wait_for(
-                extract_sops_sync(
-                    memory_store=_memory_store,
-                    session_store=router.store,
-                    redis_client=_redis_client,
-                    llm_client=_llm_client,
-                    session_id=session_id,
-                    settings=_evolution_settings,
-                    min_tool_calls=1,
-                    nudge_hook=_nudge_hook,
-                ),
-                timeout=_EXTRACT_TIMEOUT_SECONDS,
-            )
-            return ExtractResponse(
-                spawned=result.spawned and result.skip_reason is None,
-                message=format_extraction_result_zh(result),
-            )
-        except TimeoutError:
-            return ExtractResponse(
-                spawned=False,
-                message="⏳ 学习超时（>15 秒）已中止，候选数据已保留，1 分钟后可再次 /extract。",
-            )
+        return ExtractResponse(
+            spawned=result.spawned and result.skip_reason is None,
+            message=format_extraction_result_zh(result),
+        )
     except Exception:
         logger.exception("extract endpoint failed for user %s", user_id)
         return ExtractResponse(

@@ -64,6 +64,14 @@ class TestConnectionRegistry:
         reg.disconnect("u1", object())
         assert reg.count("u1") == 0
 
+    def test_clear_empties_registry(self) -> None:
+        reg = ConnectionRegistry()
+        reg.connect("u1", object())
+        reg.connect("u2", object())
+        reg.clear()
+        assert reg.count("u1") == 0
+        assert reg.count("u2") == 0
+
 
 class TestConnectionState:
     def test_initial_state(self) -> None:

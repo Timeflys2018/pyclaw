@@ -151,6 +151,7 @@ class TestEnqueueChat:
     @pytest.fixture(autouse=True)
     def _inject_task_manager(self) -> None:
         from pyclaw.channels.web import chat as chat_mod
+        chat_mod._session_queue.reset()
         chat_mod._session_queue.set_task_manager(TaskManager())
 
     @pytest.mark.asyncio

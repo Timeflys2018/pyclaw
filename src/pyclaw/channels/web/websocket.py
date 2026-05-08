@@ -15,8 +15,6 @@ from pyclaw.channels.web.protocol import (
     ChatSendMessage,
     IdentifyMessage,
     PongMessage,
-    ResumeMessage,
-    SessionCreateMessage,
     ToolApproveMessage,
     parse_client_message,
     SERVER_ERROR,
@@ -62,8 +60,19 @@ class ConnectionRegistry:
     def get_connections(self, user_id: str) -> set[Any]:
         return set(self._connections.get(user_id, set()))
 
+    def clear(self) -> None:
+        self._connections.clear()
+
 
 registry = ConnectionRegistry()
+
+
+def _get_connection_registry(websocket: WebSocket) -> ConnectionRegistry:
+    from pyclaw.channels.web.deps import WebDeps
+    web_deps = getattr(websocket.app.state, "web_deps", None)
+    if isinstance(web_deps, WebDeps):
+        return web_deps.connection_registry
+    return registry
 
 
 async def send_event(
@@ -119,13 +128,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         await websocket.close(4003, "Invalid token")
         return
 
-    if registry.count(user_id) >= settings.max_connections_per_user:
+    conn_registry = _get_connection_registry(websocket)
+    if conn_registry.count(user_id) >= settings.max_connections_per_user:
         await websocket.close(4004, "Max connections exceeded")
         return
 
     state.user_id = user_id
     state.authenticated = True
-    registry.connect(user_id, websocket)
+    conn_registry.connect(user_id, websocket)
 
     await send_event(state, SERVER_READY, "", {
         "user_id": user_id,
@@ -146,7 +156,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         pass
     finally:
         await task_manager.cancel(heartbeat_task_id)
-        registry.disconnect(user_id, websocket)
+        conn_registry.disconnect(user_id, websocket)
 
 
 async def _heartbeat_loop(state: ConnectionState, settings: WebSettings) -> None:
@@ -194,12 +204,6 @@ async def _dispatch_loop(
         elif isinstance(msg, ToolApproveMessage):
             from pyclaw.channels.web.chat import handle_tool_approve
             await handle_tool_approve(state, msg)
-
-        elif isinstance(msg, ResumeMessage):
-            pass
-
-        elif isinstance(msg, SessionCreateMessage):
-            pass
 
         else:
             await send_event(state, SERVER_ERROR, "", {

@@ -114,25 +114,55 @@ class SessionQueue:
 
     async def _consume(self, conversation_id: str) -> None:
         q = self._queues[conversation_id]
-        while True:
-            try:
-                msg, handler = await asyncio.wait_for(q.get(), timeout=60)
-            except asyncio.TimeoutError:
-                break
-            self._busy[conversation_id] = True
-            try:
-                self.reset_abort_event(conversation_id)
-                await handler(msg)
-            except Exception:
-                logger.exception(
-                    "error in chat consumer for conversation %s", conversation_id
-                )
-            finally:
-                self._busy[conversation_id] = False
-                q.task_done()
+        try:
+            while True:
+                try:
+                    # Worker idle timeout: 5 min idle → consumer exits & frees ~1KB dict slots.
+                    # NOT a session timeout — session history persists in SessionStore (Redis,
+                    # 7-day TTL) regardless. Next user message rebuilds the consumer in ~20μs.
+                    # Aligned with TaskManager._PRUNE_AGE_S=300 so completed handles get pruned.
+                    msg, handler = await asyncio.wait_for(q.get(), timeout=300)
+                except asyncio.TimeoutError:
+                    break
+                self._busy[conversation_id] = True
+                try:
+                    self.reset_abort_event(conversation_id)
+                    await handler(msg)
+                except Exception:
+                    logger.exception(
+                        "error in chat consumer for conversation %s", conversation_id
+                    )
+                finally:
+                    self._busy[conversation_id] = False
+                    q.task_done()
+        finally:
+            self._queues.pop(conversation_id, None)
+            self._consumers.pop(conversation_id, None)
+            self._busy.pop(conversation_id, None)
+            self._abort_events.pop(conversation_id, None)
+
+    def reset(self) -> None:
+        if self._task_manager is not None:
+            for tid in list(self._consumers.values()):
+                handle = self._task_manager._tasks.get(tid)
+                if handle is not None and not handle.asyncio_task.done():
+                    handle.asyncio_task.cancel()
+        self._queues.clear()
+        self._consumers.clear()
+        self._busy.clear()
+        self._abort_events.clear()
+        self._approval_decisions.clear()
 
 
 _session_queue = SessionQueue()
+
+
+def _get_session_queue(state: ConnectionState) -> SessionQueue:
+    from pyclaw.channels.web.deps import WebDeps
+    web_deps = getattr(state.ws.app.state, "web_deps", None)
+    if isinstance(web_deps, WebDeps):
+        return web_deps.session_queue
+    return _session_queue
 
 
 async def enqueue_chat(
@@ -140,26 +170,24 @@ async def enqueue_chat(
     msg: ChatSendMessage,
     settings: WebSettings,
 ) -> None:
-    if _session_queue._task_manager is None:
+    session_queue = _get_session_queue(state)
+    if session_queue._task_manager is None:
         tm = getattr(getattr(state.ws, "app", None), "state", None)
         if tm is not None:
             tm = getattr(tm, "task_manager", None)
         if tm is not None:
-            _session_queue.set_task_manager(tm)
+            session_queue.set_task_manager(tm)
 
     conversation_id = msg.conversation_id
 
     async def _handle(m: ChatSendMessage) -> None:
         await _run_chat(state, m, settings)
 
-    position = await _session_queue.enqueue(conversation_id, msg, _handle)
+    position = await session_queue.enqueue(conversation_id, msg, _handle)
     if position > 0:
         await send_event(state, SERVER_CHAT_QUEUED, conversation_id, {
             "position": position,
         })
-
-
-_EXTRACT_TIMEOUT_SECONDS = 15.0
 
 
 async def _try_slash_command(
@@ -167,91 +195,63 @@ async def _try_slash_command(
     msg: ChatSendMessage,
     session_id: str,
 ) -> bool:
-    """Return True if the message was handled as a slash command."""
-    lower = (msg.content or "").strip().lower()
+    content = (msg.content or "").strip()
+    if not content.startswith("/"):
+        return False
 
-    if lower.startswith("/new") or lower.startswith("/reset"):
-        from pyclaw.channels.web.routes import _get_router
+    from pyclaw.channels.web.command_adapter import WebCommandAdapter
+    from pyclaw.channels.web.deps import WebDeps
 
+    web_deps = getattr(state.ws.app.state, "web_deps", None)
+    if isinstance(web_deps, WebDeps):
+        adapter = WebCommandAdapter()
+        return await adapter.handle(
+            text=content,
+            state=state,
+            conversation_id=msg.conversation_id,
+            session_id=session_id,
+            deps=web_deps.runner_deps,
+            session_router=web_deps.session_router,
+            workspace_base=web_deps.workspace_base,
+            redis_client=web_deps.redis_client,
+            memory_store=web_deps.memory_store,
+            evolution_settings=web_deps.evolution_settings,
+            nudge_hook=web_deps.nudge_hook,
+            session_queue=web_deps.session_queue,
+        )
+
+    from pyclaw.channels.web.routes import (
+        _evolution_settings,
+        _get_router,
+        _llm_client,
+        _memory_store,
+        _nudge_hook,
+        _redis_client,
+    )
+
+    try:
         router = _get_router()
-        await router.rotate(
-            f"web:{state.user_id}", "default",
-        )
-        await send_event(state, SERVER_CHAT_DONE, msg.conversation_id, {
-            "final_message": "✨ 新会话已开始，之前的对话已归档。",
-            "usage": {},
-            "aborted": False,
-        })
-        return True
+    except RuntimeError:
+        return False
 
-    if lower.startswith("/extract") or lower.startswith("/learn"):
-        from pyclaw.channels.web.routes import (
-            _redis_client,
-            _memory_store,
-            _evolution_settings,
-            _llm_client,
-            _nudge_hook,
-            _get_router,
-        )
+    deps = _get_runner_deps(state)
+    workspace_base: Path = state.ws.app.state.workspace_base
 
-        router = _get_router()
-        redis_client = _redis_client
-        memory_store = _memory_store
-        evolution_settings = _evolution_settings
-        llm_client = _llm_client
-        session_store = router.store
-        nudge_hook = _nudge_hook
-
-        if not all([redis_client, memory_store, evolution_settings, llm_client, session_store]):
-            await send_event(state, SERVER_CHAT_DONE, msg.conversation_id, {
-                "final_message": "⚠️ 自我进化功能未启用。",
-                "usage": {},
-                "aborted": False,
-            })
-            return True
-
-        from pyclaw.core.sop_extraction import (
-            _check_user_ratelimit,
-            _derive_session_key,
-            extract_sops_sync,
-            format_extraction_result_zh,
-        )
-
-        session_key = _derive_session_key(session_id)
-        if not await _check_user_ratelimit(redis_client, session_key):
-            await send_event(state, SERVER_CHAT_DONE, msg.conversation_id, {
-                "final_message": "⏱ 学习触发过于频繁，请 1 分钟后再试。",
-                "usage": {},
-                "aborted": False,
-            })
-            return True
-
-        try:
-            result = await asyncio.wait_for(
-                extract_sops_sync(
-                    memory_store=memory_store,
-                    session_store=session_store,
-                    redis_client=redis_client,
-                    llm_client=llm_client,
-                    session_id=session_id,
-                    settings=evolution_settings,
-                    min_tool_calls=1,
-                    nudge_hook=nudge_hook,
-                ),
-                timeout=_EXTRACT_TIMEOUT_SECONDS,
-            )
-            reply = format_extraction_result_zh(result)
-        except TimeoutError:
-            reply = "⏳ 学习超时（>15 秒）已中止，候选数据已保留，1 分钟后可再次 /extract。"
-
-        await send_event(state, SERVER_CHAT_DONE, msg.conversation_id, {
-            "final_message": reply,
-            "usage": {},
-            "aborted": False,
-        })
-        return True
-
-    return False
+    adapter = WebCommandAdapter()
+    return await adapter.handle(
+        text=content,
+        state=state,
+        conversation_id=msg.conversation_id,
+        session_id=session_id,
+        deps=deps,
+        session_router=router,
+        workspace_base=workspace_base,
+        redis_client=_redis_client,
+        memory_store=_memory_store,
+        evolution_settings=_evolution_settings,
+        nudge_hook=_nudge_hook,
+        session_queue=_session_queue,
+    )
 
 
 async def _run_chat(
@@ -259,7 +259,8 @@ async def _run_chat(
     msg: ChatSendMessage,
     settings: WebSettings,
 ) -> None:
-    abort_event = _session_queue.get_abort_event(msg.conversation_id)
+    session_queue = _get_session_queue(state)
+    abort_event = session_queue.get_abort_event(msg.conversation_id)
 
     # Task 10.1: enforce conversation_id ownership for "web:" prefixed ids
     if msg.conversation_id.startswith("web:"):
@@ -371,7 +372,8 @@ async def handle_abort(
     state: ConnectionState,
     msg: ChatAbortMessage,
 ) -> None:
-    abort_ev = _session_queue.get_abort_event(msg.conversation_id)
+    session_queue = _get_session_queue(state)
+    abort_ev = session_queue.get_abort_event(msg.conversation_id)
     abort_ev.set()
 
 
@@ -379,6 +381,7 @@ async def handle_tool_approve(
     state: ConnectionState,
     msg: ToolApproveMessage,
 ) -> None:
-    _session_queue.set_approval_decision(
+    session_queue = _get_session_queue(state)
+    session_queue.set_approval_decision(
         msg.conversation_id, msg.tool_call_id, msg.approved
     )
