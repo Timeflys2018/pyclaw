@@ -162,7 +162,10 @@ async def test_usage_propagates_to_done_event(tmp_path: Path) -> None:
         events.append(event)
 
     done = next(e for e in events if isinstance(e, Done))
-    assert done.usage == {"input": 42, "output": 7}
+    assert done.usage["input"] == 42
+    assert done.usage["output"] == 7
+    assert done.usage["cache_creation"] == 0
+    assert done.usage["cache_read"] == 0
 
 
 @pytest.mark.asyncio

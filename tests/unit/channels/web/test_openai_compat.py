@@ -12,7 +12,11 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from pyclaw.channels.web.auth import create_jwt
-from pyclaw.channels.web.openai_compat import openai_router, set_openai_deps
+from pyclaw.channels.web.openai_compat import (
+    _format_openai_usage,
+    openai_router,
+    set_openai_deps,
+)
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.infra.settings import WebSettings
 from pyclaw.models.agent import Done, ErrorEvent, TextChunk, ToolCallStart, ToolCallEnd
@@ -211,3 +215,34 @@ class TestChatCompletionsUserField:
         assert len(captured_requests) == 1
         assert "openai:user1" in captured_requests[0].session_id
         assert "custom-user" not in captured_requests[0].session_id
+
+
+class TestFormatOpenAIUsage:
+    def test_with_cache_read(self) -> None:
+        out = _format_openai_usage(
+            {"input": 1000, "output": 200, "cache_creation": 50, "cache_read": 800}
+        )
+        assert out["prompt_tokens"] == 1000
+        assert out["completion_tokens"] == 200
+        assert out["total_tokens"] == 1200
+        assert out["prompt_tokens_details"] == {"cached_tokens": 800}
+
+    def test_zero_cache_read_still_emits_details(self) -> None:
+        out = _format_openai_usage(
+            {"input": 500, "output": 100, "cache_creation": 0, "cache_read": 0}
+        )
+        assert "prompt_tokens_details" in out
+        assert out["prompt_tokens_details"] == {"cached_tokens": 0}
+
+    def test_empty_dict_emits_zero_details(self) -> None:
+        out = _format_openai_usage({})
+        assert out["prompt_tokens"] == 0
+        assert out["completion_tokens"] == 0
+        assert out["total_tokens"] == 0
+        assert out["prompt_tokens_details"] == {"cached_tokens": 0}
+
+    def test_partial_dict(self) -> None:
+        out = _format_openai_usage({"input": 100, "output": 20})
+        assert out["prompt_tokens"] == 100
+        assert out["completion_tokens"] == 20
+        assert out["prompt_tokens_details"] == {"cached_tokens": 0}

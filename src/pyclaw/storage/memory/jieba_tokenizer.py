@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 import apsw
 import apsw.fts5
+
+logging.getLogger("jieba").setLevel(logging.WARNING)
+
 import jieba
 
+jieba.setLogLevel(logging.WARNING)
 jieba.initialize()
 
 from pyclaw.storage.memory.stop_words import STOP_WORDS

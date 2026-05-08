@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pyclaw.channels.feishu.streaming import THROTTLE_MS, FeishuStreamingCard
+from pyclaw.channels.feishu.streaming import FeishuStreamingCard
 
 
 def _make_mock_client(card_id: str = "card_123") -> Any:

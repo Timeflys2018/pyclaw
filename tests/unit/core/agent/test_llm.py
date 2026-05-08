@@ -6,6 +6,8 @@ from pyclaw.core.agent.llm import (
     session_entries_to_llm_messages,
     finalize_tool_calls,
     merge_tool_call_deltas,
+    _extract_usage,
+    _prepend_system,
 )
 
 
@@ -82,3 +84,89 @@ class TestToolCallStreamMerging:
         assert len(finalized) == 2
         assert finalized[0]["id"] == "c1"
         assert finalized[1]["id"] == "c2"
+
+
+class TestExtractUsage:
+    def test_anthropic_via_prompt_tokens_details(self) -> None:
+        raw = {
+            "usage": {
+                "prompt_tokens": 1000,
+                "completion_tokens": 200,
+                "total_tokens": 1200,
+                "prompt_tokens_details": {
+                    "cached_tokens": 800,
+                    "cache_creation_tokens": 50,
+                },
+            }
+        }
+        usage = _extract_usage(raw)
+        assert usage is not None
+        assert usage.input_tokens == 1000
+        assert usage.output_tokens == 200
+        assert usage.cache_read_input_tokens == 800
+        assert usage.cache_creation_input_tokens == 50
+
+    def test_openai_style_cached_tokens_only(self) -> None:
+        raw = {
+            "usage": {
+                "prompt_tokens": 500,
+                "completion_tokens": 100,
+                "prompt_tokens_details": {"cached_tokens": 300},
+            }
+        }
+        usage = _extract_usage(raw)
+        assert usage is not None
+        assert usage.cache_read_input_tokens == 300
+        assert usage.cache_creation_input_tokens == 0
+
+    def test_legacy_top_level_cache_fields(self) -> None:
+        raw = {
+            "usage": {
+                "prompt_tokens": 1000,
+                "completion_tokens": 200,
+                "cache_read_input_tokens": 700,
+                "cache_creation_input_tokens": 100,
+            }
+        }
+        usage = _extract_usage(raw)
+        assert usage is not None
+        assert usage.cache_read_input_tokens == 700
+        assert usage.cache_creation_input_tokens == 100
+
+    def test_no_cache_fields_zero(self) -> None:
+        raw = {"usage": {"prompt_tokens": 100, "completion_tokens": 50}}
+        usage = _extract_usage(raw)
+        assert usage is not None
+        assert usage.cache_read_input_tokens == 0
+        assert usage.cache_creation_input_tokens == 0
+
+    def test_no_usage_returns_none(self) -> None:
+        assert _extract_usage({}) is None
+        assert _extract_usage({"usage": None}) is None
+
+
+class TestPrependSystem:
+    def test_string_system(self) -> None:
+        out = _prepend_system([{"role": "user", "content": "hi"}], "you are helpful")
+        assert out[0] == {"role": "system", "content": "you are helpful"}
+        assert out[1] == {"role": "user", "content": "hi"}
+
+    def test_list_content_blocks_system(self) -> None:
+        blocks = [
+            {"type": "text", "text": "frozen", "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": "dynamic"},
+        ]
+        out = _prepend_system([{"role": "user", "content": "hi"}], blocks)
+        assert out[0]["role"] == "system"
+        assert out[0]["content"] == blocks
+        assert out[1] == {"role": "user", "content": "hi"}
+
+    def test_none_system_unchanged(self) -> None:
+        msgs = [{"role": "user", "content": "hi"}]
+        out = _prepend_system(msgs, None)
+        assert out == msgs
+
+    def test_empty_string_system_unchanged(self) -> None:
+        msgs = [{"role": "user", "content": "hi"}]
+        out = _prepend_system(msgs, "")
+        assert out == msgs

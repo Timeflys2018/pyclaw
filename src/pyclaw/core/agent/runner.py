@@ -240,13 +240,25 @@ async def run_agent_stream(
         l1_snapshot=l1_snapshot_text,
     )
 
+    effective_model = request.model or deps.llm.default_model
+    model_max_output: int | None = None
+    try:
+        from litellm import get_model_info
+
+        _info = get_model_info(effective_model)
+        model_max_output = _info.get("max_output_tokens") or _info.get("max_tokens")
+    except Exception:
+        logger.debug("get_model_info failed for %s, using ratio fallback", effective_model)
+
     history_budget = deps.config.prompt_budget.compute_history_budget(
-        deps.config.context_window
+        deps.config.context_window, model_max_output=model_max_output
     )
 
     iteration = 0
     total_input_tokens = 0
     total_output_tokens = 0
+    total_cache_creation_tokens = 0
+    total_cache_read_tokens = 0
     final_text = ""
     retry_counts: dict[str, int] = {"planning": 0, "reasoning": 0, "empty": 0}
     unknown_tool_name: str | None = None
@@ -277,12 +289,16 @@ async def run_agent_stream(
             prompt=request.user_message,
         )
 
-        system_parts = [frozen_result.text, per_turn_result.text]
+        other_system_parts: list[str] = [per_turn_result.text]
         if assembled.system_prompt_addition:
-            system_parts.append(assembled.system_prompt_addition)
+            other_system_parts.append(assembled.system_prompt_addition)
         if request.extra_system:
-            system_parts.append(request.extra_system)
-        effective_system = "\n\n".join(system_parts)
+            other_system_parts.append(request.extra_system)
+        effective_system = _build_effective_system(
+            frozen_text=frozen_result.text,
+            other_parts=other_system_parts,
+            model=effective_model,
+        )
 
         if history_budget > 0 and estimate_messages_tokens(assembled.messages) > history_budget:
             pretrim_outcome = await _try_compaction(
@@ -377,6 +393,8 @@ async def run_agent_stream(
 
         total_input_tokens += response.usage.input_tokens
         total_output_tokens += response.usage.output_tokens
+        total_cache_creation_tokens += response.usage.cache_creation_input_tokens
+        total_cache_read_tokens += response.usage.cache_read_input_tokens
 
         frozen_tokens = sum(frozen_result.token_breakdown.values())
         bootstrap_tokens = frozen_result.token_breakdown.get("bootstrap", 0)
@@ -386,7 +404,7 @@ async def run_agent_stream(
         history_tokens = estimate_messages_tokens(assembled.messages)
         logger.info(
             "token_usage turn=%d frozen=%d bootstrap=%d l1=%d memory_ctx=%d per_turn=%d history=%d "
-            "input=%d output=%d budget_remaining=%d",
+            "input=%d output=%d budget_remaining=%d cache_creation=%d cache_read=%d",
             iteration,
             frozen_tokens,
             bootstrap_tokens,
@@ -397,6 +415,8 @@ async def run_agent_stream(
             response.usage.input_tokens,
             response.usage.output_tokens,
             max(0, history_budget - history_tokens),
+            response.usage.cache_creation_input_tokens,
+            response.usage.cache_read_input_tokens,
         )
 
         if not response.tool_calls:
@@ -453,7 +473,12 @@ async def run_agent_stream(
             final_text = response.text
             yield Done(
                 final_message=final_text,
-                usage={"input": total_input_tokens, "output": total_output_tokens},
+                usage={
+                    "input": total_input_tokens,
+                    "output": total_output_tokens,
+                    "cache_creation": total_cache_creation_tokens,
+                    "cache_read": total_cache_read_tokens,
+                },
             )
             return
 
@@ -774,3 +799,38 @@ def _update_tool_loop_state(
         return current_unknown, count, True, "warn", guidance
 
     return current_unknown, count, warned, "proceed", None
+
+
+_ANTHROPIC_PREFIXES = (
+    "anthropic/",
+    "claude-",
+    "bedrock/anthropic.",
+    "vertex_ai/claude-",
+)
+_MIN_CACHE_TOKENS = 1024
+
+
+def _is_anthropic_model(model: str) -> bool:
+    m = model.lower()
+    return any(m.startswith(p) for p in _ANTHROPIC_PREFIXES)
+
+
+def _build_effective_system(
+    frozen_text: str,
+    other_parts: list[str],
+    model: str,
+) -> str | list[dict[str, Any]]:
+    rest = "\n\n".join(p for p in other_parts if p)
+    if not _is_anthropic_model(model):
+        full = "\n\n".join([frozen_text, rest]) if rest else frozen_text
+        return full
+    frozen_tokens_est = len(frozen_text) // 4
+    if frozen_tokens_est < _MIN_CACHE_TOKENS:
+        full = "\n\n".join([frozen_text, rest]) if rest else frozen_text
+        return full
+    blocks: list[dict[str, Any]] = [
+        {"type": "text", "text": frozen_text, "cache_control": {"type": "ephemeral"}},
+    ]
+    if rest:
+        blocks.append({"type": "text", "text": rest})
+    return blocks

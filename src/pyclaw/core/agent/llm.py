@@ -26,6 +26,8 @@ class LLMUsage:
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    cache_read_input_tokens: int = 0
 
 
 @dataclass
@@ -74,7 +76,7 @@ class LLMClient:
         messages: list[dict[str, Any]],
         model: str | None = None,
         tools: list[dict[str, Any]] | None = None,
-        system: str | None = None,
+        system: str | list[dict[str, Any]] | None = None,
         idle_seconds: float = 0.0,
         abort_event: asyncio.Event | None = None,
         temperature: float | None = None,
@@ -140,7 +142,7 @@ class LLMClient:
         messages: list[dict[str, Any]],
         model: str | None = None,
         tools: list[dict[str, Any]] | None = None,
-        system: str | None = None,
+        system: str | list[dict[str, Any]] | None = None,
         idle_seconds: float = 0.0,
         abort_event: asyncio.Event | None = None,
         temperature: float | None = None,
@@ -177,7 +179,9 @@ class LLMClient:
         )
 
 
-def _prepend_system(messages: list[dict[str, Any]], system: str | None) -> list[dict[str, Any]]:
+def _prepend_system(
+    messages: list[dict[str, Any]], system: str | list[dict[str, Any]] | None
+) -> list[dict[str, Any]]:
     if not system:
         return messages
     return [{"role": "system", "content": system}, *messages]
@@ -216,7 +220,25 @@ def _extract_usage(raw: Any) -> LLMUsage | None:
     prompt = _get(usage, "prompt_tokens") or _get(usage, "input_tokens") or 0
     completion = _get(usage, "completion_tokens") or _get(usage, "output_tokens") or 0
     total = _get(usage, "total_tokens") or (prompt + completion)
-    return LLMUsage(input_tokens=int(prompt), output_tokens=int(completion), total_tokens=int(total))
+
+    cache_creation = 0
+    cache_read = 0
+    details = _get(usage, "prompt_tokens_details")
+    if details is not None:
+        cache_read = int(_get(details, "cached_tokens") or 0)
+        cache_creation = int(_get(details, "cache_creation_tokens") or 0)
+    if not cache_read:
+        cache_read = int(_get(usage, "cache_read_input_tokens") or 0)
+    if not cache_creation:
+        cache_creation = int(_get(usage, "cache_creation_input_tokens") or 0)
+
+    return LLMUsage(
+        input_tokens=int(prompt),
+        output_tokens=int(completion),
+        total_tokens=int(total),
+        cache_creation_input_tokens=cache_creation,
+        cache_read_input_tokens=cache_read,
+    )
 
 
 def _get(obj: Any, key: str) -> Any:

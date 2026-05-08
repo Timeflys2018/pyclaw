@@ -139,6 +139,8 @@ class TestTokenLogging:
         assert "input=200" in msg
         assert "output=80" in msg
         assert "budget_remaining=" in msg
+        assert "cache_creation=" in msg
+        assert "cache_read=" in msg
 
     async def test_token_log_per_iteration_in_multi_turn(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         llm = _FakeLLM([
