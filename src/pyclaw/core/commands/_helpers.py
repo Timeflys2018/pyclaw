@@ -66,7 +66,9 @@ async def format_session_status(
     msg_count = len(tree.entries) if tree else 0
     created_at = tree.header.created_at if tree else "unknown"
     short_id = session_id.split(":")[-1] if ":" in session_id else session_id[-8:]
-    model = deps.llm.default_model if hasattr(deps, "llm") else "unknown"
+    model = (tree.header.model_override if tree else None) or (
+        deps.llm.default_model if hasattr(deps, "llm") else "unknown"
+    )
     lines = [
         "📊 **会话状态**",
         f"SessionKey: `{session_key}`",
