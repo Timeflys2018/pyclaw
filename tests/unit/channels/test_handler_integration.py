@@ -46,8 +46,16 @@ def _make_ctx(store: InMemorySessionStore, tmp_path: Path) -> FeishuContext:
     from pyclaw.core.agent.llm import LLMClient, LLMStreamChunk, LLMUsage
     from pyclaw.core.agent.runner import AgentRunnerDeps
     from pyclaw.core.agent.tools.registry import ToolRegistry
+    from pyclaw.core.commands.builtin import register_builtin_commands
+    from pyclaw.core.commands.registry import (
+        get_default_registry,
+        reset_default_registry,
+    )
     from pyclaw.core.hooks import HookRegistry
     from pyclaw.models import AgentRunConfig
+
+    reset_default_registry()
+    register_builtin_commands(get_default_registry())
 
     class _OneShotLLM(LLMClient):
         def __init__(self) -> None:
