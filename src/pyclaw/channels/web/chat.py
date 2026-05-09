@@ -58,9 +58,7 @@ class SessionQueue:
         return state == "running"
 
     def is_idle(self, conversation_id: str) -> bool:
-        if self._busy.get(conversation_id, False):
-            return False
-        return not self._consumer_running(conversation_id)
+        return not self._busy.get(conversation_id, False)
 
     async def enqueue(
         self,

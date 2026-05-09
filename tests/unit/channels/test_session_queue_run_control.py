@@ -63,6 +63,16 @@ def test_is_idle_false_when_busy() -> None:
     assert sq.is_idle("conv-A") is False
 
 
+def test_is_idle_does_not_inspect_consumer_running() -> None:
+    sq = SessionQueue()
+    sq._consumers["conv-Y"] = "fake-task-id-still-running"
+    assert sq.is_idle("conv-Y") is True
+    sq._busy["conv-Y"] = True
+    assert sq.is_idle("conv-Y") is False
+    sq._busy["conv-Y"] = False
+    assert sq.is_idle("conv-Y") is True
+
+
 @pytest.mark.asyncio
 async def test_run_control_active_flag_managed_in_consume_via_external_setter() -> None:
     sq = SessionQueue()
