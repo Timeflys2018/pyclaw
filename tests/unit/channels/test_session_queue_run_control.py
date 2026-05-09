@@ -73,6 +73,24 @@ def test_is_idle_does_not_inspect_consumer_running() -> None:
     assert sq.is_idle("conv-Y") is True
 
 
+def test_is_idle_returns_true_when_busy_but_run_control_aborted() -> None:
+    sq = SessionQueue()
+    rc = sq.get_run_control("conv-abort")
+    rc.active = True
+    sq._busy["conv-abort"] = True
+    assert sq.is_idle("conv-abort") is False
+    rc.stop()
+    assert sq.is_idle("conv-abort") is True
+
+
+def test_is_idle_returns_false_when_busy_and_run_control_active() -> None:
+    sq = SessionQueue()
+    rc = sq.get_run_control("conv-busy")
+    rc.active = True
+    sq._busy["conv-busy"] = True
+    assert sq.is_idle("conv-busy") is False
+
+
 @pytest.mark.asyncio
 async def test_run_control_active_flag_managed_in_consume_via_external_setter() -> None:
     sq = SessionQueue()
