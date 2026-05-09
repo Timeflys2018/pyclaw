@@ -5,6 +5,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from pyclaw.core.agent.runtime_util import AgentAbortedError
+from pyclaw.core.commands._helpers import idle_guard_check
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.registry import CommandRegistry, get_default_registry
 
@@ -56,6 +57,11 @@ class FeishuCommandAdapter:
 
         async def reply(reply_text: str) -> None:
             await ctx.feishu_client.reply_text(message_id, reply_text)
+
+        if ctx.queue_registry is not None and await idle_guard_check(
+            spec, ctx.queue_registry, session_id, reply
+        ):
+            return True
 
         async def dispatch_user_message(user_text: str) -> None:
             from pyclaw.channels.base import InboundMessage

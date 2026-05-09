@@ -3,15 +3,35 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from pyclaw.core.agent.runner import AgentRunnerDeps
+    from pyclaw.core.commands.spec import CommandSpec
     from pyclaw.core.sop_extraction import ExtractionResult
 
 logger = logging.getLogger(__name__)
 
 EXTRACT_TIMEOUT_SECONDS = 15.0
+
+
+class _IdleQueue(Protocol):
+    def is_idle(self, key: str) -> bool: ...
+
+
+async def idle_guard_check(
+    spec: "CommandSpec",
+    queue_obj: _IdleQueue,
+    key: str,
+    reply: Callable[[str], Awaitable[None]],
+) -> bool:
+    if not spec.requires_idle:
+        return False
+    if queue_obj.is_idle(key):
+        return False
+    await reply("⏳ 任务运行中，请先 /stop 或等待结束")
+    return True
 
 
 def parse_idle_duration(arg: str) -> int | None:
