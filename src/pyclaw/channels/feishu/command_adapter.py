@@ -112,6 +112,7 @@ class FeishuCommandAdapter:
                 "feishu_event": event,
                 "feishu_message_id": message_id,
                 "feishu_queue_registry": ctx.queue_registry,
+                "tool_workspace_path": ctx.workspace_base / workspace_id,
             },
         )
 

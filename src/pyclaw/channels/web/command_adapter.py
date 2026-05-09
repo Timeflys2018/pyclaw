@@ -118,6 +118,7 @@ class WebCommandAdapter:
                 "channel": "web",
                 "web_state": state,
                 "web_conversation_id": conversation_id,
+                "tool_workspace_path": workspace_base / f"web_{user_id}",
             },
         )
 

@@ -347,6 +347,7 @@ async def test_register_builtin_includes_all_nine() -> None:
     primary = sorted(s.name for s in registry.list_all())
     assert primary == [
         "/compact",
+        "/export",
         "/extract",
         "/help",
         "/history",

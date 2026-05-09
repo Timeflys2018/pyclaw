@@ -323,6 +323,99 @@ def _failed_compact_result(error: str) -> object:
     )
 
 
+async def cmd_export(args: str, ctx: CommandContext) -> None:
+    import secrets
+    from datetime import datetime, timezone
+    from pathlib import Path as _Path
+
+    from pyclaw.core.session_export import (
+        render_session_json,
+        render_session_markdown,
+    )
+
+    tokens = args.lower().split()
+    inline = "inline" in tokens
+    fmt = "markdown"
+    if "json" in tokens:
+        fmt = "json"
+    elif "markdown" in tokens or "md" in tokens:
+        fmt = "markdown"
+
+    tree = await ctx.deps.session_store.load(ctx.session_id)
+    if tree is None:
+        await ctx.reply("❌ 会话不存在")
+        return
+
+    if fmt == "json":
+        rendered = render_session_json(tree)
+        ext = "json"
+    else:
+        rendered = render_session_markdown(tree)
+        ext = "md"
+
+    if inline:
+        truncated = _truncate_utf8_bytes(rendered, 8192)
+        await ctx.reply(truncated)
+        return
+
+    workspace_path: _Path | str | None = None
+    raw = ctx.raw or {}
+    workspace_path = raw.get("tool_workspace_path")
+    if workspace_path is None:
+        workspace_path = ctx.workspace_base / f"{ctx.channel}_{ctx.user_id}"
+
+    workspace_path = _Path(workspace_path)
+    exports_dir = workspace_path / "exports"
+    exports_dir.mkdir(parents=True, exist_ok=True)
+
+    workspace_resolved = workspace_path.resolve()
+    exports_resolved = exports_dir.resolve()
+    if not _path_is_under(exports_resolved, workspace_resolved):
+        await ctx.reply(
+            f"⚠️ 导出失败：exports 目录 `{exports_resolved}` 逃出了工作区 `{workspace_resolved}`（疑似符号链接）"
+        )
+        return
+
+    rand = secrets.token_hex(4)
+    utc_iso = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    filename = f"session-{rand}-{utc_iso}.{ext}"
+    target = exports_dir / filename
+
+    target.write_text(rendered, encoding="utf-8")
+
+    resolved = target.resolve()
+    if not _path_is_under(resolved, workspace_resolved):
+        target.unlink(missing_ok=True)
+        await ctx.reply(
+            f"⚠️ 导出失败：解析后的路径 `{resolved}` 逃出了工作区"
+        )
+        return
+
+    try:
+        rel = resolved.relative_to(workspace_resolved)
+        path_display = f"`{rel}`"
+    except ValueError:
+        path_display = f"`{resolved}`"
+
+    await ctx.reply(f"✓ 已导出到 {path_display}")
+
+
+def _path_is_under(child: object, parent: object) -> bool:
+    from pathlib import Path as _P
+
+    child_p = _P(str(child))
+    parent_p = _P(str(parent))
+    return child_p == parent_p or parent_p in child_p.parents
+
+
+def _truncate_utf8_bytes(s: str, max_bytes: int) -> str:
+    encoded = s.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return s
+    truncated = encoded[:max_bytes].decode("utf-8", errors="ignore")
+    return truncated + "\n\n…（内容已截断）"
+
+
 async def cmd_help(args: str, ctx: CommandContext) -> None:
     from pyclaw.core.commands.registry import get_default_registry
 
@@ -455,6 +548,17 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             category="context",
             help_text="手动压缩会话上下文（60s 冷却）",
             args_hint="[focus]",
+            channels=ALL_CHANNELS,
+            requires_idle=True,
+        )
+    )
+    registry.register(
+        CommandSpec(
+            name="/export",
+            handler=cmd_export,
+            category="context",
+            help_text="导出会话到 markdown 或 json（可加 inline 直接回复）",
+            args_hint="[markdown|json] [inline]",
             channels=ALL_CHANNELS,
             requires_idle=True,
         )
