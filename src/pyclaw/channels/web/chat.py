@@ -185,6 +185,13 @@ async def enqueue_chat(
     msg: ChatSendMessage,
     settings: WebSettings,
 ) -> None:
+    from pyclaw.channels.web.message_classifier import classify
+    from pyclaw.channels.web.protocol_ops import handle_stop_command
+
+    if classify(msg.content or "") == "protocol_op":
+        await handle_stop_command(state, msg.conversation_id)
+        return
+
     session_queue = _get_session_queue(state)
     if session_queue._task_manager is None:
         tm = getattr(getattr(state.ws, "app", None), "state", None)

@@ -120,6 +120,16 @@ async def build_group_context(client: FeishuClient, chat_id: str, size: int) -> 
     return "\n".join(lines)
 
 
+async def handle_stop_feishu(ctx: "FeishuContext", session_id: str, message_id: str) -> None:
+    assert ctx.queue_registry is not None, "queue_registry must be set on FeishuContext"
+    rc = ctx.queue_registry.get_run_control(session_id)
+    if rc.is_active():
+        rc.stop()
+        await ctx.feishu_client.reply_text(message_id, "🛑 已停止")
+    else:
+        await ctx.feishu_client.reply_text(message_id, "⚠️ 没有正在运行的任务")
+
+
 async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
     if not event.event or not event.event.message:
         return
@@ -173,6 +183,10 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
     if await ctx.session_router.check_idle_reset(session_key, session_id, idle_minutes):
         logger.info("idle reset triggered for session %s", session_id)
         session_id, _ = await ctx.session_router.rotate(session_key, workspace_id)
+
+    if text is not None and text.strip().lower() == "/stop":
+        await handle_stop_feishu(ctx, session_id, message_id)
+        return
 
     if text is not None and text.startswith("/"):
         from pyclaw.channels.feishu.command_adapter import FeishuCommandAdapter

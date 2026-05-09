@@ -143,6 +143,7 @@ async def cmd_help(args: str, ctx: CommandContext) -> None:
     registry = ctx.registry if ctx.registry is not None else get_default_registry()
     grouped = registry.list_by_category()
 
+    has_idle_locked = False
     lines = ["📖 PyClaw 命令帮助", ""]
     for category in sorted(grouped.keys()):
         lines.append(f"📂 {category}")
@@ -153,8 +154,19 @@ async def cmd_help(args: str, ctx: CommandContext) -> None:
             if spec.aliases:
                 alias_str = ", ".join(spec.aliases)
                 help_part = f"{help_part} (别名: {alias_str})"
+            if spec.requires_idle:
+                help_part = f"{help_part} 🔒"
+                has_idle_locked = True
             lines.append(f"  {spec.name} {args_padded}{help_part}")
         lines.append("")
+
+    lines.append("⚡ Runtime Operations（运行时控制，不进队列）")
+    lines.append(f"  /stop {''.ljust(22)}停止当前运行")
+    lines.append("")
+
+    if has_idle_locked:
+        lines.append("提示：🔒 标记的命令需要 runner 闲置时执行")
+
     await ctx.reply("\n".join(lines).rstrip() + "\n")
 
 
