@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 from pyclaw.models import CompactResult
+
+if TYPE_CHECKING:
+    from pyclaw.core.agent.run_control import RunControl
 
 
 @dataclass
@@ -60,6 +63,8 @@ class AgentHook(Protocol):
     async def after_response(self, observation: ResponseObservation) -> None: ...
     async def before_compaction(self, context: CompactionContext) -> None: ...
     async def after_compaction(self, context: CompactionContext, result: CompactResult) -> None: ...
+    async def on_run_start(self, session_id: str, control: "RunControl") -> None: ...
+    async def on_run_end(self, session_id: str, terminated_by: str) -> None: ...
 
 
 class HookRegistry:
@@ -113,3 +118,29 @@ class HookRegistry:
                 await hook.after_compaction(context, result)
             except Exception:
                 logger.exception("after_compaction hook failed: %r", hook)
+
+    async def notify_run_start(self, session_id: str, control: "RunControl") -> None:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        for hook in self._hooks:
+            method = getattr(hook, "on_run_start", None)
+            if method is None:
+                continue
+            try:
+                await method(session_id, control)
+            except Exception:
+                logger.exception("on_run_start hook failed: %r", hook)
+
+    async def notify_run_end(self, session_id: str, terminated_by: str) -> None:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        for hook in self._hooks:
+            method = getattr(hook, "on_run_end", None)
+            if method is None:
+                continue
+            try:
+                await method(session_id, terminated_by)
+            except Exception:
+                logger.exception("on_run_end hook failed: %r", hook)

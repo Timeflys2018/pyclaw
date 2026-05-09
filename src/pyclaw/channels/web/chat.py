@@ -19,6 +19,7 @@ from pyclaw.channels.web.protocol import (
     SERVER_TOOL_APPROVE_REQUEST,
 )
 from pyclaw.channels.web.websocket import ConnectionState, send_event
+from pyclaw.core.agent.run_control import RunControl
 from pyclaw.core.agent.runner import RunRequest, run_agent_stream, AgentRunnerDeps
 from pyclaw.infra.settings import WebSettings
 from pyclaw.infra.task_manager import TaskManager
@@ -43,6 +44,7 @@ class SessionQueue:
         self._consumers: dict[str, str] = {}
         self._busy: dict[str, bool] = {}
         self._abort_events: dict[str, asyncio.Event] = {}
+        self._run_controls: dict[str, RunControl] = {}
         self._approval_decisions: dict[str, bool] = {}
 
     def set_task_manager(self, tm: TaskManager) -> None:
@@ -92,11 +94,22 @@ class SessionQueue:
         return pending + (1 if busy else 0)
 
     def get_abort_event(self, conversation_id: str) -> asyncio.Event:
-        if conversation_id not in self._abort_events:
-            self._abort_events[conversation_id] = asyncio.Event()
-        return self._abort_events[conversation_id]
+        return self.get_run_control(conversation_id).abort_event
+
+    def get_run_control(self, conversation_id: str) -> RunControl:
+        rc = self._run_controls.get(conversation_id)
+        if rc is None:
+            event = self._abort_events.get(conversation_id) or asyncio.Event()
+            self._abort_events[conversation_id] = event
+            rc = RunControl(abort_event=event)
+            self._run_controls[conversation_id] = rc
+        return rc
 
     def reset_abort_event(self, conversation_id: str) -> None:
+        rc = self._run_controls.get(conversation_id)
+        if rc is not None:
+            rc.abort_event.clear()
+            return
         if conversation_id in self._abort_events:
             self._abort_events[conversation_id].clear()
 
@@ -140,6 +153,7 @@ class SessionQueue:
             self._consumers.pop(conversation_id, None)
             self._busy.pop(conversation_id, None)
             self._abort_events.pop(conversation_id, None)
+            self._run_controls.pop(conversation_id, None)
 
     def reset(self) -> None:
         if self._task_manager is not None:
@@ -151,6 +165,7 @@ class SessionQueue:
         self._consumers.clear()
         self._busy.clear()
         self._abort_events.clear()
+        self._run_controls.clear()
         self._approval_decisions.clear()
 
 
@@ -260,7 +275,7 @@ async def _run_chat(
     settings: WebSettings,
 ) -> None:
     session_queue = _get_session_queue(state)
-    abort_event = session_queue.get_abort_event(msg.conversation_id)
+    rc = session_queue.get_run_control(msg.conversation_id)
 
     # Task 10.1: enforce conversation_id ownership for "web:" prefixed ids
     if msg.conversation_id.startswith("web:"):
@@ -301,9 +316,10 @@ async def _run_chat(
     user_workspace = workspace_base / f"web_{state.user_id}"
     user_workspace.mkdir(parents=True, exist_ok=True)
 
+    rc.active = True
     try:
         async for event in run_agent_stream(
-            request, deps, tool_workspace_path=user_workspace, abort=abort_event,
+            request, deps, tool_workspace_path=user_workspace, control=rc,
         ):
             if isinstance(event, TextChunk):
                 await send_event(state, SERVER_CHAT_DELTA, msg.conversation_id, {
@@ -362,6 +378,8 @@ async def _run_chat(
         await send_event(state, SERVER_ERROR, msg.conversation_id, {
             "message": "Internal error",
         })
+    finally:
+        rc.active = False
 
 
 def _get_runner_deps(state: ConnectionState) -> AgentRunnerDeps:

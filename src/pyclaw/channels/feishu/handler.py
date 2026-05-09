@@ -248,13 +248,19 @@ async def _dispatch_and_reply(
 
     if use_card:
         await stream_agent_reply(
-            dispatch_message(inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system),
+            dispatch_message(
+                inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system,
+                queue_registry=ctx.queue_registry,
+            ),
             card=card,
             fallback_fn=_fallback,
         )
     else:
         final_text = ""
-        async for ev in dispatch_message(inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system):
+        async for ev in dispatch_message(
+            inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system,
+            queue_registry=ctx.queue_registry,
+        ):
             if isinstance(ev, Done):
                 final_text = ev.final_message
         await _fallback(final_text or "(no response)")

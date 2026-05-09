@@ -168,273 +168,307 @@ async def run_agent_stream(
     abort_event = control.abort_event
     run_deadline_s = deps.config.timeouts.run_seconds
     run_started = time.monotonic()
+    terminated_by = "done"
+    await deps.hooks.notify_run_start(request.session_id, control)
 
-    def _run_timed_out() -> bool:
-        return run_deadline_s > 0 and (time.monotonic() - run_started) > run_deadline_s
-
-    tree = await ensure_session(
-        deps,
-        session_id=request.session_id,
-        workspace_id=request.workspace_id,
-        agent_id=request.agent_id,
-    )
-
-    user_entry_content: Any
-    if request.attachments:
-        user_entry_content = [
-            *request.attachments,
-            TextBlock(type="text", text=request.user_message),
-        ]
-    else:
-        user_entry_content = request.user_message
-
-    user_entry = MessageEntry(
-        id=generate_entry_id(set(tree.entries.keys())),
-        parent_id=tree.leaf_id,
-        timestamp=now_iso(),
-        role="user",
-        content=user_entry_content,
-    )
-    await _append(deps, tree, user_entry)
-
-    tool_ctx = ToolContext(
-        workspace_id=request.workspace_id,
-        workspace_path=tool_workspace_path,
-        session_id=request.session_id,
-        abort=abort_event,
-        extras=request.tool_context_extras,
-    )
-
-    skills_prompt_str: str | None = None
-    if tool_workspace_path and deps.skill_provider:
-        skills_prompt_str = deps.skill_provider.resolve_skills_prompt(str(tool_workspace_path))
-
-    tool_summaries = [(t.name, t.description) for t in (deps.tools.get(n) for n in deps.tools.names()) if t is not None]
-    prompt_inputs = PromptInputs(
-        session_id=request.session_id,
-        workspace_id=request.workspace_id,
-        agent_id=request.agent_id,
-        model=request.model or deps.llm.default_model,
-        tools=tool_summaries,
-        skills_prompt=skills_prompt_str,
-        workspace_path=str(tool_workspace_path),
-    )
-
-    bootstrap_text: str | None = None
-    l1_snapshot_text: str | None = None
-    get_bootstrap = getattr(deps.context_engine, "get_bootstrap", None)
-    if get_bootstrap is not None:
-        try:
-            bootstrap_text = await get_bootstrap(request.session_id)
-        except Exception:
-            logger.warning("get_bootstrap failed", exc_info=True)
-    get_l1 = getattr(deps.context_engine, "get_l1_snapshot", None)
-    if get_l1 is not None:
-        try:
-            l1_entries = await get_l1(request.session_id)
-            if l1_entries:
-                l1_snapshot_text = _format_l1_snapshot(l1_entries)
-        except Exception:
-            logger.warning("get_l1_snapshot failed", exc_info=True)
-
-    frozen_result = build_frozen_prefix(
-        prompt_inputs,
-        budget=deps.config.prompt_budget.system_zone_tokens,
-        bootstrap=bootstrap_text,
-        l1_snapshot=l1_snapshot_text,
-    )
-
-    effective_model = request.model or deps.llm.default_model
-    model_max_output: int | None = None
     try:
-        from litellm import get_model_info
+        def _run_timed_out() -> bool:
+            return run_deadline_s > 0 and (time.monotonic() - run_started) > run_deadline_s
 
-        _info = get_model_info(effective_model)
-        model_max_output = _info.get("max_output_tokens") or _info.get("max_tokens")
-    except Exception:
-        logger.debug("get_model_info failed for %s, using ratio fallback", effective_model)
-
-    history_budget = deps.config.prompt_budget.compute_history_budget(
-        deps.config.context_window, model_max_output=model_max_output
-    )
-
-    iteration = 0
-    total_input_tokens = 0
-    total_output_tokens = 0
-    total_cache_creation_tokens = 0
-    total_cache_read_tokens = 0
-    final_text = ""
-    retry_counts: dict[str, int] = {"planning": 0, "reasoning": 0, "empty": 0}
-    unknown_tool_name: str | None = None
-    unknown_tool_count = 0
-    unknown_tool_warned = False
-
-    while iteration < deps.config.max_iterations:
-        if _run_timed_out():
-            yield ErrorEvent(
-                error_code="timeout",
-                message=f"run exceeded {run_deadline_s}s run_seconds",
-            )
-            return
-        if is_abort_set(abort_event):
-            yield ErrorEvent(error_code="aborted", message="run aborted")
-            return
-        iteration += 1
-
-        per_turn_result = await build_per_turn_suffix(
-            prompt_inputs, hooks=deps.hooks, user_prompt=request.user_message
-        )
-
-        base_messages = tree.build_session_context()
-        assembled = await deps.context_engine.assemble(
+        tree = await ensure_session(
+            deps,
             session_id=request.session_id,
-            messages=base_messages,
-            token_budget=history_budget,
-            prompt=request.user_message,
+            workspace_id=request.workspace_id,
+            agent_id=request.agent_id,
         )
 
-        other_system_parts: list[str] = [per_turn_result.text]
-        if assembled.system_prompt_addition:
-            other_system_parts.append(assembled.system_prompt_addition)
-        if request.extra_system:
-            other_system_parts.append(request.extra_system)
-        effective_system = _build_effective_system(
-            frozen_text=frozen_result.text,
-            other_parts=other_system_parts,
-            model=effective_model,
+        user_entry_content: Any
+        if request.attachments:
+            user_entry_content = [
+                *request.attachments,
+                TextBlock(type="text", text=request.user_message),
+            ]
+        else:
+            user_entry_content = request.user_message
+
+        user_entry = MessageEntry(
+            id=generate_entry_id(set(tree.entries.keys())),
+            parent_id=tree.leaf_id,
+            timestamp=now_iso(),
+            role="user",
+            content=user_entry_content,
+        )
+        await _append(deps, tree, user_entry)
+
+        tool_ctx = ToolContext(
+            workspace_id=request.workspace_id,
+            workspace_path=tool_workspace_path,
+            session_id=request.session_id,
+            abort=abort_event,
+            extras=request.tool_context_extras,
         )
 
-        if history_budget > 0 and estimate_messages_tokens(assembled.messages) > history_budget:
-            pretrim_outcome = await _try_compaction(
-                deps, tree, request, base_messages, history_budget, abort_event, force=True
-            )
-            if not pretrim_outcome.ok:
+        skills_prompt_str: str | None = None
+        if tool_workspace_path and deps.skill_provider:
+            skills_prompt_str = deps.skill_provider.resolve_skills_prompt(str(tool_workspace_path))
+
+        tool_summaries = [(t.name, t.description) for t in (deps.tools.get(n) for n in deps.tools.names()) if t is not None]
+        prompt_inputs = PromptInputs(
+            session_id=request.session_id,
+            workspace_id=request.workspace_id,
+            agent_id=request.agent_id,
+            model=request.model or deps.llm.default_model,
+            tools=tool_summaries,
+            skills_prompt=skills_prompt_str,
+            workspace_path=str(tool_workspace_path),
+        )
+
+        bootstrap_text: str | None = None
+        l1_snapshot_text: str | None = None
+        get_bootstrap = getattr(deps.context_engine, "get_bootstrap", None)
+        if get_bootstrap is not None:
+            try:
+                bootstrap_text = await get_bootstrap(request.session_id)
+            except Exception:
+                logger.warning("get_bootstrap failed", exc_info=True)
+        get_l1 = getattr(deps.context_engine, "get_l1_snapshot", None)
+        if get_l1 is not None:
+            try:
+                l1_entries = await get_l1(request.session_id)
+                if l1_entries:
+                    l1_snapshot_text = _format_l1_snapshot(l1_entries)
+            except Exception:
+                logger.warning("get_l1_snapshot failed", exc_info=True)
+
+        frozen_result = build_frozen_prefix(
+            prompt_inputs,
+            budget=deps.config.prompt_budget.system_zone_tokens,
+            bootstrap=bootstrap_text,
+            l1_snapshot=l1_snapshot_text,
+        )
+
+        effective_model = request.model or deps.llm.default_model
+        model_max_output: int | None = None
+        try:
+            from litellm import get_model_info
+
+            _info = get_model_info(effective_model)
+            model_max_output = _info.get("max_output_tokens") or _info.get("max_tokens")
+        except Exception:
+            logger.debug("get_model_info failed for %s, using ratio fallback", effective_model)
+
+        history_budget = deps.config.prompt_budget.compute_history_budget(
+            deps.config.context_window, model_max_output=model_max_output
+        )
+
+        iteration = 0
+        total_input_tokens = 0
+        total_output_tokens = 0
+        total_cache_creation_tokens = 0
+        total_cache_read_tokens = 0
+        final_text = ""
+        retry_counts: dict[str, int] = {"planning": 0, "reasoning": 0, "empty": 0}
+        unknown_tool_name: str | None = None
+        unknown_tool_count = 0
+        unknown_tool_warned = False
+
+        while iteration < deps.config.max_iterations:
+            if _run_timed_out():
+                terminated_by = "timeout"
                 yield ErrorEvent(
-                    error_code=pretrim_outcome.error_code or "compaction_failed",
-                    message=pretrim_outcome.error_message or "compaction failed",
+                    error_code="timeout",
+                    message=f"run exceeded {run_deadline_s}s run_seconds",
                 )
                 return
-            if pretrim_outcome.compacted:
-                continue
+            if is_abort_set(abort_event):
+                terminated_by = "aborted"
+                yield ErrorEvent(error_code="aborted", message="run aborted")
+                return
+            iteration += 1
 
-        remaining_run = _remaining_run_seconds(run_deadline_s, run_started)
-        if remaining_run is not None and remaining_run <= 0:
-            yield ErrorEvent(error_code="timeout", message="run exceeded run_seconds")
-            return
-
-        text_parts: list[str] = []
-        tool_calls_buffer: dict[int, dict[str, Any]] = {}
-        finish_reason: str | None = None
-        stream_usage = LLMUsage()
-
-        try:
-            stream_iter = deps.llm.stream(
-                messages=assembled.messages,
-                model=request.model,
-                tools=deps.tools.list_for_llm() or None,
-                system=effective_system,
-                idle_seconds=deps.config.timeouts.idle_seconds,
-                abort_event=abort_event,
+            per_turn_result = await build_per_turn_suffix(
+                prompt_inputs, hooks=deps.hooks, user_prompt=request.user_message
             )
-            guarded_iter = iterate_with_deadline(
-                stream_iter,
-                deadline_s=remaining_run if remaining_run is not None and remaining_run > 0 else 0.0,
-                abort_event=abort_event,
-                kind="run",
+
+            base_messages = tree.build_session_context()
+            assembled = await deps.context_engine.assemble(
+                session_id=request.session_id,
+                messages=base_messages,
+                token_budget=history_budget,
+                prompt=request.user_message,
             )
-            stream_start = time.monotonic()
-            async for chunk in guarded_iter:
-                if _run_timed_out():
-                    yield ErrorEvent(
-                        error_code="timeout",
-                        message=f"run exceeded {run_deadline_s}s run_seconds during stream",
-                    )
-                    return
-                if is_abort_set(abort_event):
-                    yield ErrorEvent(error_code="aborted", message="run aborted during llm stream")
-                    return
-                if chunk.text_delta:
-                    text_parts.append(chunk.text_delta)
-                    yield TextChunk(text=chunk.text_delta)
-                if chunk.tool_call_deltas:
-                    merge_tool_call_deltas(tool_calls_buffer, chunk.tool_call_deltas)
-                if chunk.finish_reason:
-                    finish_reason = chunk.finish_reason
-                if chunk.usage:
-                    stream_usage = chunk.usage
-            _stream_elapsed = time.monotonic() - stream_start
-        except AgentTimeoutError as te:
-            yield ErrorEvent(error_code="timeout", message=str(te))
-            return
-        except AgentAbortedError:
-            yield ErrorEvent(error_code="aborted", message="run aborted during llm call")
-            return
-        except LLMError as exc:
-            logger.error("LLM error: code=%s message=%s", exc.code, str(exc)[:500])
-            if exc.code == "context_overflow":
-                outcome = await _try_compaction(
+
+            other_system_parts: list[str] = [per_turn_result.text]
+            if assembled.system_prompt_addition:
+                other_system_parts.append(assembled.system_prompt_addition)
+            if request.extra_system:
+                other_system_parts.append(request.extra_system)
+            effective_system = _build_effective_system(
+                frozen_text=frozen_result.text,
+                other_parts=other_system_parts,
+                model=effective_model,
+            )
+
+            if history_budget > 0 and estimate_messages_tokens(assembled.messages) > history_budget:
+                pretrim_outcome = await _try_compaction(
                     deps, tree, request, base_messages, history_budget, abort_event, force=True
                 )
-                if not outcome.ok:
+                if not pretrim_outcome.ok:
+                    terminated_by = pretrim_outcome.error_code or "compaction_failed"
                     yield ErrorEvent(
-                        error_code=outcome.error_code or "compaction_failed",
-                        message=outcome.error_message or "compaction failed",
+                        error_code=pretrim_outcome.error_code or "compaction_failed",
+                        message=pretrim_outcome.error_message or "compaction failed",
                     )
                     return
-                if outcome.compacted:
+                if pretrim_outcome.compacted:
                     continue
-            yield ErrorEvent(error_code=exc.code, message=str(exc))
-            return
 
-        assembled_text = "".join(text_parts)
-        assembled_tool_calls = finalize_tool_calls(tool_calls_buffer)
-        response = LLMResponse(
-            text=assembled_text,
-            tool_calls=assembled_tool_calls,
-            usage=stream_usage,
-            finish_reason=finish_reason,
-        )
+            remaining_run = _remaining_run_seconds(run_deadline_s, run_started)
+            if remaining_run is not None and remaining_run <= 0:
+                terminated_by = "timeout"
+                yield ErrorEvent(error_code="timeout", message="run exceeded run_seconds")
+                return
 
-        total_input_tokens += response.usage.input_tokens
-        total_output_tokens += response.usage.output_tokens
-        total_cache_creation_tokens += response.usage.cache_creation_input_tokens
-        total_cache_read_tokens += response.usage.cache_read_input_tokens
+            text_parts: list[str] = []
+            tool_calls_buffer: dict[int, dict[str, Any]] = {}
+            finish_reason: str | None = None
+            stream_usage = LLMUsage()
 
-        frozen_tokens = sum(frozen_result.token_breakdown.values())
-        bootstrap_tokens = frozen_result.token_breakdown.get("bootstrap", 0)
-        l1_tokens = frozen_result.token_breakdown.get("l1_snapshot", 0)
-        memory_context_tokens = len(assembled.system_prompt_addition or "") // 4
-        per_turn_tokens = sum(per_turn_result.token_breakdown.values())
-        history_tokens = estimate_messages_tokens(assembled.messages)
-        logger.info(
-            "token_usage turn=%d frozen=%d bootstrap=%d l1=%d memory_ctx=%d per_turn=%d history=%d "
-            "input=%d output=%d budget_remaining=%d cache_creation=%d cache_read=%d",
-            iteration,
-            frozen_tokens,
-            bootstrap_tokens,
-            l1_tokens,
-            memory_context_tokens,
-            per_turn_tokens,
-            history_tokens,
-            response.usage.input_tokens,
-            response.usage.output_tokens,
-            max(0, history_budget - history_tokens),
-            response.usage.cache_creation_input_tokens,
-            response.usage.cache_read_input_tokens,
-        )
+            try:
+                stream_iter = deps.llm.stream(
+                    messages=assembled.messages,
+                    model=request.model,
+                    tools=deps.tools.list_for_llm() or None,
+                    system=effective_system,
+                    idle_seconds=deps.config.timeouts.idle_seconds,
+                    abort_event=abort_event,
+                )
+                guarded_iter = iterate_with_deadline(
+                    stream_iter,
+                    deadline_s=remaining_run if remaining_run is not None and remaining_run > 0 else 0.0,
+                    abort_event=abort_event,
+                    kind="run",
+                )
+                stream_start = time.monotonic()
+                async for chunk in guarded_iter:
+                    if _run_timed_out():
+                        terminated_by = "timeout"
+                        yield ErrorEvent(
+                            error_code="timeout",
+                            message=f"run exceeded {run_deadline_s}s run_seconds during stream",
+                        )
+                        return
+                    if is_abort_set(abort_event):
+                        terminated_by = "aborted"
+                        yield ErrorEvent(error_code="aborted", message="run aborted during llm stream")
+                        return
+                    if chunk.text_delta:
+                        text_parts.append(chunk.text_delta)
+                        yield TextChunk(text=chunk.text_delta)
+                    if chunk.tool_call_deltas:
+                        merge_tool_call_deltas(tool_calls_buffer, chunk.tool_call_deltas)
+                    if chunk.finish_reason:
+                        finish_reason = chunk.finish_reason
+                    if chunk.usage:
+                        stream_usage = chunk.usage
+                _stream_elapsed = time.monotonic() - stream_start
+            except AgentTimeoutError as te:
+                terminated_by = "timeout"
+                yield ErrorEvent(error_code="timeout", message=str(te))
+                return
+            except AgentAbortedError:
+                terminated_by = "aborted"
+                yield ErrorEvent(error_code="aborted", message="run aborted during llm call")
+                return
+            except LLMError as exc:
+                logger.error("LLM error: code=%s message=%s", exc.code, str(exc)[:500])
+                if exc.code == "context_overflow":
+                    outcome = await _try_compaction(
+                        deps, tree, request, base_messages, history_budget, abort_event, force=True
+                    )
+                    if not outcome.ok:
+                        terminated_by = outcome.error_code or "compaction_failed"
+                        yield ErrorEvent(
+                            error_code=outcome.error_code or "compaction_failed",
+                            message=outcome.error_message or "compaction failed",
+                        )
+                        return
+                    if outcome.compacted:
+                        continue
+                terminated_by = exc.code
+                yield ErrorEvent(error_code=exc.code, message=str(exc))
+                return
 
-        if not response.tool_calls:
-            classification = classify_turn(
-                text=response.text,
-                tool_calls=response.tool_calls,
+            assembled_text = "".join(text_parts)
+            assembled_tool_calls = finalize_tool_calls(tool_calls_buffer)
+            response = LLMResponse(
+                text=assembled_text,
+                tool_calls=assembled_tool_calls,
+                usage=stream_usage,
+                finish_reason=finish_reason,
             )
-            retry_limit = _retry_limit_for(classification, deps.config)
-            if (
-                classification in ("planning", "reasoning", "empty")
-                and retry_limit > 0
-                and retry_counts[classification] < retry_limit
-            ):
-                retry_counts[classification] += 1
+
+            total_input_tokens += response.usage.input_tokens
+            total_output_tokens += response.usage.output_tokens
+            total_cache_creation_tokens += response.usage.cache_creation_input_tokens
+            total_cache_read_tokens += response.usage.cache_read_input_tokens
+
+            frozen_tokens = sum(frozen_result.token_breakdown.values())
+            bootstrap_tokens = frozen_result.token_breakdown.get("bootstrap", 0)
+            l1_tokens = frozen_result.token_breakdown.get("l1_snapshot", 0)
+            memory_context_tokens = len(assembled.system_prompt_addition or "") // 4
+            per_turn_tokens = sum(per_turn_result.token_breakdown.values())
+            history_tokens = estimate_messages_tokens(assembled.messages)
+            logger.info(
+                "token_usage turn=%d frozen=%d bootstrap=%d l1=%d memory_ctx=%d per_turn=%d history=%d "
+                "input=%d output=%d budget_remaining=%d cache_creation=%d cache_read=%d",
+                iteration,
+                frozen_tokens,
+                bootstrap_tokens,
+                l1_tokens,
+                memory_context_tokens,
+                per_turn_tokens,
+                history_tokens,
+                response.usage.input_tokens,
+                response.usage.output_tokens,
+                max(0, history_budget - history_tokens),
+                response.usage.cache_creation_input_tokens,
+                response.usage.cache_read_input_tokens,
+            )
+
+            if not response.tool_calls:
+                classification = classify_turn(
+                    text=response.text,
+                    tool_calls=response.tool_calls,
+                )
+                retry_limit = _retry_limit_for(classification, deps.config)
+                if (
+                    classification in ("planning", "reasoning", "empty")
+                    and retry_limit > 0
+                    and retry_counts[classification] < retry_limit
+                ):
+                    retry_counts[classification] += 1
+                    assistant_entry = MessageEntry(
+                        id=generate_entry_id(set(tree.entries.keys())),
+                        parent_id=tree.leaf_id,
+                        timestamp=now_iso(),
+                        role="assistant",
+                        content=response.text,
+                    )
+                    await _append(deps, tree, assistant_entry)
+
+                    retry_prompt = retry_message_for(classification)
+                    if retry_prompt is not None:
+                        retry_entry = MessageEntry(
+                            id=generate_entry_id(set(tree.entries.keys())),
+                            parent_id=tree.leaf_id,
+                            timestamp=now_iso(),
+                            role="user",
+                            content=retry_prompt,
+                        )
+                        await _append(deps, tree, retry_entry)
+                    continue
+
                 assistant_entry = MessageEntry(
                     id=generate_entry_id(set(tree.entries.keys())),
                     parent_id=tree.leaf_id,
@@ -443,18 +477,28 @@ async def run_agent_stream(
                     content=response.text,
                 )
                 await _append(deps, tree, assistant_entry)
-
-                retry_prompt = retry_message_for(classification)
-                if retry_prompt is not None:
-                    retry_entry = MessageEntry(
-                        id=generate_entry_id(set(tree.entries.keys())),
-                        parent_id=tree.leaf_id,
-                        timestamp=now_iso(),
-                        role="user",
-                        content=retry_prompt,
+                await deps.hooks.notify_response(
+                    ResponseObservation(
+                        session_id=request.session_id,
+                        assistant_text=response.text,
+                        tool_calls=[],
                     )
-                    await _append(deps, tree, retry_entry)
-                continue
+                )
+                await deps.context_engine.after_turn(
+                    request.session_id, tree.build_session_context()
+                )
+                final_text = response.text
+                terminated_by = "done"
+                yield Done(
+                    final_message=final_text,
+                    usage={
+                        "input": total_input_tokens,
+                        "output": total_output_tokens,
+                        "cache_creation": total_cache_creation_tokens,
+                        "cache_read": total_cache_read_tokens,
+                    },
+                )
+                return
 
             assistant_entry = MessageEntry(
                 id=generate_entry_id(set(tree.entries.keys())),
@@ -462,181 +506,155 @@ async def run_agent_stream(
                 timestamp=now_iso(),
                 role="assistant",
                 content=response.text,
+                tool_calls=response.tool_calls,
             )
             await _append(deps, tree, assistant_entry)
             await deps.hooks.notify_response(
                 ResponseObservation(
                     session_id=request.session_id,
                     assistant_text=response.text,
-                    tool_calls=[],
+                    tool_calls=response.tool_calls,
                 )
             )
-            await deps.context_engine.after_turn(
-                request.session_id, tree.build_session_context()
-            )
-            final_text = response.text
-            yield Done(
-                final_message=final_text,
-                usage={
-                    "input": total_input_tokens,
-                    "output": total_output_tokens,
-                    "cache_creation": total_cache_creation_tokens,
-                    "cache_read": total_cache_read_tokens,
-                },
-            )
-            return
 
-        assistant_entry = MessageEntry(
-            id=generate_entry_id(set(tree.entries.keys())),
-            parent_id=tree.leaf_id,
-            timestamp=now_iso(),
-            role="assistant",
-            content=response.text,
-            tool_calls=response.tool_calls,
-        )
-        await _append(deps, tree, assistant_entry)
-        await deps.hooks.notify_response(
-            ResponseObservation(
-                session_id=request.session_id,
-                assistant_text=response.text,
-                tool_calls=response.tool_calls,
-            )
-        )
-
-        (
-            unknown_tool_name,
-            unknown_tool_count,
-            unknown_tool_warned,
-            loop_action,
-            loop_guidance,
-        ) = _update_tool_loop_state(
-            response.tool_calls,
-            deps.tools,
-            unknown_tool_name,
-            unknown_tool_count,
-            unknown_tool_warned,
-            deps.config.retry.unknown_tool_threshold,
-        )
-
-        if loop_action == "terminate":
-            yield ErrorEvent(
-                error_code="tool_loop",
-                message=f"tool {unknown_tool_name!r} called after unknown-tool guidance",
-            )
-            return
-
-        if loop_action == "warn" and loop_guidance is not None:
-            guidance_entry = MessageEntry(
-                id=generate_entry_id(set(tree.entries.keys())),
-                parent_id=tree.leaf_id,
-                timestamp=now_iso(),
-                role="user",
-                content=loop_guidance,
-            )
-            await _append(deps, tree, guidance_entry)
-            continue
-
-        parsed_calls: list[tuple[dict, str, dict]] = []
-        for call in response.tool_calls:
-            fn = (call or {}).get("function") or {}
-            raw_args = fn.get("arguments") or {}
-            if isinstance(raw_args, str):
-                import json as _json
-                try:
-                    raw_args = _json.loads(raw_args)
-                except Exception:
-                    raw_args = {"_raw": raw_args}
-            parsed_calls.append((call, fn.get("name", "") or "", raw_args))
-            yield ToolCallStart(
-                tool_call_id=call.get("id", ""),
-                name=fn.get("name", "") or "",
-                arguments=raw_args,
+            (
+                unknown_tool_name,
+                unknown_tool_count,
+                unknown_tool_warned,
+                loop_action,
+                loop_guidance,
+            ) = _update_tool_loop_state(
+                response.tool_calls,
+                deps.tools,
+                unknown_tool_name,
+                unknown_tool_count,
+                unknown_tool_warned,
+                deps.config.retry.unknown_tool_threshold,
             )
 
-        if deps.tool_approval_hook is not None:
-            for call, tool_name, raw_args in parsed_calls:
-                yield ToolApprovalRequest(
+            if loop_action == "terminate":
+                terminated_by = "tool_loop"
+                yield ErrorEvent(
+                    error_code="tool_loop",
+                    message=f"tool {unknown_tool_name!r} called after unknown-tool guidance",
+                )
+                return
+
+            if loop_action == "warn" and loop_guidance is not None:
+                guidance_entry = MessageEntry(
+                    id=generate_entry_id(set(tree.entries.keys())),
+                    parent_id=tree.leaf_id,
+                    timestamp=now_iso(),
+                    role="user",
+                    content=loop_guidance,
+                )
+                await _append(deps, tree, guidance_entry)
+                continue
+
+            parsed_calls: list[tuple[dict, str, dict]] = []
+            for call in response.tool_calls:
+                fn = (call or {}).get("function") or {}
+                raw_args = fn.get("arguments") or {}
+                if isinstance(raw_args, str):
+                    import json as _json
+                    try:
+                        raw_args = _json.loads(raw_args)
+                    except Exception:
+                        raw_args = {"_raw": raw_args}
+                parsed_calls.append((call, fn.get("name", "") or "", raw_args))
+                yield ToolCallStart(
                     tool_call_id=call.get("id", ""),
-                    tool_name=tool_name,
-                    args=raw_args,
+                    name=fn.get("name", "") or "",
+                    arguments=raw_args,
                 )
 
-            decisions = await deps.tool_approval_hook.before_tool_execution(
-                [
-                    {"id": c.get("id", ""), "name": tn, "args": ra}
-                    for c, tn, ra in parsed_calls
-                ],
-                session_id=request.session_id,
+            if deps.tool_approval_hook is not None:
+                for call, tool_name, raw_args in parsed_calls:
+                    yield ToolApprovalRequest(
+                        tool_call_id=call.get("id", ""),
+                        tool_name=tool_name,
+                        args=raw_args,
+                    )
+
+                decisions = await deps.tool_approval_hook.before_tool_execution(
+                    [
+                        {"id": c.get("id", ""), "name": tn, "args": ra}
+                        for c, tn, ra in parsed_calls
+                    ],
+                    session_id=request.session_id,
+                )
+
+                denied_ids: set[str] = set()
+                for idx, decision in enumerate(decisions):
+                    if decision == "deny":
+                        denied_ids.add(parsed_calls[idx][0].get("id", ""))
+
+                if denied_ids:
+                    response.tool_calls = [
+                        tc for tc in response.tool_calls
+                        if tc.get("id", "") not in denied_ids
+                    ]
+                    if not response.tool_calls:
+                        for call, tool_name, _ in parsed_calls:
+                            cid = call.get("id", "")
+                            if cid in denied_ids:
+                                denied_result = ToolResult(
+                                    tool_call_id=cid,
+                                    content=[TextBlock(text=f"Tool '{tool_name}' was denied by approval hook.")],
+                                    is_error=True,
+                                )
+                                denied_entry = MessageEntry(
+                                    id=generate_entry_id(set(tree.entries.keys())),
+                                    parent_id=tree.leaf_id,
+                                    timestamp=now_iso(),
+                                    role="tool",
+                                    content=tool_result_to_llm_content(denied_result),
+                                    tool_call_id=cid,
+                                )
+                                await _append(deps, tree, denied_entry)
+                                yield ToolCallEnd(tool_call_id=cid, result=denied_result)
+                        continue
+
+            results: list[ToolResult] = await execute_tool_calls(
+                deps.tools,
+                response.tool_calls,
+                tool_ctx,
+                default_tool_timeout_s=deps.config.timeouts.tool_seconds,
             )
 
-            denied_ids: set[str] = set()
-            for idx, decision in enumerate(decisions):
-                if decision == "deny":
-                    denied_ids.add(parsed_calls[idx][0].get("id", ""))
+            truncated_results: list[ToolResult] = []
+            for call, result in zip(response.tool_calls, results, strict=False):
+                tool_name = ((call or {}).get("function") or {}).get("name") or ""
+                tool_obj = deps.tools.get(tool_name) if tool_name else None
+                cap = (
+                    resolve_max_output_chars(tool_obj, deps.config.tools.max_output_chars)
+                    if tool_obj is not None
+                    else deps.config.tools.max_output_chars
+                )
+                truncated_results.append(truncate_tool_result(result, cap))
+            results = truncated_results
 
-            if denied_ids:
-                response.tool_calls = [
-                    tc for tc in response.tool_calls
-                    if tc.get("id", "") not in denied_ids
-                ]
-                if not response.tool_calls:
-                    for call, tool_name, _ in parsed_calls:
-                        cid = call.get("id", "")
-                        if cid in denied_ids:
-                            denied_result = ToolResult(
-                                tool_call_id=cid,
-                                content=[TextBlock(text=f"Tool '{tool_name}' was denied by approval hook.")],
-                                is_error=True,
-                            )
-                            denied_entry = MessageEntry(
-                                id=generate_entry_id(set(tree.entries.keys())),
-                                parent_id=tree.leaf_id,
-                                timestamp=now_iso(),
-                                role="tool",
-                                content=tool_result_to_llm_content(denied_result),
-                                tool_call_id=cid,
-                            )
-                            await _append(deps, tree, denied_entry)
-                            yield ToolCallEnd(tool_call_id=cid, result=denied_result)
-                    continue
+            for call, result in zip(response.tool_calls, results, strict=False):
+                tool_entry = MessageEntry(
+                    id=generate_entry_id(set(tree.entries.keys())),
+                    parent_id=tree.leaf_id,
+                    timestamp=now_iso(),
+                    role="tool",
+                    content=tool_result_to_llm_content(result),
+                    tool_call_id=call.get("id", ""),
+                )
+                await _append(deps, tree, tool_entry)
+                yield ToolCallEnd(tool_call_id=call.get("id", ""), result=result)
 
-        results: list[ToolResult] = await execute_tool_calls(
-            deps.tools,
-            response.tool_calls,
-            tool_ctx,
-            default_tool_timeout_s=deps.config.timeouts.tool_seconds,
+            retry_counts = {"planning": 0, "reasoning": 0, "empty": 0}
+
+        terminated_by = "max_iterations"
+        yield ErrorEvent(
+            error_code="max_iterations",
+            message=f"reached max_iterations={deps.config.max_iterations}",
         )
-
-        truncated_results: list[ToolResult] = []
-        for call, result in zip(response.tool_calls, results, strict=False):
-            tool_name = ((call or {}).get("function") or {}).get("name") or ""
-            tool_obj = deps.tools.get(tool_name) if tool_name else None
-            cap = (
-                resolve_max_output_chars(tool_obj, deps.config.tools.max_output_chars)
-                if tool_obj is not None
-                else deps.config.tools.max_output_chars
-            )
-            truncated_results.append(truncate_tool_result(result, cap))
-        results = truncated_results
-
-        for call, result in zip(response.tool_calls, results, strict=False):
-            tool_entry = MessageEntry(
-                id=generate_entry_id(set(tree.entries.keys())),
-                parent_id=tree.leaf_id,
-                timestamp=now_iso(),
-                role="tool",
-                content=tool_result_to_llm_content(result),
-                tool_call_id=call.get("id", ""),
-            )
-            await _append(deps, tree, tool_entry)
-            yield ToolCallEnd(tool_call_id=call.get("id", ""), result=result)
-
-        retry_counts = {"planning": 0, "reasoning": 0, "empty": 0}
-
-    yield ErrorEvent(
-        error_code="max_iterations",
-        message=f"reached max_iterations={deps.config.max_iterations}",
-    )
+    finally:
+        await deps.hooks.notify_run_end(request.session_id, terminated_by)
 
 
 @dataclass
