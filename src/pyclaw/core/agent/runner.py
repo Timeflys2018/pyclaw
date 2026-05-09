@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pyclaw.core.agent.compaction import estimate_messages_tokens, take_checkpoint
+from pyclaw.core.agent.run_control import RunControl
 from pyclaw.core.agent.incomplete_turn import classify_turn, retry_message_for
 from pyclaw.core.agent.llm import (
     LLMClient,
@@ -159,9 +160,12 @@ async def run_agent_stream(
     deps: AgentRunnerDeps,
     *,
     tool_workspace_path,
+    control: RunControl | None = None,
     abort: asyncio.Event | None = None,
 ) -> AsyncIterator[Any]:
-    abort_event = abort if abort is not None else asyncio.Event()
+    if control is None:
+        control = RunControl(abort_event=abort) if abort is not None else RunControl()
+    abort_event = control.abort_event
     run_deadline_s = deps.config.timeouts.run_seconds
     run_started = time.monotonic()
 
