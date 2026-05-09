@@ -135,6 +135,46 @@ def _entry_to_llm_dict(entry: MessageEntry) -> dict[str, Any]:
     return out
 
 
+async def _persist_partial_assistant(
+    deps: AgentRunnerDeps,
+    tree: SessionTree,
+    text: str,
+) -> None:
+    """Persist already-streamed assistant text as a partial=True MessageEntry.
+
+    Best-effort persistence: failures (e.g., Redis connection drop in
+    session_store.append_entry) are logged at WARNING and SHALL NOT propagate.
+    The caller's `yield ErrorEvent(...)` is the must-deliver cross-layer
+    signal; partial persistence is data enrichment that can be sacrificed
+    under storage pressure.
+
+    `except Exception` is deliberate — `asyncio.CancelledError` and
+    `KeyboardInterrupt` inherit from `BaseException` (Python 3.8+) so they
+    propagate normally, which is correct (cancellation must not be swallowed).
+
+    Caller MUST gate on non-empty text. Caller MUST only invoke from
+    Bucket B paths (mid-stream / LLM-raised ErrorEvent exits).
+    """
+    if not text:
+        return
+    entry = MessageEntry(
+        id=generate_entry_id(set(tree.entries.keys())),
+        parent_id=tree.leaf_id,
+        timestamp=now_iso(),
+        role="assistant",
+        content=text,
+        partial=True,
+    )
+    try:
+        await _append(deps, tree, entry)
+    except Exception:
+        logger.warning(
+            "failed to persist partial assistant content (best-effort); "
+            "ErrorEvent dispatch will still proceed",
+            exc_info=True,
+        )
+
+
 async def run_agent(
     request: RunRequest,
     deps: AgentRunnerDeps,
@@ -355,6 +395,8 @@ async def run_agent_stream(
                 async for chunk in guarded_iter:
                     if _run_timed_out():
                         terminated_by = "timeout"
+                        if text_parts:
+                            await _persist_partial_assistant(deps, tree, "".join(text_parts))
                         yield ErrorEvent(
                             error_code="timeout",
                             message=f"run exceeded {run_deadline_s}s run_seconds during stream",
@@ -362,6 +404,8 @@ async def run_agent_stream(
                         return
                     if is_abort_set(abort_event):
                         terminated_by = "aborted"
+                        if text_parts:
+                            await _persist_partial_assistant(deps, tree, "".join(text_parts))
                         yield ErrorEvent(error_code="aborted", message="run aborted during llm stream")
                         return
                     if chunk.text_delta:
@@ -376,10 +420,14 @@ async def run_agent_stream(
                 _stream_elapsed = time.monotonic() - stream_start
             except AgentTimeoutError as te:
                 terminated_by = "timeout"
+                if text_parts:
+                    await _persist_partial_assistant(deps, tree, "".join(text_parts))
                 yield ErrorEvent(error_code="timeout", message=str(te))
                 return
             except AgentAbortedError:
                 terminated_by = "aborted"
+                if text_parts:
+                    await _persist_partial_assistant(deps, tree, "".join(text_parts))
                 yield ErrorEvent(error_code="aborted", message="run aborted during llm call")
                 return
             except LLMError as exc:
@@ -390,6 +438,8 @@ async def run_agent_stream(
                     )
                     if not outcome.ok:
                         terminated_by = outcome.error_code or "compaction_failed"
+                        if text_parts:
+                            await _persist_partial_assistant(deps, tree, "".join(text_parts))
                         yield ErrorEvent(
                             error_code=outcome.error_code or "compaction_failed",
                             message=outcome.error_message or "compaction failed",
@@ -398,6 +448,8 @@ async def run_agent_stream(
                     if outcome.compacted:
                         continue
                 terminated_by = exc.code
+                if text_parts:
+                    await _persist_partial_assistant(deps, tree, "".join(text_parts))
                 yield ErrorEvent(error_code=exc.code, message=str(exc))
                 return
 

@@ -55,6 +55,7 @@ class MessageEntry(SessionEntryBase):
     content: str | list[ContentBlock]
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
+    partial: bool = False
 
 
 class CompactionEntry(SessionEntryBase):
