@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, type FormEvent } from 'react'
 import { Send, Square, Clock } from 'lucide-react'
 import type { Message } from '../types'
+import { isProtocolOp } from '../protocol'
 import MessageBubble from './MessageBubble'
 
 interface Props {
@@ -32,7 +33,8 @@ export default function ChatArea({
   const submit = (e: FormEvent) => {
     e.preventDefault()
     const trimmed = input.trim()
-    if (!trimmed || isStreaming) return
+    if (!trimmed) return
+    if (isStreaming && !isProtocolOp(trimmed)) return
     onSend(trimmed)
     setInput('')
   }
@@ -112,7 +114,7 @@ export default function ChatArea({
             />
             <button
               type="submit"
-              disabled={!input.trim() || isStreaming}
+              disabled={!input.trim() || (isStreaming && !isProtocolOp(input))}
               className="shrink-0 w-11 h-11 rounded-xl bg-[var(--c-accent)] text-white grid place-items-center
                          hover:brightness-110 active:scale-95
                          disabled:opacity-30 disabled:pointer-events-none
