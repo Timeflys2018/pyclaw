@@ -189,6 +189,140 @@ async def cmd_model(args: str, ctx: CommandContext) -> None:
     await ctx.reply(f"✓ 模型已切换为 `{target}`（下次对话生效）")
 
 
+async def cmd_compact(args: str, ctx: CommandContext) -> None:
+    import asyncio as _asyncio
+
+    from pyclaw.core.agent.compaction import estimate_messages_tokens
+    from pyclaw.core.hooks import CompactionContext
+    from pyclaw.models import CompactionEntry, generate_entry_id, now_iso
+
+    cooldown_key = f"pyclaw:compact_cooldown:{ctx.session_id}"
+    if ctx.redis_client is not None:
+        try:
+            acquired = await ctx.redis_client.set(cooldown_key, "1", nx=True, ex=60)
+            if not acquired:
+                await ctx.reply("⏱ /compact 冷却中（60s 内只能触发一次）")
+                return
+        except Exception:
+            logger.warning("compact cooldown check failed; proceeding without lock", exc_info=True)
+
+    tree = await ctx.deps.session_store.load(ctx.session_id)
+    if tree is None:
+        await ctx.reply("❌ 会话不存在")
+        return
+
+    base_messages = tree.build_session_context()
+    if not base_messages:
+        await ctx.reply("📭 当前会话没有可压缩的消息")
+        return
+
+    config = ctx.deps.config
+    model_max_output: int | None = None
+    try:
+        from litellm import get_model_info
+
+        _info = get_model_info(getattr(ctx.deps.llm, "default_model", "gpt-4o"))
+        model_max_output = _info.get("max_output_tokens") or _info.get("max_tokens")
+    except Exception:
+        pass
+
+    history_budget = config.prompt_budget.compute_history_budget(
+        config.context_window, model_max_output=model_max_output
+    )
+
+    focus = args.strip()
+    engine_to_use = ctx.deps.context_engine
+    if focus:
+        engine_to_use = _wrap_context_engine_with_focus(ctx.deps.context_engine, focus)
+
+    compaction_ctx = CompactionContext(
+        session_id=ctx.session_id,
+        workspace_id=ctx.workspace_id,
+        agent_id=tree.header.agent_id,
+        message_count=len(base_messages),
+        tokens_before=estimate_messages_tokens(base_messages),
+    )
+    await ctx.deps.hooks.notify_before_compaction(compaction_ctx)
+
+    abort_event = _asyncio.Event()
+    try:
+        result = await engine_to_use.compact(
+            session_id=ctx.session_id,
+            messages=base_messages,
+            token_budget=history_budget,
+            force=True,
+            abort_event=abort_event,
+            model=config.compaction.model,
+        )
+    except Exception as exc:
+        logger.exception("compact handler failed")
+        await ctx.deps.hooks.notify_after_compaction(
+            compaction_ctx,
+            _failed_compact_result(str(exc)),
+        )
+        await ctx.reply(f"⚠️ 压缩失败：{type(exc).__name__}: {exc}")
+        return
+
+    compaction_ctx.tokens_before = result.tokens_before
+    await ctx.deps.hooks.notify_after_compaction(compaction_ctx, result)
+
+    if not result.ok:
+        await ctx.reply(f"⚠️ 压缩失败：{result.reason or 'unknown'}")
+        return
+
+    if not result.compacted:
+        await ctx.reply(f"ℹ️ 无需压缩：{result.reason or 'within-budget'}")
+        return
+
+    if result.summary:
+        comp_entry = CompactionEntry(
+            id=generate_entry_id(set(tree.entries.keys())),
+            parent_id=tree.leaf_id,
+            timestamp=now_iso(),
+            summary=result.summary,
+            first_kept_entry_id=tree.leaf_id or "",
+            tokens_before=result.tokens_before,
+        )
+        await ctx.deps.session_store.append_entry(
+            ctx.session_id, comp_entry, leaf_id=comp_entry.id
+        )
+
+    tokens_saved = max(0, result.tokens_before - (result.tokens_after or 0))
+    await ctx.reply(f"✓ 压缩完成，节省约 {tokens_saved} tokens")
+
+
+def _wrap_context_engine_with_focus(engine: object, focus: str) -> object:
+    class _FocusedEngine:
+        def __init__(self) -> None:
+            self._inner = engine
+            self._focus = focus
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._inner, name)
+
+        async def compact(self, **kwargs: object) -> object:
+            messages = kwargs.get("messages") or []
+            focus_msg = {
+                "role": "system",
+                "content": f"Compaction focus from user: {self._focus}",
+            }
+            kwargs["messages"] = [focus_msg, *messages]
+            return await self._inner.compact(**kwargs)
+
+    return _FocusedEngine()
+
+
+def _failed_compact_result(error: str) -> object:
+    from pyclaw.models import CompactResult
+
+    return CompactResult(
+        ok=False,
+        compacted=False,
+        reason=f"handler exception: {error}",
+        reason_code="handler_error",
+    )
+
+
 async def cmd_help(args: str, ctx: CommandContext) -> None:
     from pyclaw.core.commands.registry import get_default_registry
 
@@ -312,5 +446,16 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             aliases=["/models"],
             channels=ALL_CHANNELS,
             requires_idle=False,
+        )
+    )
+    registry.register(
+        CommandSpec(
+            name="/compact",
+            handler=cmd_compact,
+            category="context",
+            help_text="手动压缩会话上下文（60s 冷却）",
+            args_hint="[focus]",
+            channels=ALL_CHANNELS,
+            requires_idle=True,
         )
     )
