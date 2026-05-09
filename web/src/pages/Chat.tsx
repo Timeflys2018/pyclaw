@@ -292,7 +292,7 @@ export default function Chat() {
       const data = await res.json()
       const newId = data.session_id
       setConversations((prev) => [
-        { id: newId, title: newId.split(':').pop()?.slice(0, 8) ?? 'New', updatedAt: Date.now(), active: true },
+        { id: newId, title: 'New chat', updatedAt: Date.now(), active: true },
         ...prev,
       ])
       setActiveConvId(newId)
