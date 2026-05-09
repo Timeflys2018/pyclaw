@@ -39,6 +39,7 @@ class FeishuChannelPlugin:
         memory_store: MemoryStore | None = None,
         redis_client: Any = None,  # noqa: ANN401
         evolution_settings: Any = None,  # noqa: ANN401
+        agent_settings: Any = None,  # noqa: ANN401
     ) -> None:
         self._settings = settings
         self._feishu_client = feishu_client
@@ -50,6 +51,7 @@ class FeishuChannelPlugin:
         self._memory_store = memory_store
         self._redis_client = redis_client
         self._evolution_settings = evolution_settings
+        self._agent_settings = agent_settings
         self._ws_client: lark.ws.Client | None = None
         self._main_loop: asyncio.AbstractEventLoop | None = None
         self._ws_loop: asyncio.AbstractEventLoop | None = None
@@ -142,6 +144,7 @@ class FeishuChannelPlugin:
             memory_store=memory_store,
             evolution_settings=evolution_settings,
             nudge_hook=nudge_hook,
+            agent_settings=self._agent_settings,
         )
 
         def _sync_handler(event: P2ImMessageReceiveV1) -> None:

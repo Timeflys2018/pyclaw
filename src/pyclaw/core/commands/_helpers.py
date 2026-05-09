@@ -34,6 +34,16 @@ async def idle_guard_check(
     return True
 
 
+def list_available_models(agent_settings: Any) -> dict[str, list[str]]:
+    providers = getattr(agent_settings, "providers", None) or {}
+    result: dict[str, list[str]] = {}
+    for name, ps in providers.items():
+        models = list(getattr(ps, "models", []) or [])
+        if models:
+            result[name] = models
+    return result
+
+
 def parse_idle_duration(arg: str) -> int | None:
     arg = arg.strip().lower()
     if arg in ("off", "0", "disable", "关闭"):

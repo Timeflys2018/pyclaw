@@ -44,6 +44,7 @@ class WebCommandAdapter:
         evolution_settings: Any = None,
         nudge_hook: Any = None,
         session_queue: Any = None,
+        agent_settings: Any = None,
     ) -> bool:
         if not text or not text.strip().startswith("/"):
             return False
@@ -109,6 +110,7 @@ class WebCommandAdapter:
             memory_store=memory_store,
             evolution_settings=evolution_settings,
             nudge_hook=nudge_hook,
+            agent_settings=agent_settings,
             reply=reply,
             dispatch_user_message=dispatch_user_message,
             registry=self._registry,

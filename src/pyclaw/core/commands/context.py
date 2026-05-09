@@ -32,5 +32,6 @@ class CommandContext:
     memory_store: Any = None
     evolution_settings: Any = None
     nudge_hook: Any = None
+    agent_settings: Any = None
     registry: "CommandRegistry | None" = None
     command_timeout: float = 30.0

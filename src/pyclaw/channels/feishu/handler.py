@@ -42,6 +42,7 @@ class FeishuContext:
     memory_store: Any = None
     evolution_settings: Any = None
     nudge_hook: Any = None
+    agent_settings: Any = None
 
 
 def build_session_key(app_id: str, event: Any, scope: str) -> str:

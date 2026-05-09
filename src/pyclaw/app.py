@@ -123,6 +123,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             memory_store=memory_store,
             redis_client=redis_client,
             evolution_settings=settings.evolution if settings.evolution.enabled else None,
+            agent_settings=settings.agent,
         )
         app.state.feishu_channel = feishu_channel
         await feishu_channel.start()
@@ -218,6 +219,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             evolution_settings=settings.evolution if settings.evolution.enabled else None,
             nudge_hook=web_nudge_hook,
             llm_client=runner_deps.llm,
+            agent_settings=settings.agent,
             worker_registry=worker_registry,
         )
 

@@ -240,6 +240,7 @@ async def _try_slash_command(
             evolution_settings=web_deps.evolution_settings,
             nudge_hook=web_deps.nudge_hook,
             session_queue=web_deps.session_queue,
+            agent_settings=web_deps.agent_settings,
         )
 
     from pyclaw.channels.web.routes import (

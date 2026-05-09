@@ -213,11 +213,14 @@ async def run_agent_stream(
             skills_prompt_str = deps.skill_provider.resolve_skills_prompt(str(tool_workspace_path))
 
         tool_summaries = [(t.name, t.description) for t in (deps.tools.get(n) for n in deps.tools.names()) if t is not None]
+        effective_model = (
+            request.model or tree.header.model_override or deps.llm.default_model
+        )
         prompt_inputs = PromptInputs(
             session_id=request.session_id,
             workspace_id=request.workspace_id,
             agent_id=request.agent_id,
-            model=request.model or deps.llm.default_model,
+            model=effective_model,
             tools=tool_summaries,
             skills_prompt=skills_prompt_str,
             workspace_path=str(tool_workspace_path),
@@ -247,7 +250,6 @@ async def run_agent_stream(
             l1_snapshot=l1_snapshot_text,
         )
 
-        effective_model = request.model or deps.llm.default_model
         model_max_output: int | None = None
         try:
             from litellm import get_model_info
@@ -337,7 +339,7 @@ async def run_agent_stream(
             try:
                 stream_iter = deps.llm.stream(
                     messages=assembled.messages,
-                    model=request.model,
+                    model=effective_model,
                     tools=deps.tools.list_for_llm() or None,
                     system=effective_system,
                     idle_seconds=deps.config.timeouts.idle_seconds,

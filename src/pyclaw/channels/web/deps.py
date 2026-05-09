@@ -30,6 +30,7 @@ class WebDeps:
     evolution_settings: Any = None
     nudge_hook: Any = None
     llm_client: Any = None
+    agent_settings: Any = None
     worker_registry: "WorkerRegistry | None" = None
 
 

@@ -103,6 +103,7 @@ class FeishuCommandAdapter:
             memory_store=ctx.memory_store,
             evolution_settings=ctx.evolution_settings,
             nudge_hook=ctx.nudge_hook,
+            agent_settings=ctx.agent_settings,
             reply=reply,
             dispatch_user_message=dispatch_user_message,
             registry=self._registry,

@@ -4,6 +4,7 @@ import logging
 
 from pyclaw.core.commands._helpers import (
     format_session_status,
+    list_available_models,
     parse_idle_duration,
     run_extract,
 )
@@ -137,6 +138,57 @@ async def cmd_extract(args: str, ctx: CommandContext) -> None:
     await ctx.reply(format_extraction_result_zh(result))
 
 
+async def cmd_model(args: str, ctx: CommandContext) -> None:
+    from pyclaw.models import ModelChangeEntry, generate_entry_id, now_iso
+
+    target = args.strip()
+    available = list_available_models(ctx.agent_settings)
+
+    if not target:
+        tree = await ctx.deps.session_store.load(ctx.session_id)
+        current = (
+            tree.header.model_override if tree and tree.header.model_override else None
+        ) or getattr(ctx.deps.llm, "default_model", "(unknown)")
+
+        lines = [f"🤖 当前模型: `{current}`", ""]
+        if available:
+            lines.append("可用模型:")
+            for provider, models in sorted(available.items()):
+                lines.append(f"  📦 {provider}")
+                for m in models:
+                    lines.append(f"    • {m}")
+        else:
+            lines.append("⚠️ 配置中尚未声明可用模型列表 (agent.providers.<name>.models)。")
+        await ctx.reply("\n".join(lines))
+        return
+
+    tree = await ctx.deps.session_store.load(ctx.session_id)
+    if tree is None:
+        await ctx.reply("❌ 会话不存在")
+        return
+
+    updated_header = tree.header.model_copy(update={"model_override": target})
+    updated_tree = tree.model_copy(update={"header": updated_header})
+    await ctx.deps.session_store.save_header(updated_tree)
+
+    provider = "unknown"
+    for prov, models in available.items():
+        if target in models:
+            provider = prov
+            break
+
+    entry = ModelChangeEntry(
+        id=generate_entry_id(set(tree.entries.keys())),
+        parent_id=tree.leaf_id,
+        timestamp=now_iso(),
+        provider=provider,
+        model_id=target,
+    )
+    await ctx.deps.session_store.append_entry(ctx.session_id, entry, leaf_id=entry.id)
+
+    await ctx.reply(f"✓ 模型已切换为 `{target}`（下次对话生效）")
+
+
 async def cmd_help(args: str, ctx: CommandContext) -> None:
     from pyclaw.core.commands.registry import get_default_registry
 
@@ -248,5 +300,17 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             aliases=["/learn"],
             channels=ALL_CHANNELS,
             requires_idle=True,
+        )
+    )
+    registry.register(
+        CommandSpec(
+            name="/model",
+            handler=cmd_model,
+            category="model",
+            help_text="查看/切换当前会话使用的 LLM 模型",
+            args_hint="[name]",
+            aliases=["/models"],
+            channels=ALL_CHANNELS,
+            requires_idle=False,
         )
     )

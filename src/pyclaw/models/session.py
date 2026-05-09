@@ -32,6 +32,7 @@ class SessionHeader(BaseModel):
     session_key: str = ""
     last_interaction_at: str | None = None
     idle_minutes_override: int | None = None
+    model_override: str | None = None
 
 
 class SessionHistorySummary(BaseModel):

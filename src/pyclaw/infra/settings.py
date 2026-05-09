@@ -138,6 +138,7 @@ class EmbeddingSettings(BaseSettings):
 class ProviderSettings(BaseSettings):
     api_key: str | None = Field(default=None, alias="apiKey")
     base_url: str | None = Field(default=None, alias="baseURL")
+    models: list[str] = Field(default_factory=list)
 
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
 
