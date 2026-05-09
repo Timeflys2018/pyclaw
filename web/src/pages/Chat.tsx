@@ -35,6 +35,7 @@ export default function Chat() {
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null)
 
   const toolCallsRef = useRef<ToolCallInfo[]>([])
+  const streamingTextRef = useRef('')
 
   const currentMessages = activeConvId ? messagesByConv[activeConvId] ?? [] : []
 
@@ -90,7 +91,8 @@ export default function Chat() {
       case 'chat.delta':
         setIsQueued(false)
         setIsStreaming(true)
-        setStreamingText((prev) => prev + msg.data.text)
+        streamingTextRef.current = streamingTextRef.current + msg.data.text
+        setStreamingText(streamingTextRef.current)
         break
 
       case 'chat.tool_start': {
@@ -119,12 +121,13 @@ export default function Chat() {
           const finalText = typeof msg.data.final_message === 'string'
             ? msg.data.final_message
             : msg.data.final_message?.content ?? ''
+          const partial = streamingTextRef.current
 
-          if (aborted && streamingText) {
+          if (aborted && partial) {
             const partialMsg: Message = {
               id: `asst_partial_${Date.now()}`,
               role: 'assistant',
-              content: streamingText,
+              content: partial,
               timestamp: Date.now(),
               toolCalls:
                 toolCallsRef.current.length > 0
@@ -149,6 +152,7 @@ export default function Chat() {
             appendMessage(convId, finalMsg)
           }
         }
+        streamingTextRef.current = ''
         setStreamingText('')
         setIsStreaming(false)
         setIsQueued(false)
@@ -173,9 +177,38 @@ export default function Chat() {
         }
         break
 
-      case 'error':
+      case 'error': {
         console.error('[ws error]', msg.data.message)
+        if (convId) {
+          const partial = streamingTextRef.current
+          if (partial) {
+            const partialMsg: Message = {
+              id: `asst_partial_${Date.now()}`,
+              role: 'assistant',
+              content: partial,
+              timestamp: Date.now(),
+              toolCalls:
+                toolCallsRef.current.length > 0
+                  ? [...toolCallsRef.current]
+                  : undefined,
+            }
+            appendMessage(convId, partialMsg)
+          }
+          const errMsg: Message = {
+            id: `err_${Date.now()}`,
+            role: 'assistant',
+            content: `⚠️ ${msg.data.message || 'Internal error'}`,
+            timestamp: Date.now(),
+          }
+          appendMessage(convId, errMsg)
+        }
+        streamingTextRef.current = ''
+        setStreamingText('')
+        setIsStreaming(false)
+        setIsQueued(false)
+        toolCallsRef.current = []
         break
+      }
     }
   }, [lastMessage, appendMessage])
 
@@ -263,6 +296,7 @@ export default function Chat() {
         ...prev,
       ])
       setActiveConvId(newId)
+      streamingTextRef.current = ''
       setStreamingText('')
     } catch {}
   }, [token, setConversations])
