@@ -372,11 +372,14 @@ async def _run_chat(
             elif isinstance(event, ErrorEvent):
                 aborted = event.error_code == "aborted"
                 if aborted:
-                    await send_event(state, SERVER_CHAT_DONE, msg.conversation_id, {
-                        "final_message": "",
-                        "usage": {},
-                        "aborted": True,
-                    })
+                    if rc.chat_done_handled_externally:
+                        rc.chat_done_handled_externally = False
+                    else:
+                        await send_event(state, SERVER_CHAT_DONE, msg.conversation_id, {
+                            "final_message": "",
+                            "usage": {},
+                            "aborted": True,
+                        })
                 else:
                     await send_event(state, SERVER_ERROR, msg.conversation_id, {
                         "message": event.message,

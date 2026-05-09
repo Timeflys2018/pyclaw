@@ -125,6 +125,7 @@ async def handle_stop_feishu(ctx: "FeishuContext", session_id: str, message_id: 
     assert ctx.queue_registry is not None, "queue_registry must be set on FeishuContext"
     rc = ctx.queue_registry.get_run_control(session_id)
     if rc.is_active():
+        rc.chat_done_handled_externally = True
         rc.stop()
         await ctx.feishu_client.reply_text(message_id, "🛑 已停止")
     else:

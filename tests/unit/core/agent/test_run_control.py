@@ -60,3 +60,16 @@ def test_no_reserved_fields_present() -> None:
     rc = RunControl()
     assert not hasattr(rc, "steer_buffer")
     assert not hasattr(rc, "side_channel")
+
+
+def test_chat_done_handled_externally_default_false() -> None:
+    rc = RunControl()
+    assert rc.chat_done_handled_externally is False
+
+
+def test_chat_done_handled_externally_is_writable_marker() -> None:
+    rc = RunControl()
+    rc.chat_done_handled_externally = True
+    assert rc.chat_done_handled_externally is True
+    rc.chat_done_handled_externally = False
+    assert rc.chat_done_handled_externally is False

@@ -97,6 +97,12 @@ async def test_stop_bypass_aborts_inflight_run_within_200ms() -> None:
     assert len(stop_replies) == 1, f"expected 1 '🛑 已停止' reply, got {stop_replies!r}"
     assert stop_replies[0]["data"]["aborted"] is True
 
+    chat_done_payloads = [p for p in sent_payloads if p["type"] == SERVER_CHAT_DONE]
+    assert len(chat_done_payloads) == 1, (
+        f"expected exactly 1 chat.done after /stop (no duplicate from runner abort path), "
+        f"got {len(chat_done_payloads)}: {chat_done_payloads!r}"
+    )
+
     queued_replies = [p for p in sent_payloads if p["type"] == SERVER_CHAT_QUEUED]
     assert len(queued_replies) == 0, "/stop must NOT be enqueued"
 

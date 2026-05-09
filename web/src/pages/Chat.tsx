@@ -115,20 +115,39 @@ export default function Chat() {
 
       case 'chat.done': {
         if (convId) {
-          const content = typeof msg.data.final_message === 'string'
+          const aborted = msg.data.aborted === true
+          const finalText = typeof msg.data.final_message === 'string'
             ? msg.data.final_message
-            : msg.data.final_message?.content ?? streamingText
-          const finalMsg: Message = {
-            id: `asst_${Date.now()}`,
-            role: 'assistant',
-            content,
-            timestamp: Date.now(),
-            toolCalls:
-              toolCallsRef.current.length > 0
-                ? [...toolCallsRef.current]
-                : undefined,
+            : msg.data.final_message?.content ?? ''
+
+          if (aborted && streamingText) {
+            const partialMsg: Message = {
+              id: `asst_partial_${Date.now()}`,
+              role: 'assistant',
+              content: streamingText,
+              timestamp: Date.now(),
+              toolCalls:
+                toolCallsRef.current.length > 0
+                  ? [...toolCallsRef.current]
+                  : undefined,
+            }
+            appendMessage(convId, partialMsg)
           }
-          appendMessage(convId, finalMsg)
+
+          const shouldShowFinal = finalText.trim().length > 0
+          if (shouldShowFinal) {
+            const finalMsg: Message = {
+              id: `asst_${Date.now()}`,
+              role: 'assistant',
+              content: finalText,
+              timestamp: Date.now(),
+              toolCalls:
+                !aborted && toolCallsRef.current.length > 0
+                  ? [...toolCallsRef.current]
+                  : undefined,
+            }
+            appendMessage(convId, finalMsg)
+          }
         }
         setStreamingText('')
         setIsStreaming(false)

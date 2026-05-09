@@ -31,6 +31,7 @@ class RunControl:
 
     abort_event: asyncio.Event = field(default_factory=asyncio.Event)
     active: bool = False
+    chat_done_handled_externally: bool = False
 
     def stop(self) -> None:
         self.abort_event.set()

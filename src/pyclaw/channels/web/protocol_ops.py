@@ -15,6 +15,7 @@ async def handle_stop_command(state: ConnectionState, conversation_id: str) -> N
     rc = session_queue.get_run_control(conversation_id)
 
     if rc.is_active():
+        rc.chat_done_handled_externally = True
         rc.stop()
         await send_event(
             state,
