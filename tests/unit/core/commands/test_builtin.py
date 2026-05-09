@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -56,7 +55,6 @@ def _build_ctx(
             memory_store=memory_store,
             evolution_settings=evolution_settings,
             nudge_hook=nudge_hook,
-            abort_event=asyncio.Event(),
             reply=reply,
             dispatch_user_message=dispatch,
             registry=registry,

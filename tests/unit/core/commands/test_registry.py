@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -23,7 +22,6 @@ def _make_ctx(channel: str = "feishu", **overrides) -> CommandContext:
         deps=MagicMock(),
         session_router=MagicMock(),
         workspace_base=Path("/tmp"),
-        abort_event=asyncio.Event(),
         reply=reply,
         dispatch_user_message=dispatch,
         raw={"channel": channel},

@@ -97,7 +97,6 @@ class FeishuCommandAdapter:
             memory_store=ctx.memory_store,
             evolution_settings=ctx.evolution_settings,
             nudge_hook=ctx.nudge_hook,
-            abort_event=asyncio.Event(),
             reply=reply,
             dispatch_user_message=dispatch_user_message,
             registry=self._registry,

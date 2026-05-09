@@ -57,7 +57,10 @@ class CommandRegistry:
             allowed = sorted(spec.channels)
             await ctx.reply(f"❌ 命令 {name} 仅在 {allowed} 可用")
             return True
-        await spec.handler(args, ctx)
+        try:
+            await asyncio.wait_for(spec.handler(args, ctx), timeout=ctx.command_timeout)
+        except asyncio.TimeoutError:
+            await ctx.reply(f"⏱ 命令 {name} 超过 {ctx.command_timeout}s 未完成")
         return True
 
 

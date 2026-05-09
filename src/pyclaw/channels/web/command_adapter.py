@@ -103,7 +103,6 @@ class WebCommandAdapter:
             memory_store=memory_store,
             evolution_settings=evolution_settings,
             nudge_hook=nudge_hook,
-            abort_event=asyncio.Event(),
             reply=reply,
             dispatch_user_message=dispatch_user_message,
             registry=self._registry,

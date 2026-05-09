@@ -167,6 +167,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             help_text="开启新会话（可选附带初始消息）",
             args_hint="[消息]",
             channels=ALL_CHANNELS,
+            requires_idle=True,
         )
     )
     registry.register(
@@ -177,6 +178,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             help_text="重置会话（同 /new，提示语不同）",
             args_hint="[消息]",
             channels=ALL_CHANNELS,
+            requires_idle=True,
         )
     )
     registry.register(
@@ -233,5 +235,6 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             help_text="手动触发 SOP 提取",
             aliases=["/learn"],
             channels=ALL_CHANNELS,
+            requires_idle=True,
         )
     )

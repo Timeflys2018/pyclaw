@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +23,6 @@ class CommandContext:
     session_router: "SessionRouter"
     workspace_base: Path
 
-    abort_event: asyncio.Event
     reply: Callable[[str], Awaitable[None]]
     dispatch_user_message: Callable[[str], Awaitable[None]]
 
@@ -35,3 +33,4 @@ class CommandContext:
     evolution_settings: Any = None
     nudge_hook: Any = None
     registry: "CommandRegistry | None" = None
+    command_timeout: float = 30.0

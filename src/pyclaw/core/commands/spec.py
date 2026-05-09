@@ -21,3 +21,4 @@ class CommandSpec:
     channels: frozenset[str] = field(default_factory=lambda: ALL_CHANNELS)
     aliases: list[str] = field(default_factory=list)
     args_hint: str = ""
+    requires_idle: bool = False
