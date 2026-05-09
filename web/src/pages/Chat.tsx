@@ -267,18 +267,20 @@ export default function Chat() {
       const res = await fetch(`/api/sessions/${encodeURIComponent(convId)}/messages?limit=100`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (res.ok) {
-        const entries = await res.json()
-        if (Array.isArray(entries) && entries.length > 0) {
-          const msgs: Message[] = entries.map((e: { role: string; content?: string; id?: string; timestamp?: string }) => ({
-            id: e.id ?? `msg_${Math.random().toString(36).slice(2)}`,
-            role: e.role === 'user' ? 'user' : 'assistant',
-            content: e.content ?? '',
-            timestamp: e.timestamp ? new Date(e.timestamp).getTime() : Date.now(),
-          }))
-          setMessagesByConv((prev) => ({ ...prev, [convId]: msgs }))
-        }
-      }
+      if (!res.ok) return
+      const entries = await res.json()
+      if (!Array.isArray(entries)) return
+      const serverMsgs: Message[] = entries.map((e: { role: string; content?: string; id?: string; timestamp?: string }) => ({
+        id: e.id ?? `msg_${Math.random().toString(36).slice(2)}`,
+        role: e.role === 'user' ? 'user' : 'assistant',
+        content: e.content ?? '',
+        timestamp: e.timestamp ? new Date(e.timestamp).getTime() : Date.now(),
+      }))
+      setMessagesByConv((prev) => {
+        const local = prev[convId] ?? []
+        if (serverMsgs.length === 0 && local.length > 0) return prev
+        return { ...prev, [convId]: serverMsgs }
+      })
     } catch {}
   }, [token])
 
