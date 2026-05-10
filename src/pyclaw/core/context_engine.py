@@ -22,6 +22,8 @@ from pyclaw.core.agent.compaction import (
 from pyclaw.models import AssembleResult, CompactResult
 from pyclaw.storage.workspace.base import WorkspaceStore
 
+ARCHIVE_CACHE_MAX_ENTRIES = 200
+
 
 def _derive_workspace_id(session_id: str) -> str:
     idx = session_id.find(":s:")
@@ -89,6 +91,7 @@ class DefaultContextEngine:
         self._bootstrap_cache: dict[str, str] = {}
         self._memory_store = memory_store
         self._l1_cache: dict[str, list[Any]] = {}
+        self._archive_cache: dict[str, tuple[str, list[Any]]] = {}
         if memory_settings is None:
             from pyclaw.infra.settings import MemorySettings
             memory_settings = MemorySettings()
@@ -153,17 +156,26 @@ class DefaultContextEngine:
                 logging.getLogger(__name__).warning(
                     "memory_store.search (L2/L3) failed for session %s", session_id, exc_info=True,
                 )
-            try:
-                archive_results = await self._memory_store.search_archives(
-                    session_key, prompt,
-                    limit=cfg.archive_max_results,
-                    min_similarity=cfg.archive_min_similarity,
-                )
-            except Exception:
-                import logging
-                logging.getLogger(__name__).warning(
-                    "memory_store.search_archives (L4) failed for session %s", session_id, exc_info=True,
-                )
+            if cfg.archive_enabled:
+                cached = self._archive_cache.get(session_id)
+                if cached is not None and cached[0] == prompt:
+                    archive_results = list(cached[1])
+                else:
+                    try:
+                        archive_results = await self._memory_store.search_archives(
+                            session_key, prompt,
+                            limit=cfg.archive_max_results,
+                            min_similarity=cfg.archive_min_similarity,
+                        )
+                        if len(self._archive_cache) >= ARCHIVE_CACHE_MAX_ENTRIES:
+                            oldest_session_id = next(iter(self._archive_cache))
+                            del self._archive_cache[oldest_session_id]
+                        self._archive_cache[session_id] = (prompt, archive_results)
+                    except Exception:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            "memory_store.search_archives (L4) failed for session %s", session_id, exc_info=True,
+                        )
 
         memory_context = self._format_memory_context(l2l3_results, archive_results)
         return AssembleResult(
@@ -366,7 +378,7 @@ class DefaultContextEngine:
             raise _CompactionAborted() from ae
 
     async def after_turn(self, session_id: str, messages: list[dict[str, Any]]) -> None:
-        return None
+        self._archive_cache.pop(session_id, None)
 
 
 class _CompactionTimeout(Exception):

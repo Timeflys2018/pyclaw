@@ -194,3 +194,189 @@ def test_format_memory_context_old_signature_rejected() -> None:
     """
     with pytest.raises(TypeError):
         DefaultContextEngine._format_memory_context([])  # type: ignore[call-arg]
+
+
+# ============================================================================
+# add-archive-toggle-and-per-turn-cache change — 9 new tests
+#
+# Mock pattern: AsyncMock for memory_store; explicit stub
+#   `ms.search.return_value = []` + `ms.search_archives.return_value = [...]`
+# Assertion via `assert_called_once()` / `.call_count == N` / `.assert_not_called()`.
+# ============================================================================
+
+
+from pyclaw.infra.settings import MemorySettings
+
+
+@pytest.mark.asyncio
+async def test_assemble_skips_search_archives_when_archive_disabled() -> None:
+    """Spec scenario: archive_enabled=False causes search_archives skip."""
+    ms = AsyncMock()
+    ms.search.return_value = []
+    ms.search_archives.return_value = []
+    settings = MemorySettings(archive_enabled=False)
+    engine = DefaultContextEngine(memory_store=ms, memory_settings=settings)
+
+    result = await engine.assemble(
+        session_id="web:admin:s:abc",
+        messages=[],
+        prompt="hello",
+    )
+
+    ms.search_archives.assert_not_called()
+    assert result.system_prompt_addition is None or "<archives>" not in result.system_prompt_addition
+
+
+@pytest.mark.asyncio
+async def test_assemble_calls_search_archives_when_archive_enabled() -> None:
+    """Spec scenario: archive_enabled=True invokes search_archives normally."""
+    ms = AsyncMock()
+    ms.search.return_value = []
+    ms.search_archives.return_value = []
+    settings = MemorySettings(archive_enabled=True)
+    engine = DefaultContextEngine(memory_store=ms, memory_settings=settings)
+
+    await engine.assemble(
+        session_id="web:admin:s:abc",
+        messages=[],
+        prompt="hello",
+    )
+
+    ms.search_archives.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "env_value,expected",
+    [
+        ("false", False),
+        ("False", False),
+        ("0", False),
+        ("no", False),
+        ("true", True),
+        (None, True),
+    ],
+)
+def test_archive_enabled_from_env_var(monkeypatch, env_value: str | None, expected: bool) -> None:
+    """Spec scenario: archive_enabled set via environment variable, with default fallback."""
+    if env_value is None:
+        monkeypatch.delenv("PYCLAW_MEMORY_ARCHIVE_ENABLED", raising=False)
+    else:
+        monkeypatch.setenv("PYCLAW_MEMORY_ARCHIVE_ENABLED", env_value)
+    settings = MemorySettings()
+    assert settings.archive_enabled is expected
+
+
+@pytest.mark.asyncio
+async def test_assemble_cache_hit_skips_embedding_call_within_turn() -> None:
+    """Spec scenario: Cache hit within same user turn skips embedding API call."""
+    ms = AsyncMock()
+    ms.search.return_value = []
+    cached_entry = _archive_entry("web:admin:s:f8b9701e8f80cb8b", "summary 1", similarity=0.74)
+    ms.search_archives.return_value = [cached_entry]
+    engine = DefaultContextEngine(memory_store=ms)
+
+    result1 = await engine.assemble(session_id="s1", messages=[], prompt="hello")
+    result2 = await engine.assemble(session_id="s1", messages=[], prompt="hello")
+
+    assert ms.search_archives.call_count == 1
+    assert "summary 1" in (result1.system_prompt_addition or "")
+    assert "summary 1" in (result2.system_prompt_addition or "")
+
+
+@pytest.mark.asyncio
+async def test_assemble_cache_miss_when_prompt_changes() -> None:
+    """Spec scenario: Cache miss when prompt changes for same session."""
+    ms = AsyncMock()
+    ms.search.return_value = []
+    ms.search_archives.return_value = [_archive_entry("web:admin:s:abc", "any", similarity=0.6)]
+    engine = DefaultContextEngine(memory_store=ms)
+
+    await engine.assemble(session_id="s1", messages=[], prompt="prompt_one")
+    await engine.assemble(session_id="s1", messages=[], prompt="prompt_two")
+
+    assert ms.search_archives.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_after_turn_clears_session_cache() -> None:
+    """Spec scenario: after_turn removes cache entry for the session."""
+    ms = AsyncMock()
+    ms.search.return_value = []
+    ms.search_archives.return_value = [_archive_entry("web:admin:s:abc", "any", similarity=0.6)]
+    engine = DefaultContextEngine(memory_store=ms)
+
+    await engine.assemble(session_id="s1", messages=[], prompt="hello")
+    assert "s1" in engine._archive_cache
+
+    await engine.after_turn("s1", [])
+    assert "s1" not in engine._archive_cache
+
+    await engine.assemble(session_id="s1", messages=[], prompt="hello")
+    assert ms.search_archives.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_archive_disabled_does_not_use_cache() -> None:
+    """Spec scenario: archive_enabled=False does not read existing cache entries."""
+    ms = AsyncMock()
+    ms.search.return_value = []
+    cached_entry = _archive_entry("web:admin:s:f8b9701e8f80cb8b", "stale data", similarity=0.74)
+    ms.search_archives.return_value = [cached_entry]
+
+    settings = MemorySettings(archive_enabled=True)
+    engine = DefaultContextEngine(memory_store=ms, memory_settings=settings)
+    await engine.assemble(session_id="s1", messages=[], prompt="hello")
+    assert "s1" in engine._archive_cache
+    cache_snapshot = dict(engine._archive_cache)
+
+    engine._memory_settings = MemorySettings(archive_enabled=False)
+    ms.search_archives.reset_mock()
+
+    result = await engine.assemble(session_id="s1", messages=[], prompt="hello")
+
+    ms.search_archives.assert_not_called()
+    assert result.system_prompt_addition is None or "<archives>" not in result.system_prompt_addition
+    assert engine._archive_cache == cache_snapshot
+
+
+@pytest.mark.asyncio
+async def test_fifo_eviction_at_cap(monkeypatch) -> None:
+    """Spec scenario: FIFO eviction triggers at cap.
+
+    Patches ARCHIVE_CACHE_MAX_ENTRIES to 3 to make the test fast and obvious.
+    """
+    from pyclaw.core import context_engine as ce_module
+    monkeypatch.setattr(ce_module, "ARCHIVE_CACHE_MAX_ENTRIES", 3)
+
+    ms = AsyncMock()
+    ms.search.return_value = []
+    ms.search_archives.return_value = [_archive_entry("web:admin:s:abc", "any", similarity=0.6)]
+    engine = DefaultContextEngine(memory_store=ms)
+
+    await engine.assemble(session_id="s1", messages=[], prompt="p1")
+    await engine.assemble(session_id="s2", messages=[], prompt="p2")
+    await engine.assemble(session_id="s3", messages=[], prompt="p3")
+    assert len(engine._archive_cache) == 3
+    assert "s1" in engine._archive_cache
+
+    await engine.assemble(session_id="s4", messages=[], prompt="p4")
+
+    assert len(engine._archive_cache) == 3
+    assert "s1" not in engine._archive_cache
+    assert "s4" in engine._archive_cache
+
+
+@pytest.mark.asyncio
+async def test_cache_isolation_across_sessions() -> None:
+    """Spec scenario: cache isolation across different sessions."""
+    ms = AsyncMock()
+    ms.search.return_value = []
+    ms.search_archives.return_value = [_archive_entry("web:admin:s:abc", "any", similarity=0.6)]
+    engine = DefaultContextEngine(memory_store=ms)
+
+    await engine.assemble(session_id="s1", messages=[], prompt="hello")
+    await engine.assemble(session_id="s2", messages=[], prompt="hello")
+
+    assert ms.search_archives.call_count == 2
+    assert "s1" in engine._archive_cache
+    assert "s2" in engine._archive_cache

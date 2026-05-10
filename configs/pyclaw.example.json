@@ -18,7 +18,8 @@
     "search_fts_min_query_chars": 3,
     "archive_max_results": 5,
     "archive_min_similarity": 0.5,
-    "archive_min_results": 1
+    "archive_min_results": 1,
+    "archive_enabled": true
   },
   "embedding": {
     "model": "",

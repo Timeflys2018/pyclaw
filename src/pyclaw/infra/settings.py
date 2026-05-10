@@ -71,6 +71,7 @@ class MemorySettings(BaseSettings):
     archive_max_results: int = 5
     archive_min_similarity: float = 0.5
     archive_min_results: int = 1
+    archive_enabled: bool = True
 
     model_config = SettingsConfigDict(env_prefix="PYCLAW_MEMORY_")
 
