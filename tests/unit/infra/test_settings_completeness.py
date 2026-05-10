@@ -87,3 +87,87 @@ def test_full_pyclaw_json_parses_without_error(tmp_path) -> None:
     s = Settings.model_validate(data)
     assert s.agent.default_model == "gpt-4o"
     assert s.channels.feishu.session_scope == "chat"
+
+
+def test_provider_settings_prefixes_field() -> None:
+    s = _parse({
+        "agent": {
+            "providers": {
+                "openai": {
+                    "apiKey": "k",
+                    "baseURL": "u",
+                    "prefixes": ["openai", "azure_openai", "minimax"],
+                }
+            }
+        }
+    })
+    assert s.agent.providers["openai"].prefixes == ["openai", "azure_openai", "minimax"]
+
+
+def test_provider_settings_prefixes_default_empty() -> None:
+    s = _parse({"agent": {"providers": {"openai": {"apiKey": "k"}}}})
+    assert s.agent.providers["openai"].prefixes == []
+
+
+def test_provider_settings_litellm_provider_field() -> None:
+    s = _parse({
+        "agent": {
+            "providers": {
+                "openai": {"apiKey": "k", "litellmProvider": "openai"}
+            }
+        }
+    })
+    assert s.agent.providers["openai"].litellm_provider == "openai"
+
+
+def test_provider_settings_litellm_provider_default_none() -> None:
+    s = _parse({"agent": {"providers": {"openai": {"apiKey": "k"}}}})
+    assert s.agent.providers["openai"].litellm_provider is None
+
+
+def test_provider_settings_litellm_provider_snake_case_also_works() -> None:
+    s = _parse({
+        "agent": {
+            "providers": {
+                "openai": {"apiKey": "k", "litellm_provider": "openai"}
+            }
+        }
+    })
+    assert s.agent.providers["openai"].litellm_provider == "openai"
+
+
+def test_agent_default_provider_field() -> None:
+    s = _parse({"agent": {"default_provider": "openai"}})
+    assert s.agent.default_provider == "openai"
+
+
+def test_agent_default_provider_default_none() -> None:
+    s = _parse({"agent": {}})
+    assert s.agent.default_provider is None
+
+
+def test_agent_unknown_prefix_policy_default_fail() -> None:
+    s = _parse({"agent": {}})
+    assert s.agent.unknown_prefix_policy == "fail"
+
+
+def test_agent_unknown_prefix_policy_explicit_default() -> None:
+    s = _parse({"agent": {"unknown_prefix_policy": "default"}})
+    assert s.agent.unknown_prefix_policy == "default"
+
+
+def test_agent_unknown_prefix_policy_invalid_rejected() -> None:
+    with pytest.raises(Exception):
+        _parse({"agent": {"unknown_prefix_policy": "lenient"}})
+
+
+def test_existing_example_config_still_loads() -> None:
+    import pathlib
+    example_path = pathlib.Path(__file__).resolve().parents[3] / "configs" / "pyclaw.example.json"
+    if not example_path.is_file():
+        pytest.skip("configs/pyclaw.example.json not present")
+    data = json.loads(example_path.read_text(encoding="utf-8"))
+    s = Settings.model_validate(data)
+    assert isinstance(s.agent.providers, dict)
+    assert s.agent.unknown_prefix_policy == "fail"
+    assert s.agent.default_provider is None

@@ -29,7 +29,28 @@
   },
   "agent": {
     "default_model": "gpt-4o",
-    "providers": { "openai": { "apiKey": null, "baseURL": null } },
+    "default_provider": null,
+    "unknown_prefix_policy": "fail",
+    "providers": {
+      "anthropic": {
+        "apiKey": null,
+        "baseURL": null,
+        "prefixes": ["anthropic"],
+        "models": []
+      },
+      "openai": {
+        "apiKey": null,
+        "baseURL": null,
+        "prefixes": ["openai", "azure_openai", "minimax", "zhipuai", "xiaomi", "moonshot", "volcengine_maas", "deepseek"],
+        "models": []
+      },
+      "gemini": {
+        "apiKey": null,
+        "baseURL": null,
+        "prefixes": ["gemini", "vertex_ai"],
+        "models": []
+      }
+    },
     "max_iterations": 50,
     "max_context_tokens": 200000,
     "promptBudget": {

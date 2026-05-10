@@ -125,18 +125,54 @@ async def test_model_with_arg_writes_override_and_appends_entry() -> None:
 
 
 @pytest.mark.asyncio
-async def test_model_with_unknown_arg_still_persists_override() -> None:
+async def test_model_with_unknown_arg_rejected_by_dry_run() -> None:
     ctx, reply, store = await _make_ctx(agent_settings=_make_settings_with_models())
 
-    await cmd_model("some-unknown-model-xyz", ctx)
+    await cmd_model("vertex_ai/gemini-2.5-pro", ctx)
+
+    msg = reply.await_args[0][0]
+    assert "❌" in msg
+    assert "vertex_ai/gemini-2.5-pro" in msg
 
     tree = await store.load(ctx.session_id)
     assert tree is not None
-    assert tree.header.model_override == "some-unknown-model-xyz"
-
+    assert tree.header.model_override is None
     model_entries = [e for e in tree.entries.values() if isinstance(e, ModelChangeEntry)]
-    assert len(model_entries) == 1
-    assert model_entries[0].provider == "unknown"
+    assert len(model_entries) == 0
+
+
+@pytest.mark.asyncio
+async def test_model_dry_run_uses_strict_mode_ignoring_settings_default_policy() -> None:
+    settings = AgentSettings(
+        providers={
+            "openai": ProviderSettings(api_key="sk-x", prefixes=["openai"]),
+            "anthropic": ProviderSettings(api_key="sk-y", prefixes=["anthropic"]),
+        },
+        default_provider="openai",
+        unknown_prefix_policy="default",
+    )
+    ctx, reply, store = await _make_ctx(agent_settings=settings)
+
+    await cmd_model("totally-fake-prefix-xyz", ctx)
+
+    msg = reply.await_args[0][0]
+    assert "❌" in msg
+    tree = await store.load(ctx.session_id)
+    assert tree is not None
+    assert tree.header.model_override is None
+
+
+@pytest.mark.asyncio
+async def test_model_dry_run_state_not_polluted_after_rejection() -> None:
+    ctx, reply, store = await _make_ctx(agent_settings=_make_settings_with_models())
+
+    await cmd_model("claude-sonnet-4-20250514", ctx)
+    tree = await store.load(ctx.session_id)
+    assert tree.header.model_override == "claude-sonnet-4-20250514"
+
+    await cmd_model("vertex_ai/foo", ctx)
+    tree = await store.load(ctx.session_id)
+    assert tree.header.model_override == "claude-sonnet-4-20250514"
 
 
 @pytest.mark.asyncio

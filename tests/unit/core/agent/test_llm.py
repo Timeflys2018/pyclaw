@@ -1,14 +1,29 @@
 from __future__ import annotations
 
+import pytest
+
 from pyclaw.core.agent.llm import (
+    LLMError,
     LLMErrorCode,
     classify_error,
+    resolve_provider_for_model,
     session_entries_to_llm_messages,
     finalize_tool_calls,
     merge_tool_call_deltas,
     _extract_usage,
     _prepend_system,
 )
+from pyclaw.infra.settings import ProviderSettings
+
+
+def _ps(*, api_key: str = "k", base_url: str = "u",
+        models: list[str] | None = None, prefixes: list[str] | None = None) -> ProviderSettings:
+    return ProviderSettings(
+        api_key=api_key,
+        base_url=base_url,
+        models=list(models or []),
+        prefixes=list(prefixes or []),
+    )
 
 
 class TestClassifyError:
@@ -26,6 +41,14 @@ class TestClassifyError:
 
     def test_unknown(self) -> None:
         assert classify_error(Exception("something else")) == LLMErrorCode.UNKNOWN
+
+    def test_llm_error_passthrough_preserves_code(self) -> None:
+        exc = LLMError(LLMErrorCode.PROVIDER_NOT_FOUND, "check your api key for provider config")
+        assert classify_error(exc) == LLMErrorCode.PROVIDER_NOT_FOUND
+
+    def test_llm_error_passthrough_for_any_code(self) -> None:
+        exc = LLMError(LLMErrorCode.AUTH_ERROR, "no auth keyword in message")
+        assert classify_error(exc) == LLMErrorCode.AUTH_ERROR
 
 
 class TestMessageConversion:
@@ -170,3 +193,375 @@ class TestPrependSystem:
         msgs = [{"role": "user", "content": "hi"}]
         out = _prepend_system(msgs, "")
         assert out == msgs
+
+
+class TestResolveProviderForModel:
+    def test_layer1_exact_match_in_models(self) -> None:
+        providers = {"anthropic": _ps(models=["anthropic/ppio/pa/claude-sonnet-4-6"])}
+        name, ps = resolve_provider_for_model("anthropic/ppio/pa/claude-sonnet-4-6", providers)
+        assert name == "anthropic"
+        assert ps is providers["anthropic"]
+
+    def test_layer2_prefix_match_with_declared_prefixes(self) -> None:
+        providers = {
+            "openai": _ps(prefixes=["openai", "azure_openai", "minimax"]),
+        }
+        name, ps = resolve_provider_for_model("azure_openai/gpt-5.4-pro", providers)
+        assert name == "openai"
+
+    def test_layer2_prefix_match_without_subpath(self) -> None:
+        providers = {"anthropic": _ps(prefixes=["anthropic"])}
+        name, _ = resolve_provider_for_model("anthropic", providers)
+        assert name == "anthropic"
+
+    def test_layer2_default_prefixes_to_provider_name(self) -> None:
+        providers = {"openai": _ps(prefixes=[])}
+        name, _ = resolve_provider_for_model("openai/gpt-4o", providers)
+        assert name == "openai"
+
+    def test_layer3_first_segment_fallback(self) -> None:
+        providers = {
+            "anthropic": _ps(),
+            "gemini": _ps(),
+        }
+        name, _ = resolve_provider_for_model("gemini/gemini-2.5-pro", providers)
+        assert name == "gemini"
+
+    def test_layer4_single_provider_catch_all(self) -> None:
+        providers = {"openai": _ps()}
+        name, _ = resolve_provider_for_model("anthropic/claude-3-5-sonnet", providers)
+        assert name == "openai"
+
+    def test_layer5_unknown_prefix_policy_default(self) -> None:
+        providers = {"anthropic": _ps(), "openai": _ps()}
+        name, _ = resolve_provider_for_model(
+            "totally-fake-model",
+            providers,
+            default_provider="openai",
+            unknown_prefix_policy="default",
+        )
+        assert name == "openai"
+
+    def test_layer6_fail_when_no_match(self) -> None:
+        providers = {"anthropic": _ps(prefixes=["anthropic"]), "openai": _ps(prefixes=["openai"])}
+        with pytest.raises(LLMError) as exc_info:
+            resolve_provider_for_model("vertex_ai/gemini", providers)
+        exc = exc_info.value
+        assert exc.code == LLMErrorCode.PROVIDER_NOT_FOUND
+        assert "vertex_ai/gemini" in str(exc)
+        assert "anthropic" in str(exc) and "openai" in str(exc)
+        assert "prefixes" in str(exc) or "unknown_prefix_policy" in str(exc)
+
+    def test_layer1_overrides_layer2(self) -> None:
+        providers = {
+            "a": _ps(models=["weird-model"]),
+            "b": _ps(prefixes=["weird-model"]),
+        }
+        name, _ = resolve_provider_for_model("weird-model", providers)
+        assert name == "a"
+
+    def test_three_segment_model_routes_via_anthropic_prefix(self) -> None:
+        providers = {"anthropic": _ps(prefixes=["anthropic"])}
+        name, _ = resolve_provider_for_model("anthropic/ppio/pa/claude-sonnet-4-6", providers)
+        assert name == "anthropic"
+
+    def test_unknown_prefix_policy_default_without_default_provider_falls_back_to_fail(self) -> None:
+        providers = {"anthropic": _ps(), "openai": _ps()}
+        with pytest.raises(LLMError) as exc_info:
+            resolve_provider_for_model(
+                "vertex_ai/foo",
+                providers,
+                default_provider=None,
+                unknown_prefix_policy="default",
+            )
+        assert exc_info.value.code == LLMErrorCode.PROVIDER_NOT_FOUND
+
+
+class TestLLMClientMultiProvider:
+    """Mock path: patch litellm.acompletion (function-local import in stream)."""
+
+    @staticmethod
+    def _make_anthropic_openai_client():
+        from pyclaw.core.agent.llm import LLMClient
+        providers = {
+            "anthropic": _ps(api_key="ak", base_url="ab", prefixes=["anthropic"]),
+            "openai": _ps(api_key="ok", base_url="ob", prefixes=["openai", "azure_openai"]),
+        }
+        return LLMClient(default_model="anthropic/foo", providers=providers)
+
+    @staticmethod
+    async def _empty_stream():
+        if False:
+            yield None
+
+    @pytest.mark.asyncio
+    async def test_stream_routes_anthropic_credentials(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = self._make_anthropic_openai_client()
+        async for _ in client.stream(messages=[{"role": "user", "content": "hi"}],
+                                     model="anthropic/ppio/pa/claude-sonnet-4-6"):
+            pass
+        assert captured["api_key"] == "ak"
+        assert captured["api_base"] == "ab"
+        assert captured["model"] == "anthropic/ppio/pa/claude-sonnet-4-6"
+
+    @pytest.mark.asyncio
+    async def test_same_client_routes_two_models_to_different_creds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[dict[str, object]] = []
+
+        async def fake_acompletion(**kwargs):
+            calls.append(kwargs)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = self._make_anthropic_openai_client()
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
+                                     model="anthropic/foo"):
+            pass
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
+                                     model="azure_openai/gpt-5"):
+            pass
+        assert calls[0]["api_key"] == "ak" and calls[0]["api_base"] == "ab"
+        assert calls[1]["api_key"] == "ok" and calls[1]["api_base"] == "ob"
+
+    @pytest.mark.asyncio
+    async def test_stream_default_model_routes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = self._make_anthropic_openai_client()
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}], model=None):
+            pass
+        assert captured["api_key"] == "ak"
+        assert captured["model"] == "anthropic/foo"
+
+    @pytest.mark.asyncio
+    async def test_legacy_signature_still_streams(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from pyclaw.core.agent.llm import LLMClient
+
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = LLMClient(default_model="legacy", api_key="legacy_k", api_base="legacy_b")
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}], model="anything"):
+            pass
+        assert captured["api_key"] == "legacy_k"
+        assert captured["api_base"] == "legacy_b"
+
+    @pytest.mark.asyncio
+    async def test_providers_take_precedence_over_legacy_creds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from pyclaw.core.agent.llm import LLMClient
+
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        providers = {"anthropic": _ps(api_key="new_k", base_url="new_b", prefixes=["anthropic"])}
+        client = LLMClient(
+            default_model="anthropic/foo",
+            api_key="legacy_k",
+            api_base="legacy_b",
+            providers=providers,
+        )
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
+                                     model="anthropic/foo"):
+            pass
+        assert captured["api_key"] == "new_k"
+        assert captured["api_base"] == "new_b"
+
+    @pytest.mark.asyncio
+    async def test_unknown_prefix_raises_provider_not_found_without_acompletion_call(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        called: list[bool] = []
+
+        async def fake_acompletion(**kwargs):
+            called.append(True)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = self._make_anthropic_openai_client()
+        with pytest.raises(LLMError) as exc_info:
+            async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
+                                         model="vertex_ai/gemini"):
+                pass
+        assert exc_info.value.code == LLMErrorCode.PROVIDER_NOT_FOUND
+        assert called == []
+
+    def test_positional_providers_raises_typeerror(self) -> None:
+        from pyclaw.core.agent.llm import LLMClient
+        with pytest.raises(TypeError):
+            LLMClient("m", "k", "b", {"anthropic": _ps()})  # type: ignore[misc]
+
+    @pytest.mark.asyncio
+    async def test_complete_path_routes_credentials(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = self._make_anthropic_openai_client()
+        await client.complete(
+            messages=[{"role": "user", "content": "x"}],
+            model="azure_openai/gpt-5",
+        )
+        assert captured["api_key"] == "ok"
+        assert captured["api_base"] == "ob"
+
+    @pytest.mark.asyncio
+    async def test_litellm_provider_injected_when_set(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from pyclaw.core.agent.llm import LLMClient
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        providers = {
+            "openai": _ps(
+                api_key="k", base_url="u",
+                prefixes=["azure_openai"],
+            ),
+        }
+        providers["openai"].litellm_provider = "openai"
+        client = LLMClient(default_model="azure_openai/foo", providers=providers)
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
+                                     model="azure_openai/gpt-5.4"):
+            pass
+        assert captured["custom_llm_provider"] == "openai"
+        assert captured["model"] == "azure_openai/gpt-5.4"
+
+    @pytest.mark.asyncio
+    async def test_litellm_provider_falls_back_to_dict_key_when_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = self._make_anthropic_openai_client()
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
+                                     model="anthropic/foo"):
+            pass
+        assert captured["custom_llm_provider"] == "anthropic"
+
+    @pytest.mark.asyncio
+    async def test_d11_dict_key_fallback_when_litellm_provider_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from pyclaw.core.agent.llm import LLMClient
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        providers = {
+            "openai": _ps(api_key="k", base_url="u", prefixes=["azure_openai"]),
+        }
+        assert providers["openai"].litellm_provider is None
+        client = LLMClient(default_model="azure_openai/foo", providers=providers)
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
+                                     model="azure_openai/gpt-5.4"):
+            pass
+        assert captured["custom_llm_provider"] == "openai"
+
+    @pytest.mark.asyncio
+    async def test_d11_explicit_litellm_provider_overrides_dict_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from pyclaw.core.agent.llm import LLMClient
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        ps = _ps(api_key="k", base_url="u", prefixes=["azure_openai"])
+        ps.litellm_provider = "openai"
+        client = LLMClient(default_model="azure_openai/foo",
+                          providers={"mify_us": ps})
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
+                                     model="azure_openai/gpt-5.4"):
+            pass
+        assert captured["custom_llm_provider"] == "openai"
+
+    @pytest.mark.asyncio
+    async def test_d11_legacy_signature_does_not_inject_dict_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from pyclaw.core.agent.llm import LLMClient
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = LLMClient(default_model="legacy", api_key="k", api_base="u")
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
+                                     model="anything"):
+            pass
+        assert "custom_llm_provider" not in captured
+
+    @pytest.mark.asyncio
+    async def test_litellm_provider_switches_per_call(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from pyclaw.core.agent.llm import LLMClient
+        calls: list[dict[str, object]] = []
+
+        async def fake_acompletion(**kwargs):
+            calls.append(kwargs)
+            return TestLLMClientMultiProvider._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        anthropic_ps = _ps(api_key="ak", base_url="ab", prefixes=["anthropic"])
+        anthropic_ps.litellm_provider = "anthropic"
+        openai_ps = _ps(api_key="ok", base_url="ob", prefixes=["azure_openai"])
+        openai_ps.litellm_provider = "openai"
+        client = LLMClient(
+            default_model="anthropic/foo",
+            providers={"anthropic": anthropic_ps, "openai": openai_ps},
+        )
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
+                                     model="anthropic/foo"):
+            pass
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
+                                     model="azure_openai/bar"):
+            pass
+        assert calls[0]["custom_llm_provider"] == "anthropic"
+        assert calls[1]["custom_llm_provider"] == "openai"

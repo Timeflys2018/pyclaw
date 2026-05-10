@@ -139,6 +139,11 @@ async def cmd_extract(args: str, ctx: CommandContext) -> None:
 
 
 async def cmd_model(args: str, ctx: CommandContext) -> None:
+    from pyclaw.core.agent.llm import (
+        LLMError,
+        LLMErrorCode,
+        resolve_provider_for_model,
+    )
     from pyclaw.models import ModelChangeEntry, generate_entry_id, now_iso
 
     target = args.strip()
@@ -161,6 +166,20 @@ async def cmd_model(args: str, ctx: CommandContext) -> None:
             lines.append("⚠️ 配置中尚未声明可用模型列表 (agent.providers.<name>.models)。")
         await ctx.reply("\n".join(lines))
         return
+
+    if ctx.agent_settings.providers:
+        try:
+            resolve_provider_for_model(
+                target,
+                ctx.agent_settings.providers,
+                default_provider=None,
+                unknown_prefix_policy="fail",
+            )
+        except LLMError as exc:
+            if exc.code == LLMErrorCode.PROVIDER_NOT_FOUND:
+                await ctx.reply(f"❌ {exc}")
+                return
+            raise
 
     tree = await ctx.deps.session_store.load(ctx.session_id)
     if tree is None:

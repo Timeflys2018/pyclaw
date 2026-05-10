@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -140,6 +142,8 @@ class ProviderSettings(BaseSettings):
     api_key: str | None = Field(default=None, alias="apiKey")
     base_url: str | None = Field(default=None, alias="baseURL")
     models: list[str] = Field(default_factory=list)
+    prefixes: list[str] = Field(default_factory=list)
+    litellm_provider: str | None = Field(default=None, alias="litellmProvider")
 
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
 
@@ -149,6 +153,8 @@ class AgentSettings(BaseSettings):
     max_context_tokens: int = 128000
     compaction_threshold: float = 0.8
     providers: dict[str, ProviderSettings] = Field(default_factory=dict)
+    default_provider: str | None = None
+    unknown_prefix_policy: Literal["fail", "default"] = "fail"
     max_iterations: int = 50
     timeouts: TimeoutConfig = Field(default_factory=TimeoutConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)

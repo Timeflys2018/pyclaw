@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pyclaw.core.agent.llm import LLMClient
+from pyclaw.core.agent.llm import LLMClient, LLMError, resolve_provider_for_model
 from pyclaw.core.agent.runner import AgentRunnerDeps
 from pyclaw.core.agent.tools.builtin import register_builtin_tools
 from pyclaw.core.agent.tools.registry import ToolRegistry
@@ -25,17 +25,26 @@ async def create_agent_runner_deps(
     memory_store: MemoryStore | None = None,
     redis_client=None,
 ) -> AgentRunnerDeps:
-    api_key: str | None = None
-    base_url: str | None = None
-    default_model = settings.agent.default_model
+    llm = LLMClient(
+        default_model=settings.agent.default_model,
+        providers=settings.agent.providers,
+        default_provider=settings.agent.default_provider,
+        unknown_prefix_policy=settings.agent.unknown_prefix_policy,
+    )
 
-    for _prefix, provider in settings.agent.providers.items():
-        if provider.api_key:
-            api_key = provider.api_key
-            base_url = provider.base_url
-            break
-
-    llm = LLMClient(default_model=default_model, api_key=api_key, api_base=base_url)
+    if settings.agent.providers:
+        try:
+            resolve_provider_for_model(
+                settings.agent.default_model,
+                settings.agent.providers,
+                default_provider=settings.agent.default_provider,
+                unknown_prefix_policy=settings.agent.unknown_prefix_policy,
+            )
+        except LLMError as exc:
+            raise RuntimeError(
+                f"agent.default_model='{settings.agent.default_model}' cannot be routed "
+                f"to any configured provider. Fix configs/pyclaw.json before starting. {exc}"
+            ) from exc
 
     workspace_default = getattr(
         getattr(settings, "workspaces", None), "default", None

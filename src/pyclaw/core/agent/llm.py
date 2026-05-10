@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from pyclaw.infra.settings import ProviderSettings
 
 
 class LLMErrorCode:
@@ -11,6 +14,7 @@ class LLMErrorCode:
     RATE_LIMIT = "rate_limit"
     AUTH_ERROR = "auth_error"
     TIMEOUT = "timeout"
+    PROVIDER_NOT_FOUND = "provider_not_found"
     UNKNOWN = "unknown"
 
 
@@ -47,6 +51,12 @@ class LLMResponse:
 
 
 def classify_error(exc: Exception) -> str:
+    # Wrap-once invariant: an LLMError already carries an explicit code that was
+    # set by whoever raised it (e.g. resolve_provider_for_model raising
+    # PROVIDER_NOT_FOUND).  Never re-classify it from message text — the
+    # keyword heuristic below is for raw upstream exceptions only.
+    if isinstance(exc, LLMError):
+        return exc.code
     message = str(exc).lower()
     if "context" in message and ("overflow" in message or "length" in message or "maximum" in message):
         return LLMErrorCode.CONTEXT_OVERFLOW
@@ -59,16 +69,83 @@ def classify_error(exc: Exception) -> str:
     return LLMErrorCode.UNKNOWN
 
 
+def resolve_provider_for_model(
+    model: str,
+    providers: "Mapping[str, ProviderSettings]",
+    *,
+    default_provider: str | None = None,
+    unknown_prefix_policy: Literal["fail", "default"] = "fail",
+) -> "tuple[str, ProviderSettings]":
+    for name, ps in providers.items():
+        if model in (ps.models or []):
+            return name, ps
+
+    for name, ps in providers.items():
+        prefixes = ps.prefixes or [name]
+        for prefix in prefixes:
+            if model == prefix or model.startswith(prefix + "/"):
+                return name, ps
+
+    first_segment = model.split("/", 1)[0]
+    if first_segment in providers:
+        return first_segment, providers[first_segment]
+
+    if len(providers) == 1:
+        only_name, only_ps = next(iter(providers.items()))
+        return only_name, only_ps
+
+    if (
+        unknown_prefix_policy == "default"
+        and default_provider is not None
+        and default_provider in providers
+    ):
+        return default_provider, providers[default_provider]
+
+    raise LLMError(
+        LLMErrorCode.PROVIDER_NOT_FOUND,
+        f"No provider matches model '{model}'. "
+        f"Configured providers: {list(providers)}. "
+        f"Declare prefixes[] on a provider, or set agent.unknown_prefix_policy='default' "
+        f"and agent.default_provider='<name>' to route unknowns.",
+    )
+
+
 class LLMClient:
     def __init__(
         self,
         default_model: str = "gpt-4o-mini",
         api_key: str | None = None,
         api_base: str | None = None,
+        *,
+        providers: "Mapping[str, ProviderSettings] | None" = None,
+        default_provider: str | None = None,
+        unknown_prefix_policy: Literal["fail", "default"] = "fail",
     ) -> None:
         self.default_model = default_model
-        self._api_key = api_key
-        self._api_base = api_base
+        if providers:
+            self._providers: dict[str, "ProviderSettings"] = dict(providers)
+            self._fallback_key: str | None = None
+            self._fallback_base: str | None = None
+        else:
+            self._providers = {}
+            self._fallback_key = api_key
+            self._fallback_base = api_base
+        self._default_provider = default_provider
+        self._unknown_prefix_policy: Literal["fail", "default"] = unknown_prefix_policy
+
+    def _resolve_credentials(
+        self, model: str
+    ) -> tuple[str | None, str | None, str | None]:
+        if not self._providers:
+            return self._fallback_key, self._fallback_base, None
+        name, ps = resolve_provider_for_model(
+            model,
+            self._providers,
+            default_provider=self._default_provider,
+            unknown_prefix_policy=self._unknown_prefix_policy,
+        )
+        litellm_provider = ps.litellm_provider if ps.litellm_provider is not None else name
+        return ps.api_key, ps.base_url, litellm_provider
 
     async def stream(
         self,
@@ -92,11 +169,15 @@ class LLMClient:
         effective_model = model or self.default_model
         payload_messages = _prepend_system(messages, system)
 
+        api_key, api_base, litellm_provider = self._resolve_credentials(effective_model)
+
         extra: dict[str, Any] = {}
-        if self._api_key:
-            extra["api_key"] = self._api_key
-        if self._api_base:
-            extra["api_base"] = self._api_base
+        if api_key:
+            extra["api_key"] = api_key
+        if api_base:
+            extra["api_base"] = api_base
+        if litellm_provider:
+            extra["custom_llm_provider"] = litellm_provider
         if temperature is not None:
             extra["temperature"] = temperature
 
