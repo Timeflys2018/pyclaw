@@ -137,34 +137,48 @@ class DefaultContextEngine:
         token_budget: int | None = None,
         prompt: str | None = None,
     ) -> AssembleResult:
-        memory_context: str | None = None
+        l2l3_results: list[Any] = []
+        archive_results: list[Any] = []
         if self._memory_store is not None and prompt:
+            session_key = self._derive_session_key(session_id)
+            cfg = self._memory_settings
             try:
-                session_key = self._derive_session_key(session_id)
-                cfg = self._memory_settings
-                results = await self._memory_store.search(
+                l2l3_results = await self._memory_store.search(
                     session_key, prompt,
                     layers=["L2", "L3"],
                     per_layer_limits={"L2": cfg.search_l2_quota, "L3": cfg.search_l3_quota},
                 )
-                if results:
-                    memory_context = self._format_memory_context(results)
             except Exception:
                 import logging
                 logging.getLogger(__name__).warning(
-                    "memory_store.search failed for session %s", session_id, exc_info=True
+                    "memory_store.search (L2/L3) failed for session %s", session_id, exc_info=True,
+                )
+            try:
+                archive_results = await self._memory_store.search_archives(
+                    session_key, prompt,
+                    limit=cfg.archive_max_results,
+                    min_similarity=cfg.archive_min_similarity,
+                )
+            except Exception:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "memory_store.search_archives (L4) failed for session %s", session_id, exc_info=True,
                 )
 
+        memory_context = self._format_memory_context(l2l3_results, archive_results)
         return AssembleResult(
             messages=list(messages),
             system_prompt_addition=memory_context,
         )
 
     @staticmethod
-    def _format_memory_context(results: list[Any]) -> str | None:
-        l2_entries = [r for r in results if getattr(r, "layer", "") == "L2"]
-        l3_entries = [r for r in results if getattr(r, "layer", "") == "L3"]
-        if not l2_entries and not l3_entries:
+    def _format_memory_context(
+        l2l3_results: list[Any],
+        archive_results: list[Any],
+    ) -> str | None:
+        l2_entries = [r for r in l2l3_results if getattr(r, "layer", "") == "L2"]
+        l3_entries = [r for r in l2l3_results if getattr(r, "layer", "") == "L3"]
+        if not l2_entries and not l3_entries and not archive_results:
             return None
         lines = ["<memory_context>"]
         if l2_entries:
@@ -181,6 +195,15 @@ class DefaultContextEngine:
                     f"{getattr(entry, 'content', '')}"
                 )
             lines.append("</procedures>")
+        if archive_results:
+            lines.append("<archives>")
+            for entry in archive_results:
+                sid_short = getattr(entry, "session_id", "").split(":")[-1][:12]
+                similarity = getattr(entry, "similarity", None)
+                sim_str = f"{similarity:.2f}" if isinstance(similarity, (int, float)) and not isinstance(similarity, bool) else "?"
+                summary = getattr(entry, "summary", "")
+                lines.append(f"- [session={sid_short}|sim={sim_str}] {summary}")
+            lines.append("</archives>")
         lines.append("</memory_context>")
         return "\n".join(lines)
 

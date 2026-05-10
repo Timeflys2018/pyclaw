@@ -14,7 +14,7 @@ class TestFormatMemoryContext:
             type = "auto_sop"
             content = "Deploy via helm chart"
 
-        result = DefaultContextEngine._format_memory_context([MockEntry()])
+        result = DefaultContextEngine._format_memory_context([MockEntry()], [])
         assert result is not None
         assert "[auto_sop|7f3a2b9c]" in result
         assert "Deploy via helm chart" in result
@@ -28,7 +28,7 @@ class TestFormatMemoryContext:
             type = "user_preference"
             content = "Prefers dark mode"
 
-        result = DefaultContextEngine._format_memory_context([MockEntry()])
+        result = DefaultContextEngine._format_memory_context([MockEntry()], [])
         assert result is not None
         # L2 should still use old format (no ID prefix)
         assert "[user_preference]" in result
@@ -42,7 +42,7 @@ class TestFormatMemoryContext:
             type = "workflow"
             content = "Some procedure"
 
-        result = DefaultContextEngine._format_memory_context([MockEntry()])
+        result = DefaultContextEngine._format_memory_context([MockEntry()], [])
         assert result is not None
         assert "[workflow|]" in result
 

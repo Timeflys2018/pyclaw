@@ -33,7 +33,7 @@ from pyclaw.models import (
     ToolCallEnd,
     now_iso,
 )
-from pyclaw.storage.memory.base import MemoryEntry
+from pyclaw.storage.memory.base import ArchiveEntry, MemoryEntry
 from pyclaw.storage.session.base import InMemorySessionStore
 
 
@@ -92,6 +92,7 @@ class _FakeMemoryStore:
         self.stored: list[tuple[str, MemoryEntry]] = []
         self.archive_calls: list[tuple[str, str, str]] = []
         self.search_results: list[MemoryEntry] = []
+        self.archive_results: list[Any] = []
 
     async def index_get(self, session_key: str) -> list[MemoryEntry]:
         return list(self.l1_by_key.get(session_key, []))
@@ -120,7 +121,7 @@ class _FakeMemoryStore:
         self.archive_calls.append((session_key, session_id, summary))
 
     async def search_archives(self, session_key: str, query: str, *, limit: int = 5, min_similarity: float = 0.0):
-        return []
+        return list(self.archive_results[:limit])
 
     async def close(self) -> None:
         pass
@@ -323,6 +324,40 @@ async def test_l2_l3_search_results_appear_in_system_prompt_addition() -> None:
     assert "<procedures>" in result.system_prompt_addition
     assert "use Redis for L1 index" in result.system_prompt_addition
     assert "deploy: tag release then push" in result.system_prompt_addition
+
+
+async def test_l4_archive_search_results_appear_in_system_prompt_addition() -> None:
+    """L4 archive retrieval flows from search_archives → assemble → <archives> XML.
+
+    Mirrors the L2/L3 e2e pattern above, validating the new wire-l4-retrieval-into-assemble
+    integration end-to-end through DefaultContextEngine.assemble.
+    """
+    memory_store = _FakeMemoryStore()
+    memory_store.archive_results = [
+        ArchiveEntry(
+            id="archive-1",
+            session_id="feishu:cli:ou_x:s:f8b9701e8f80cb8b",
+            summary="user: 上次部署遇到问题\nassistant: 检查 helm chart 版本",
+            created_at=time.time(),
+            distance=0.26,
+            similarity=0.74,
+        ),
+    ]
+
+    engine = DefaultContextEngine(memory_store=memory_store)
+
+    result = await engine.assemble(
+        session_id="feishu:cli:ou_x:s:y",
+        messages=[{"role": "user", "content": "上次的部署问题"}],
+        prompt="上次的部署问题",
+    )
+
+    assert result.system_prompt_addition is not None
+    assert "<memory_context>" in result.system_prompt_addition
+    assert "<archives>" in result.system_prompt_addition
+    assert "[session=f8b9701e8f80|sim=0.74]" in result.system_prompt_addition
+    assert "上次部署遇到问题" in result.system_prompt_addition
+    assert "检查 helm chart 版本" in result.system_prompt_addition
 
 
 async def test_archive_session_fires_on_rotate() -> None:

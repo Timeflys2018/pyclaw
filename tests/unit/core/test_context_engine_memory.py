@@ -25,6 +25,7 @@ def _entry(entry_id: str, content: str, layer: str = "L2", type_: str = "fact") 
 @pytest.mark.asyncio
 async def test_get_l1_snapshot_cached_per_session() -> None:
     ms = AsyncMock()
+    ms.search_archives.return_value = []
     ms.index_get.return_value = [_entry("m1", "fact one"), _entry("m2", "fact two")]
     engine = DefaultContextEngine(memory_store=ms)
 
@@ -39,6 +40,7 @@ async def test_get_l1_snapshot_cached_per_session() -> None:
 @pytest.mark.asyncio
 async def test_get_l1_snapshot_different_sessions_independent() -> None:
     ms = AsyncMock()
+    ms.search_archives.return_value = []
     ms.index_get.side_effect = [
         [_entry("a1", "A content")],
         [_entry("b1", "B content")],
@@ -62,6 +64,7 @@ async def test_get_l1_snapshot_no_memory_store_returns_empty() -> None:
 @pytest.mark.asyncio
 async def test_get_l1_snapshot_handles_store_error_gracefully() -> None:
     ms = AsyncMock()
+    ms.search_archives.return_value = []
     ms.index_get.side_effect = RuntimeError("redis down")
     engine = DefaultContextEngine(memory_store=ms)
 
@@ -72,6 +75,7 @@ async def test_get_l1_snapshot_handles_store_error_gracefully() -> None:
 @pytest.mark.asyncio
 async def test_get_l1_snapshot_derives_session_key_correctly() -> None:
     ms = AsyncMock()
+    ms.search_archives.return_value = []
     ms.index_get.return_value = []
     engine = DefaultContextEngine(memory_store=ms)
 
@@ -125,6 +129,7 @@ async def test_enforce_system_budget_can_truncate_l1_snapshot() -> None:
 @pytest.mark.asyncio
 async def test_assemble_searches_memory_store_when_prompt_provided() -> None:
     ms = AsyncMock()
+    ms.search_archives.return_value = []
     ms.search.return_value = [
         _entry("r1", "prefers short answers", layer="L2", type_="user_preference"),
         _entry("r2", "deploys via GitHub Actions", layer="L3", type_="workflow"),
@@ -163,6 +168,7 @@ async def test_assemble_without_memory_store_returns_none() -> None:
 @pytest.mark.asyncio
 async def test_assemble_skips_search_when_no_prompt() -> None:
     ms = AsyncMock()
+    ms.search_archives.return_value = []
     engine = DefaultContextEngine(memory_store=ms)
 
     result = await engine.assemble(
@@ -178,6 +184,7 @@ async def test_assemble_skips_search_when_no_prompt() -> None:
 @pytest.mark.asyncio
 async def test_assemble_empty_search_results_returns_none_addition() -> None:
     ms = AsyncMock()
+    ms.search_archives.return_value = []
     ms.search.return_value = []
     engine = DefaultContextEngine(memory_store=ms)
 
@@ -192,6 +199,7 @@ async def test_assemble_empty_search_results_returns_none_addition() -> None:
 @pytest.mark.asyncio
 async def test_assemble_search_error_does_not_raise() -> None:
     ms = AsyncMock()
+    ms.search_archives.return_value = []
     ms.search.side_effect = RuntimeError("boom")
     engine = DefaultContextEngine(memory_store=ms)
 

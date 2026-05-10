@@ -83,7 +83,7 @@ async def test_format_memory_context_partitions_by_layer() -> None:
         _entry("l3-1", "deploy: tag then push", layer="L3", type_="workflow"),
     ]
 
-    output = engine._format_memory_context(results)
+    output = engine._format_memory_context(results, [])
 
     assert output is not None
     assert "<memory_context>" in output
@@ -119,7 +119,7 @@ async def test_format_memory_context_only_l2_no_empty_procedures() -> None:
         _entry("l2-1", "fact only", layer="L2", type_="env_fact"),
     ]
 
-    output = engine._format_memory_context(results)
+    output = engine._format_memory_context(results, [])
 
     assert output is not None
     assert "<facts>" in output
@@ -134,7 +134,7 @@ async def test_format_memory_context_only_l3_no_empty_facts() -> None:
         _entry("l3-1", "workflow only", layer="L3", type_="workflow"),
     ]
 
-    output = engine._format_memory_context(results)
+    output = engine._format_memory_context(results, [])
 
     assert output is not None
     assert "<procedures>" in output
@@ -144,7 +144,7 @@ async def test_format_memory_context_only_l3_no_empty_facts() -> None:
 
 async def test_format_memory_context_empty_returns_none() -> None:
     engine = DefaultContextEngine()
-    assert engine._format_memory_context([]) is None
+    assert engine._format_memory_context([], []) is None
 
 
 async def test_assemble_produces_partitioned_format_in_system_prompt_addition() -> None:
