@@ -26,3 +26,5 @@ pyclaw.json
 web/.vite/
 node_modules/
 logs/
+
+.worktrees/
