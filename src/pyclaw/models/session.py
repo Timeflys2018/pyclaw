@@ -184,5 +184,7 @@ def _content_blocks_to_llm(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
                 "image_url": {"url": f"data:{block.mime_type};base64,{block.data}"},
             })
         elif isinstance(block, TextBlock):
+            if not block.text or not block.text.strip():
+                continue
             result.append({"type": "text", "text": block.text})
     return result

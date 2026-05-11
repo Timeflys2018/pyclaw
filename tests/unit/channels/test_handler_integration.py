@@ -416,3 +416,149 @@ async def test_workspace_base_comes_from_context_not_hardcoded(tmp_path: Path) -
 
     assert len(workspace_paths_seen) == 1
     assert workspace_paths_seen[0].parent == custom_base
+
+
+def _make_post_event(
+    content_json: str,
+    chat_type: str = "p2p",
+    open_id: str = "ou_test",
+    chat_id: str = "oc_chat1",
+    message_id: str = "msg_post",
+) -> Any:
+    event = MagicMock()
+    event.event.sender.sender_id.open_id = open_id
+    event.event.message.chat_type = chat_type
+    event.event.message.chat_id = chat_id
+    event.event.message.thread_id = ""
+    event.event.message.message_type = "post"
+    event.event.message.message_id = message_id
+    event.event.message.content = content_json
+    event.event.message.mentions = []
+    return event
+
+
+def _make_pure_image_event(
+    image_key: str,
+    chat_type: str = "p2p",
+    open_id: str = "ou_test",
+    chat_id: str = "oc_chat1",
+    message_id: str = "msg_img",
+) -> Any:
+    event = MagicMock()
+    event.event.sender.sender_id.open_id = open_id
+    event.event.message.chat_type = chat_type
+    event.event.message.chat_id = chat_id
+    event.event.message.thread_id = ""
+    event.event.message.message_type = "image"
+    event.event.message.message_id = message_id
+    event.event.message.content = '{"image_key": "' + image_key + '"}'
+    event.event.message.mentions = []
+    return event
+
+
+@pytest.mark.asyncio
+async def test_handle_post_with_one_image_attaches(tmp_path: Path) -> None:
+    from pyclaw.models import ImageBlock as _ImageBlock
+
+    store = InMemorySessionStore()
+    ctx = _make_ctx(store, tmp_path)
+    content = (
+        '{"zh_cn": {"content": [['
+        '{"tag": "text", "text": "look"},'
+        '{"tag": "img", "image_key": "img_xyz"}'
+        ']]}}'
+    )
+    event = _make_post_event(content, message_id="msg_post_one_img")
+
+    async def fake_image_to_block(client, mid, key):
+        return _ImageBlock(type="image", data="b64", mime_type="image/png")
+
+    captured: dict[str, Any] = {}
+
+    async def fake_dispatch(inbound, ctx_, message_id, workspace_path, extra_system):
+        captured["inbound"] = inbound
+
+    async def _run_immediately(session_id, coro):
+        await coro
+
+    with patch("pyclaw.channels.feishu.handler.feishu_image_to_block",
+               side_effect=fake_image_to_block):
+        with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
+            with patch("pyclaw.channels.feishu.handler._dispatch_and_reply",
+                       side_effect=fake_dispatch):
+                await handle_feishu_message(event, ctx)
+
+    inbound = captured["inbound"]
+    assert len(inbound.attachments) == 1
+    assert inbound.attachments[0].type == "image"
+    assert "look" in inbound.user_message
+
+
+@pytest.mark.asyncio
+async def test_handle_seven_images_truncated_to_five_with_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from pyclaw.models import ImageBlock as _ImageBlock
+
+    store = InMemorySessionStore()
+    ctx = _make_ctx(store, tmp_path)
+    spans = ",".join(
+        f'{{"tag": "img", "image_key": "k{i}"}}' for i in range(7)
+    )
+    content = '{"zh_cn": {"content": [[' + spans + "]]}}"
+    event = _make_post_event(content, message_id="msg_seven_imgs")
+
+    async def fake_image_to_block(client, mid, key):
+        return _ImageBlock(type="image", data="b64", mime_type="image/png")
+
+    captured: dict[str, Any] = {}
+
+    async def fake_dispatch(inbound, ctx_, message_id, workspace_path, extra_system):
+        captured["inbound"] = inbound
+
+    async def _run_immediately(session_id, coro):
+        await coro
+
+    import logging
+    with caplog.at_level(logging.WARNING, logger="pyclaw.channels.feishu.handler"):
+        with patch("pyclaw.channels.feishu.handler.feishu_image_to_block",
+                   side_effect=fake_image_to_block):
+            with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
+                with patch("pyclaw.channels.feishu.handler._dispatch_and_reply",
+                           side_effect=fake_dispatch):
+                    await handle_feishu_message(event, ctx)
+
+    inbound = captured["inbound"]
+    assert len(inbound.attachments) == 5
+    assert any("truncating to 5" in rec.message for rec in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_handle_pure_image_no_text_forces_empty_string(tmp_path: Path) -> None:
+    from pyclaw.models import ImageBlock as _ImageBlock
+
+    store = InMemorySessionStore()
+    ctx = _make_ctx(store, tmp_path)
+    event = _make_pure_image_event("img_only_key", message_id="msg_pure_img")
+
+    async def fake_image_to_block(client, mid, key):
+        return _ImageBlock(type="image", data="b64", mime_type="image/jpeg")
+
+    captured: dict[str, Any] = {}
+
+    async def fake_dispatch(inbound, ctx_, message_id, workspace_path, extra_system):
+        captured["inbound"] = inbound
+
+    async def _run_immediately(session_id, coro):
+        await coro
+
+    with patch("pyclaw.channels.feishu.handler.feishu_image_to_block",
+               side_effect=fake_image_to_block):
+        with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
+            with patch("pyclaw.channels.feishu.handler._dispatch_and_reply",
+                       side_effect=fake_dispatch):
+                await handle_feishu_message(event, ctx)
+
+    inbound = captured["inbound"]
+    assert inbound.user_message == ""
+    assert len(inbound.attachments) == 1

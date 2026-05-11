@@ -73,9 +73,9 @@ def is_bot_mentioned(event: Any, bot_open_id: str) -> bool:
     )
 
 
-def extract_text_from_event(event: Any) -> str | None:
+def extract_text_and_images_from_event(event: Any) -> tuple[str | None, list[str]]:
     if not event.event or not event.event.message:
-        return None
+        return None, []
     msg = event.event.message
     msg_type = msg.message_type or ""
     content_str = msg.content or ""
@@ -83,32 +83,66 @@ def extract_text_from_event(event: Any) -> str | None:
     if msg_type == "text":
         try:
             data = json.loads(content_str)
-            return str(data.get("text", ""))
+            return str(data.get("text", "")), []
         except Exception:
-            return content_str
+            return content_str, []
+
+    if msg_type == "image":
+        try:
+            data = json.loads(content_str)
+            image_key = str(data.get("image_key") or "")
+            return None, [image_key] if image_key else []
+        except Exception:
+            return None, []
+
+    if msg_type == "media":
+        try:
+            data = json.loads(content_str)
+            image_key = str(data.get("image_key") or "")
+            return None, [image_key] if image_key else []
+        except Exception:
+            return None, []
 
     if msg_type == "post":
         try:
             data = json.loads(content_str)
-            parts: list[str] = []
+            text_parts: list[str] = []
+            image_keys: list[str] = []
             for lang_content in data.values():
-                if isinstance(lang_content, dict):
-                    for row in lang_content.get("content", []):
-                        for span in row:
-                            if isinstance(span, dict) and span.get("tag") == "text":
-                                parts.append(str(span.get("text", "")))
-            if parts:
-                return " ".join(parts)
-            content_body = data.get("content") or data.get("zh_cn", {}).get("content", [])
-            for row in content_body:
-                for span in row:
-                    if isinstance(span, dict) and span.get("tag") == "text":
-                        parts.append(str(span.get("text", "")))
-            return " ".join(parts) if parts else None
+                if not isinstance(lang_content, dict):
+                    continue
+                for row in lang_content.get("content", []) or []:
+                    for span in row:
+                        if not isinstance(span, dict):
+                            continue
+                        tag = span.get("tag")
+                        if tag == "text":
+                            text_parts.append(str(span.get("text", "")))
+                        elif tag == "a":
+                            text_parts.append(str(span.get("text", "")))
+                        elif tag == "at":
+                            user_name = span.get("user_name")
+                            if user_name:
+                                text_parts.append(f"@{user_name}")
+                        elif tag == "img":
+                            key = span.get("image_key")
+                            if key:
+                                image_keys.append(str(key))
+                        elif tag == "media":
+                            key = span.get("image_key")
+                            if key:
+                                image_keys.append(str(key))
+            text = " ".join(p for p in text_parts if p) if text_parts else None
+            return text, image_keys
         except Exception:
-            return None
+            return None, []
 
-    return None
+    return None, []
+
+
+def extract_text_from_event(event: Any) -> str | None:
+    text, _ = extract_text_and_images_from_event(event)
+    return text
 
 
 async def build_group_context(client: FeishuClient, chat_id: str, size: int) -> str:
@@ -150,20 +184,25 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         logger.debug("group message without bot mention, skipping")
         return
 
-    text = extract_text_from_event(event)
+    text, image_keys = extract_text_and_images_from_event(event)
+
+    if len(image_keys) > 5:
+        logger.warning(
+            "feishu message %s has %d images, truncating to 5",
+            message_id, len(image_keys),
+        )
+        image_keys = image_keys[:5]
 
     attachments: list[ImageBlock] = []
-    if msg_type == "image":
+    for image_key in image_keys:
         try:
-            content_data = json.loads(msg.content or "{}")
-            image_key = content_data.get("image_key", "")
-            if image_key:
-                block = await feishu_image_to_block(ctx.feishu_client, message_id, image_key)
-                attachments.append(block)
-                if text is None:
-                    text = ""
+            block = await feishu_image_to_block(ctx.feishu_client, message_id, image_key)
+            attachments.append(block)
         except Exception:
-            logger.exception("failed to download image for message %s", message_id)
+            logger.exception(
+                "failed to download image %s for message %s",
+                image_key, message_id,
+            )
 
     if text is None and not attachments:
         logger.debug("unsupported message type %s, skipping", msg_type)

@@ -7,6 +7,7 @@ import pytest
 
 from pyclaw.channels.feishu.handler import (
     build_session_id,
+    extract_text_and_images_from_event,
     extract_text_from_event,
     is_bot_mentioned,
 )
@@ -88,3 +89,103 @@ def test_extract_text_returns_none_for_image() -> None:
     event = _make_event(msg_type="image", content='{"image_key": "img_abc"}')
     text = extract_text_from_event(event)
     assert text is None
+
+
+class TestExtractTextAndImagesFromEvent:
+    def test_extract_text_message(self) -> None:
+        event = _make_event(msg_type="text", content='{"text": "hello"}')
+        text, images = extract_text_and_images_from_event(event)
+        assert text == "hello"
+        assert images == []
+
+    def test_extract_pure_image_message(self) -> None:
+        event = _make_event(msg_type="image", content='{"image_key": "img_abc"}')
+        text, images = extract_text_and_images_from_event(event)
+        assert text is None
+        assert images == ["img_abc"]
+
+    def test_extract_post_text_only(self) -> None:
+        content = (
+            '{"zh_cn": {"title": "t", "content": '
+            '[[{"tag": "text", "text": "hi"}, {"tag": "text", "text": " there"}]]}}'
+        )
+        event = _make_event(msg_type="post", content=content)
+        text, images = extract_text_and_images_from_event(event)
+        assert text is not None
+        assert "hi" in text and "there" in text
+        assert images == []
+
+    def test_extract_post_text_plus_one_image(self) -> None:
+        content = (
+            '{"zh_cn": {"content": [['
+            '{"tag": "text", "text": "look at this"},'
+            '{"tag": "img", "image_key": "img_xyz"}'
+            ']]}}'
+        )
+        event = _make_event(msg_type="post", content=content)
+        text, images = extract_text_and_images_from_event(event)
+        assert text is not None
+        assert "look at this" in text
+        assert images == ["img_xyz"]
+
+    def test_extract_post_three_images_multi(self) -> None:
+        content = (
+            '{"zh_cn": {"content": [['
+            '{"tag": "img", "image_key": "k1"},'
+            '{"tag": "img", "image_key": "k2"},'
+            '{"tag": "img", "image_key": "k3"}'
+            ']]}}'
+        )
+        event = _make_event(msg_type="post", content=content)
+        _, images = extract_text_and_images_from_event(event)
+        assert images == ["k1", "k2", "k3"]
+
+    def test_extract_post_with_at_tag(self) -> None:
+        content = (
+            '{"zh_cn": {"content": [['
+            '{"tag": "at", "user_name": "alice"},'
+            '{"tag": "text", "text": " hello"}'
+            ']]}}'
+        )
+        event = _make_event(msg_type="post", content=content)
+        text, _ = extract_text_and_images_from_event(event)
+        assert text is not None
+        assert "@alice" in text
+        assert "hello" in text
+
+    def test_extract_post_with_a_tag(self) -> None:
+        content = (
+            '{"zh_cn": {"content": [['
+            '{"tag": "a", "text": "click me", "href": "https://example.com"}'
+            ']]}}'
+        )
+        event = _make_event(msg_type="post", content=content)
+        text, _ = extract_text_and_images_from_event(event)
+        assert text is not None
+        assert "click me" in text
+        assert "https://example.com" not in text
+
+    def test_extract_post_media_video_cover(self) -> None:
+        content = (
+            '{"zh_cn": {"content": [['
+            '{"tag": "media", "image_key": "cover_img_key"}'
+            ']]}}'
+        )
+        event = _make_event(msg_type="post", content=content)
+        _, images = extract_text_and_images_from_event(event)
+        assert images == ["cover_img_key"]
+
+    def test_extract_top_level_media_message(self) -> None:
+        event = _make_event(
+            msg_type="media",
+            content='{"image_key": "video_cover_key", "file_key": "vk1"}',
+        )
+        text, images = extract_text_and_images_from_event(event)
+        assert text is None
+        assert images == ["video_cover_key"]
+
+    def test_extract_unsupported_msg_type_returns_empty(self) -> None:
+        event = _make_event(msg_type="sticker", content='{"file_key": "fk"}')
+        text, images = extract_text_and_images_from_event(event)
+        assert text is None
+        assert images == []
