@@ -79,6 +79,70 @@ async def test_archive_failure_does_not_propagate() -> None:
     ms.archive_session.assert_awaited_once()
 
 
+async def test_archive_summary_handles_list_content_with_image() -> None:
+    from pyclaw.models import ImageBlock, TextBlock
+
+    store = InMemorySessionStore()
+    tree = await store.create_new_session("feishu:cli:ou_img", "default", "default")
+    session_id = tree.header.id
+    prior: str | None = None
+    for i in range(5):
+        u = MessageEntry(
+            id=f"u{i}", parent_id=prior, timestamp=now_iso(),
+            role="user",
+            content=[
+                ImageBlock(type="image", data="b64", mime_type="image/png"),
+                TextBlock(type="text", text=f"what is image {i}"),
+            ],
+        )
+        await store.append_entry(session_id, u, leaf_id=u.id)
+        prior = u.id
+        a = MessageEntry(
+            id=f"a{i}", parent_id=prior, timestamp=now_iso(),
+            role="assistant", content=f"I see image {i}",
+        )
+        await store.append_entry(session_id, a, leaf_id=a.id)
+        prior = a.id
+
+    ms = AsyncMock()
+    await archive_session_background(ms, store, session_id)
+
+    ms.archive_session.assert_awaited_once()
+    summary = ms.archive_session.await_args.args[2]
+    assert "what is image" in summary
+    assert "[图片]" in summary
+    assert "I see image" in summary
+
+
+async def test_archive_summary_pure_image_user_turns_not_silently_dropped() -> None:
+    from pyclaw.models import ImageBlock
+
+    store = InMemorySessionStore()
+    tree = await store.create_new_session("feishu:cli:ou_pure_img", "default", "default")
+    session_id = tree.header.id
+    prior: str | None = None
+    for i in range(5):
+        u = MessageEntry(
+            id=f"u{i}", parent_id=prior, timestamp=now_iso(),
+            role="user",
+            content=[ImageBlock(type="image", data="b64", mime_type="image/png")],
+        )
+        await store.append_entry(session_id, u, leaf_id=u.id)
+        prior = u.id
+        a = MessageEntry(
+            id=f"a{i}", parent_id=prior, timestamp=now_iso(),
+            role="assistant", content=f"assistant {i}",
+        )
+        await store.append_entry(session_id, a, leaf_id=a.id)
+        prior = a.id
+
+    ms = AsyncMock()
+    await archive_session_background(ms, store, session_id)
+
+    summary = ms.archive_session.await_args.args[2]
+    assert summary.count("user: [图片]") >= 5
+
+
 async def test_archive_summary_truncates_long_content() -> None:
     store = InMemorySessionStore()
     tree = await store.create_new_session("feishu:cli:ou_long", "default", "default")

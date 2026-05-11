@@ -69,3 +69,38 @@ class TestCompact:
         assert result.summary == "custom summary"
         assert len(calls) == 1
         assert calls[0][0]["role"] == "system"
+
+
+class TestFallbackSummary:
+    def test_string_content_preserved(self) -> None:
+        from pyclaw.core.context_engine import _fallback_summary
+
+        msgs = [{"role": "user", "content": "hello world"}]
+        result = _fallback_summary(msgs)
+        assert "hello world" in result
+
+    def test_list_content_with_image_extracts_text_and_placeholder(self) -> None:
+        from pyclaw.core.context_engine import _fallback_summary
+
+        msgs = [
+            {"role": "user", "content": [
+                {"type": "text", "text": "what is this"},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+            ]},
+        ]
+        result = _fallback_summary(msgs)
+        assert "what is this" in result
+        assert "[图片]" in result
+
+    def test_pure_image_turn_not_silently_dropped(self) -> None:
+        from pyclaw.core.context_engine import _fallback_summary
+
+        msgs = [
+            {"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,xyz"}},
+            ]},
+            {"role": "assistant", "content": "I see the image"},
+        ]
+        result = _fallback_summary(msgs)
+        assert "[图片]" in result
+        assert "I see the image" in result

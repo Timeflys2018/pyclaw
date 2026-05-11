@@ -390,12 +390,14 @@ class _CompactionAborted(Exception):
 
 
 def _fallback_summary(messages: list[dict[str, Any]]) -> str:
+    from pyclaw.models.utils import extract_text_from_content
+
     lines = [f"[summary of {len(messages)} prior messages]"]
     for m in messages[:3]:
         role = m.get("role", "user")
-        content = m.get("content", "")
-        if isinstance(content, str):
-            snippet = content[:120].replace("\n", " ")
+        text = extract_text_from_content(m.get("content"))
+        if text:
+            snippet = text[:120].replace("\n", " ")
             lines.append(f"- {role}: {snippet}")
     if len(messages) > 3:
         lines.append(f"- ... ({len(messages) - 3} more)")

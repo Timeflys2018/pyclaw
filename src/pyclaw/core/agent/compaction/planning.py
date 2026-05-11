@@ -8,6 +8,7 @@ from typing import Any, TypeVar
 DEFAULT_KEEP_RECENT_TOKENS = 20_000
 DEFAULT_THRESHOLD = 0.8
 DEFAULT_COMPACTION_SAFETY_TIMEOUT_S = 900.0
+IMAGE_TOKEN_ESTIMATE = 1600
 
 _T = TypeVar("_T")
 
@@ -44,8 +45,12 @@ def estimate_message_tokens(msg: dict[str, Any]) -> int:
     elif isinstance(content, list):
         for block in content:
             if isinstance(block, dict):
-                text = block.get("text") or ""
-                total += estimate_tokens(text) if isinstance(text, str) else 0
+                btype = block.get("type")
+                if btype in ("image_url", "image"):
+                    total += IMAGE_TOKEN_ESTIMATE
+                else:
+                    text = block.get("text") or ""
+                    total += estimate_tokens(text) if isinstance(text, str) else 0
     for call in msg.get("tool_calls") or []:
         fn = (call or {}).get("function") or {}
         name = fn.get("name") or ""

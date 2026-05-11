@@ -28,15 +28,17 @@ def _count_user_messages(tree: Any) -> int:
 
 
 def _simple_summary(tree: Any) -> str:
+    from pyclaw.models.utils import extract_text_from_content
+
     texts: list[str] = []
     for entry in tree.entries.values():
         if not isinstance(entry, MessageEntry):
             continue
         if entry.role not in ("user", "assistant"):
             continue
-        content = entry.content
-        if isinstance(content, str) and content.strip():
-            texts.append(f"{entry.role}: {content}")
+        text = extract_text_from_content(entry.content)
+        if text.strip():
+            texts.append(f"{entry.role}: {text}")
     joined = "\n".join(texts)
     if len(joined) <= SIMPLE_SUMMARY_HEAD + SIMPLE_SUMMARY_TAIL + 10:
         return joined

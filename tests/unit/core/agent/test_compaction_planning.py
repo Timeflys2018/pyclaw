@@ -31,6 +31,45 @@ class TestTokenEstimation:
         tokens = estimate_message_tokens(msg)
         assert tokens > 100
 
+    def test_image_url_block_charged_image_token_estimate(self) -> None:
+        from pyclaw.core.agent.compaction.planning import IMAGE_TOKEN_ESTIMATE
+
+        msg = {
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64," + "A" * 100_000}},
+                {"type": "text", "text": "what"},
+            ],
+        }
+        tokens = estimate_message_tokens(msg)
+        assert tokens >= IMAGE_TOKEN_ESTIMATE
+
+    def test_anthropic_image_block_charged(self) -> None:
+        from pyclaw.core.agent.compaction.planning import IMAGE_TOKEN_ESTIMATE
+
+        msg = {
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "..."}},
+            ],
+        }
+        tokens = estimate_message_tokens(msg)
+        assert tokens >= IMAGE_TOKEN_ESTIMATE
+
+    def test_multiple_images_charged_per_image(self) -> None:
+        from pyclaw.core.agent.compaction.planning import IMAGE_TOKEN_ESTIMATE
+
+        msg = {
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,def"}},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,ghi"}},
+            ],
+        }
+        tokens = estimate_message_tokens(msg)
+        assert tokens >= 3 * IMAGE_TOKEN_ESTIMATE
+
 
 class TestShouldCompact:
     def test_below_threshold_false(self) -> None:

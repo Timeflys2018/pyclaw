@@ -20,20 +20,8 @@ def normalize_for_dedup(text: str) -> str:
 
 
 def _extract_text(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts = []
-        for block in content:
-            if isinstance(block, dict):
-                if block.get("type") == "text" and isinstance(block.get("text"), str):
-                    parts.append(block["text"])
-            else:
-                text_attr = getattr(block, "text", None)
-                if isinstance(text_attr, str):
-                    parts.append(text_attr)
-        return "\n".join(parts)
-    return ""
+    from pyclaw.models.utils import extract_text_from_content
+    return extract_text_from_content(content)
 
 
 def _parse_timestamp(value: Any) -> float | None:
