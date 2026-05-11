@@ -79,6 +79,10 @@ def extract_text_and_images_from_event(event: Any) -> tuple[str | None, list[str
     msg = event.event.message
     msg_type = msg.message_type or ""
     content_str = msg.content or ""
+    logger.debug(
+        "extract_text_and_images: msg_type=%s raw_content=%r",
+        msg_type, content_str[:2000],
+    )
 
     if msg_type == "text":
         try:
@@ -108,10 +112,21 @@ def extract_text_and_images_from_event(event: Any) -> tuple[str | None, list[str
             data = json.loads(content_str)
             text_parts: list[str] = []
             image_keys: list[str] = []
-            for lang_content in data.values():
-                if not isinstance(lang_content, dict):
-                    continue
-                for row in lang_content.get("content", []) or []:
+
+            content_grids: list[Any] = []
+            top_level = data.get("content")
+            if isinstance(top_level, list):
+                content_grids.append(top_level)
+            for value in data.values():
+                if isinstance(value, dict):
+                    inner = value.get("content")
+                    if isinstance(inner, list):
+                        content_grids.append(inner)
+
+            for grid in content_grids:
+                for row in grid:
+                    if not isinstance(row, list):
+                        continue
                     for span in row:
                         if not isinstance(span, dict):
                             continue

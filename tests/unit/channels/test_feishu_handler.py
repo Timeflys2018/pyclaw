@@ -189,3 +189,22 @@ class TestExtractTextAndImagesFromEvent:
         text, images = extract_text_and_images_from_event(event)
         assert text is None
         assert images == []
+
+    def test_extract_post_top_level_content_image_then_text(self) -> None:
+        content = (
+            '{"title": "", "content": [['
+            '{"tag": "img", "image_key": "img_v3_xyz", "width": 100, "height": 50}'
+            '], [{"tag": "text", "text": "这张图里有什么", "style": []}]]}'
+        )
+        event = _make_event(msg_type="post", content=content)
+        text, images = extract_text_and_images_from_event(event)
+        assert text is not None
+        assert "这张图里有什么" in text
+        assert images == ["img_v3_xyz"]
+
+    def test_extract_post_top_level_content_only_text(self) -> None:
+        content = '{"title": "", "content": [[{"tag": "text", "text": "纯文字 post"}]]}'
+        event = _make_event(msg_type="post", content=content)
+        text, images = extract_text_and_images_from_event(event)
+        assert text == "纯文字 post"
+        assert images == []
