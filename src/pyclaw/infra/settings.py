@@ -5,7 +5,7 @@ from pathlib import Path
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pyclaw.models import (
@@ -138,14 +138,39 @@ class EmbeddingSettings(BaseSettings):
     )
 
 
+class ModelModalities(BaseModel):
+    input: set[str] = Field(default_factory=lambda: {"text"})
+    output: set[str] = Field(default_factory=lambda: {"text"})
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+
+class ModelEntry(BaseModel):
+    modalities: ModelModalities = Field(default_factory=ModelModalities)
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+
 class ProviderSettings(BaseSettings):
     api_key: str | None = Field(default=None, alias="apiKey")
     base_url: str | None = Field(default=None, alias="baseURL")
-    models: list[str] = Field(default_factory=list)
+    models: dict[str, ModelEntry] = Field(default_factory=dict)
     prefixes: list[str] = Field(default_factory=list)
     litellm_provider: str | None = Field(default=None, alias="litellmProvider")
 
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
+
+    @field_validator("models", mode="before")
+    @classmethod
+    def _reject_legacy_list_form(cls, value):
+        if isinstance(value, list):
+            raise ValueError(
+                'ProviderSettings.models must be a dict {model_id: ModelEntry}, got list. '
+                'Migration: change "models": [...] to '
+                '"models": {model_id: {"modalities": {"input": [...], "output": [...]}}}. '
+                "See configs/pyclaw.example.json."
+            )
+        return value
 
 
 class AgentSettings(BaseSettings):

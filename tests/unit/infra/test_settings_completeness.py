@@ -171,3 +171,135 @@ def test_existing_example_config_still_loads() -> None:
     assert isinstance(s.agent.providers, dict)
     assert s.agent.unknown_prefix_policy == "fail"
     assert s.agent.default_provider is None
+
+
+class TestModelEntrySchema:
+    def test_model_modalities_default_text_only(self) -> None:
+        from pyclaw.infra.settings import ModelModalities
+
+        m = ModelModalities()
+        assert m.input == {"text"}
+        assert m.output == {"text"}
+
+    def test_model_modalities_json_list_to_set(self) -> None:
+        from pyclaw.infra.settings import ModelModalities
+
+        m = ModelModalities.model_validate(
+            {"input": ["text", "image", "pdf"], "output": ["text"]}
+        )
+        assert m.input == {"text", "image", "pdf"}
+        assert m.output == {"text"}
+
+    def test_model_modalities_case_sensitive(self) -> None:
+        from pyclaw.infra.settings import ModelModalities
+
+        m = ModelModalities.model_validate({"input": ["Image"], "output": ["text"]})
+        assert "image" not in m.input
+        assert "Image" in m.input
+
+    def test_model_entry_default_constructs(self) -> None:
+        from pyclaw.infra.settings import ModelEntry
+
+        entry = ModelEntry()
+        assert entry.modalities.input == {"text"}
+        assert entry.modalities.output == {"text"}
+
+    def test_model_entry_with_modalities(self) -> None:
+        from pyclaw.infra.settings import ModelEntry
+
+        entry = ModelEntry.model_validate(
+            {"modalities": {"input": ["text", "image"], "output": ["text"]}}
+        )
+        assert entry.modalities.input == {"text", "image"}
+
+    def test_model_entry_extra_fields_ignored(self) -> None:
+        from pyclaw.infra.settings import ModelEntry
+
+        entry = ModelEntry.model_validate(
+            {
+                "modalities": {"input": ["text", "image"], "output": ["text"]},
+                "limit": {"context": 128000, "output": 4096},
+                "name": "GPT-5.4",
+                "attachment": True,
+            }
+        )
+        assert entry.modalities.input == {"text", "image"}
+
+    def test_provider_settings_models_dict_form(self) -> None:
+        s = _parse(
+            {
+                "agent": {
+                    "providers": {
+                        "openai": {
+                            "apiKey": "k",
+                            "models": {
+                                "azure_openai/gpt-5.4": {
+                                    "modalities": {
+                                        "input": ["text", "image"],
+                                        "output": ["text"],
+                                    }
+                                },
+                                "azure_openai/gpt-5.3-codex": {
+                                    "modalities": {
+                                        "input": ["text"],
+                                        "output": ["text"],
+                                    }
+                                },
+                            },
+                        }
+                    }
+                }
+            }
+        )
+        ps = s.agent.providers["openai"]
+        assert isinstance(ps.models, dict)
+        assert "azure_openai/gpt-5.4" in ps.models
+        assert "image" in ps.models["azure_openai/gpt-5.4"].modalities.input
+        assert "image" not in ps.models["azure_openai/gpt-5.3-codex"].modalities.input
+
+    def test_provider_settings_models_empty_dict_ok(self) -> None:
+        s = _parse(
+            {"agent": {"providers": {"openai": {"apiKey": "k", "models": {}}}}}
+        )
+        assert s.agent.providers["openai"].models == {}
+
+    def test_provider_settings_models_list_rejected(self) -> None:
+        with pytest.raises(Exception) as excinfo:
+            _parse(
+                {
+                    "agent": {
+                        "providers": {
+                            "openai": {
+                                "apiKey": "k",
+                                "models": ["azure_openai/gpt-5.4"],
+                            }
+                        }
+                    }
+                }
+            )
+        msg = str(excinfo.value).lower()
+        assert "must be a dict" in msg or "dict" in msg
+        assert "modalities" in msg or "model_id" in msg or "pyclaw.example.json" in msg
+
+    def test_provider_settings_models_dict_preserves_order(self) -> None:
+        ordered_ids = [
+            "azure_openai/gpt-5.4",
+            "azure_openai/gpt-5.3-codex",
+            "azure_openai/gpt-4o",
+        ]
+        s = _parse(
+            {
+                "agent": {
+                    "providers": {
+                        "openai": {
+                            "apiKey": "k",
+                            "models": {
+                                mid: {"modalities": {"input": ["text"], "output": ["text"]}}
+                                for mid in ordered_ids
+                            },
+                        }
+                    }
+                }
+            }
+        )
+        assert list(s.agent.providers["openai"].models.keys()) == ordered_ids

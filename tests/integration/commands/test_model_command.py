@@ -9,7 +9,7 @@ import pytest
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.commands.builtin import cmd_model
 from pyclaw.core.commands.context import CommandContext
-from pyclaw.infra.settings import AgentSettings, ProviderSettings
+from pyclaw.infra.settings import AgentSettings, ModelEntry, ModelModalities, ProviderSettings
 from pyclaw.models import (
     ModelChangeEntry,
     SessionHeader,
@@ -18,14 +18,24 @@ from pyclaw.models import (
 from pyclaw.storage.session.base import InMemorySessionStore
 
 
+def _text_only_entry() -> ModelEntry:
+    return ModelEntry(modalities=ModelModalities(input={"text"}, output={"text"}))
+
+
 def _make_settings_with_models() -> AgentSettings:
     return AgentSettings(
         providers={
-            "openai": ProviderSettings(api_key="sk-x", models=["gpt-4o", "gpt-4o-mini"]),
+            "openai": ProviderSettings(
+                api_key="sk-x",
+                models={
+                    "gpt-4o": _text_only_entry(),
+                    "gpt-4o-mini": _text_only_entry(),
+                },
+            ),
             "anthropic": ProviderSettings(
                 api_key="sk-y",
                 base_url="https://api.anthropic.com",
-                models=["claude-sonnet-4-20250514"],
+                models={"claude-sonnet-4-20250514": _text_only_entry()},
             ),
         }
     )

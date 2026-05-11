@@ -38,9 +38,21 @@ def list_available_models(agent_settings: Any) -> dict[str, list[str]]:
     providers = getattr(agent_settings, "providers", None) or {}
     result: dict[str, list[str]] = {}
     for name, ps in providers.items():
-        models = list(getattr(ps, "models", []) or [])
-        if models:
-            result[name] = models
+        models_dict = getattr(ps, "models", None) or {}
+        ids = list(models_dict.keys())
+        if ids:
+            result[name] = ids
+    return result
+
+
+def list_available_models_with_modalities(agent_settings: Any) -> dict[str, list[tuple[str, Any]]]:
+    providers = getattr(agent_settings, "providers", None) or {}
+    result: dict[str, list[tuple[str, Any]]] = {}
+    for name, ps in providers.items():
+        models_dict = getattr(ps, "models", None) or {}
+        if not models_dict:
+            continue
+        result[name] = [(mid, entry.modalities) for mid, entry in models_dict.items()]
     return result
 
 

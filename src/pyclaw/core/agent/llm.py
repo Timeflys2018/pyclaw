@@ -15,6 +15,7 @@ class LLMErrorCode:
     AUTH_ERROR = "auth_error"
     TIMEOUT = "timeout"
     PROVIDER_NOT_FOUND = "provider_not_found"
+    VISION_NOT_SUPPORTED = "vision_not_support"
     UNKNOWN = "unknown"
 
 
@@ -77,7 +78,7 @@ def resolve_provider_for_model(
     unknown_prefix_policy: Literal["fail", "default"] = "fail",
 ) -> "tuple[str, ProviderSettings]":
     for name, ps in providers.items():
-        if model in (ps.models or []):
+        if model in (ps.models or {}):
             return name, ps
 
     for name, ps in providers.items():
@@ -108,6 +109,60 @@ def resolve_provider_for_model(
         f"Declare prefixes[] on a provider, or set agent.unknown_prefix_policy='default' "
         f"and agent.default_provider='<name>' to route unknowns.",
     )
+
+
+def model_supports_input(
+    model: str,
+    providers: "Mapping[str, ProviderSettings]",
+    modality: str,
+    *,
+    default_provider: str | None = None,
+    unknown_prefix_policy: Literal["fail", "default"] = "fail",
+) -> bool:
+    _name, ps = resolve_provider_for_model(
+        model,
+        providers,
+        default_provider=default_provider,
+        unknown_prefix_policy=unknown_prefix_policy,
+    )
+    entry = (ps.models or {}).get(model)
+    if entry is None:
+        return False
+    return modality in entry.modalities.input
+
+
+def messages_have_user_image_content(messages: list[dict[str, Any]]) -> bool:
+    for msg in messages:
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, Mapping):
+                continue
+            btype = block.get("type")
+            if btype == "image_url" or btype == "image":
+                return True
+    return False
+
+
+def format_vision_capable_models(
+    providers: "Mapping[str, ProviderSettings]",
+) -> str:
+    parts: list[str] = []
+    for provider_name, ps in providers.items():
+        models_dict = ps.models or {}
+        vision_ids = [
+            mid for mid, entry in models_dict.items()
+            if "image" in entry.modalities.input
+        ]
+        if vision_ids:
+            parts.append(f"📦 {provider_name}: {', '.join(vision_ids)}")
+    return "; ".join(parts) if parts else "(none configured)"
+
+
+_format_vision_capable_models = format_vision_capable_models
 
 
 class LLMClient:
@@ -170,6 +225,22 @@ class LLMClient:
         payload_messages = _prepend_system(messages, system)
 
         api_key, api_base, litellm_provider = self._resolve_credentials(effective_model)
+
+        if self._providers and messages_have_user_image_content(payload_messages):
+            if not model_supports_input(
+                effective_model,
+                self._providers,
+                "image",
+                default_provider=self._default_provider,
+                unknown_prefix_policy=self._unknown_prefix_policy,
+            ):
+                vision_models_str = format_vision_capable_models(self._providers)
+                raise LLMError(
+                    LLMErrorCode.VISION_NOT_SUPPORTED,
+                    f"Model '{effective_model}' does not have image input capability. "
+                    f"Available vision-capable models: {vision_models_str}. "
+                    f"Use /model <model_id> to switch.",
+                )
 
         extra: dict[str, Any] = {}
         if api_key:

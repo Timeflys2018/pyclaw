@@ -16,7 +16,9 @@ from pyclaw.core.agent.llm import (
     LLMResponse,
     LLMUsage,
     finalize_tool_calls,
+    format_vision_capable_models,
     merge_tool_call_deltas,
+    model_supports_input,
 )
 from pyclaw.core.agent.tool_result_truncation import (
     resolve_max_output_chars,
@@ -222,12 +224,36 @@ async def run_agent_stream(
             agent_id=request.agent_id,
         )
 
+        effective_model = (
+            request.model or tree.header.model_override or deps.llm.default_model
+        )
+
+        if request.attachments and getattr(deps.llm, "_providers", None):
+            providers = deps.llm._providers
+            if not model_supports_input(
+                effective_model,
+                providers,
+                "image",
+                default_provider=getattr(deps.llm, "_default_provider", None),
+                unknown_prefix_policy="fail",
+            ):
+                vision_models_str = format_vision_capable_models(providers)
+                yield ErrorEvent(
+                    error_code="vision_not_support",
+                    message=(
+                        f"Model '{effective_model}' does not have image input capability. "
+                        f"Available vision-capable models: {vision_models_str}. "
+                        f"Use /model <model_id> to switch."
+                    ),
+                )
+                return
+
         user_entry_content: Any
         if request.attachments:
-            user_entry_content = [
-                *request.attachments,
-                TextBlock(type="text", text=request.user_message),
-            ]
+            blocks: list[Any] = list(request.attachments)
+            if request.user_message and request.user_message.strip():
+                blocks.append(TextBlock(type="text", text=request.user_message))
+            user_entry_content = blocks
         else:
             user_entry_content = request.user_message
 
@@ -253,9 +279,6 @@ async def run_agent_stream(
             skills_prompt_str = deps.skill_provider.resolve_skills_prompt(str(tool_workspace_path))
 
         tool_summaries = [(t.name, t.description) for t in (deps.tools.get(n) for n in deps.tools.names()) if t is not None]
-        effective_model = (
-            request.model or tree.header.model_override or deps.llm.default_model
-        )
         prompt_inputs = PromptInputs(
             session_id=request.session_id,
             workspace_id=request.workspace_id,

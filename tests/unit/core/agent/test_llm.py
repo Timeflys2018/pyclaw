@@ -17,11 +17,20 @@ from pyclaw.infra.settings import ProviderSettings
 
 
 def _ps(*, api_key: str = "k", base_url: str = "u",
-        models: list[str] | None = None, prefixes: list[str] | None = None) -> ProviderSettings:
+        models: list[str] | dict | None = None, prefixes: list[str] | None = None) -> ProviderSettings:
+    if isinstance(models, dict):
+        models_dict = models
+    elif isinstance(models, list):
+        models_dict = {
+            mid: {"modalities": {"input": ["text"], "output": ["text"]}}
+            for mid in models
+        }
+    else:
+        models_dict = {}
     return ProviderSettings(
         api_key=api_key,
         base_url=base_url,
-        models=list(models or []),
+        models=models_dict,
         prefixes=list(prefixes or []),
     )
 
@@ -565,3 +574,300 @@ class TestLLMClientMultiProvider:
             pass
         assert calls[0]["custom_llm_provider"] == "anthropic"
         assert calls[1]["custom_llm_provider"] == "openai"
+
+
+def _ps_with_models(models: dict[str, dict] | None = None, *,
+                    api_key: str = "k", base_url: str = "u",
+                    prefixes: list[str] | None = None) -> ProviderSettings:
+    return ProviderSettings(
+        api_key=api_key,
+        base_url=base_url,
+        models=models or {},
+        prefixes=list(prefixes or []),
+    )
+
+
+class TestModelSupportsInput:
+    def test_declared_image_input_returns_true(self) -> None:
+        from pyclaw.core.agent.llm import model_supports_input
+
+        providers = {
+            "openai": _ps_with_models(
+                {"azure_openai/gpt-5.4": {"modalities": {"input": ["text", "image"], "output": ["text"]}}},
+                prefixes=["azure_openai"],
+            )
+        }
+        assert model_supports_input("azure_openai/gpt-5.4", providers, "image") is True
+
+    def test_undeclared_modality_returns_false(self) -> None:
+        from pyclaw.core.agent.llm import model_supports_input
+
+        providers = {
+            "openai": _ps_with_models(
+                {"azure_openai/gpt-5.4": {"modalities": {"input": ["text", "image"], "output": ["text"]}}},
+                prefixes=["azure_openai"],
+            )
+        }
+        assert model_supports_input("azure_openai/gpt-5.4", providers, "audio") is False
+
+    def test_text_only_model_returns_false_for_image(self) -> None:
+        from pyclaw.core.agent.llm import model_supports_input
+
+        providers = {
+            "openai": _ps_with_models(
+                {"azure_openai/gpt-5.3-codex": {"modalities": {"input": ["text"], "output": ["text"]}}},
+                prefixes=["azure_openai"],
+            )
+        }
+        assert model_supports_input("azure_openai/gpt-5.3-codex", providers, "image") is False
+
+    def test_model_not_in_models_dict_returns_false(self) -> None:
+        from pyclaw.core.agent.llm import model_supports_input
+
+        providers = {"openai": _ps_with_models(prefixes=["azure_openai"])}
+        assert model_supports_input("azure_openai/unknown-model", providers, "image") is False
+
+    def test_provider_not_found_re_raises_llmerror(self) -> None:
+        from pyclaw.core.agent.llm import model_supports_input
+
+        providers = {
+            "openai": _ps_with_models(prefixes=["openai"]),
+            "anthropic": _ps_with_models(prefixes=["anthropic"]),
+        }
+        with pytest.raises(LLMError) as excinfo:
+            model_supports_input("gemini/pro", providers, "image")
+        assert excinfo.value.code == LLMErrorCode.PROVIDER_NOT_FOUND
+
+    def test_modality_case_sensitive(self) -> None:
+        from pyclaw.core.agent.llm import model_supports_input
+
+        providers = {
+            "openai": _ps_with_models(
+                {"azure_openai/gpt-5.4": {"modalities": {"input": ["text", "image"], "output": ["text"]}}},
+                prefixes=["azure_openai"],
+            )
+        }
+        assert model_supports_input("azure_openai/gpt-5.4", providers, "Image") is False
+
+
+class TestMessagesHaveUserImageContent:
+    def test_openai_image_url_block_detected(self) -> None:
+        from pyclaw.core.agent.llm import messages_have_user_image_content
+
+        msgs = [
+            {"role": "user", "content": [
+                {"type": "text", "text": "what's this?"},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+            ]}
+        ]
+        assert messages_have_user_image_content(msgs) is True
+
+    def test_anthropic_image_block_detected(self) -> None:
+        from pyclaw.core.agent.llm import messages_have_user_image_content
+
+        msgs = [
+            {"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "abc"}},
+            ]}
+        ]
+        assert messages_have_user_image_content(msgs) is True
+
+    def test_text_only_string_returns_false(self) -> None:
+        from pyclaw.core.agent.llm import messages_have_user_image_content
+
+        msgs = [{"role": "user", "content": "hello"}]
+        assert messages_have_user_image_content(msgs) is False
+
+    def test_text_only_block_list_returns_false(self) -> None:
+        from pyclaw.core.agent.llm import messages_have_user_image_content
+
+        msgs = [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+        assert messages_have_user_image_content(msgs) is False
+
+    def test_assistant_image_not_counted(self) -> None:
+        from pyclaw.core.agent.llm import messages_have_user_image_content
+
+        msgs = [
+            {"role": "assistant", "content": [
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+            ]}
+        ]
+        assert messages_have_user_image_content(msgs) is False
+
+    def test_system_image_not_counted(self) -> None:
+        from pyclaw.core.agent.llm import messages_have_user_image_content
+
+        msgs = [
+            {"role": "system", "content": [
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+            ]}
+        ]
+        assert messages_have_user_image_content(msgs) is False
+
+    def test_multiple_user_messages_first_match_returns_true(self) -> None:
+        from pyclaw.core.agent.llm import messages_have_user_image_content
+
+        msgs = [
+            {"role": "user", "content": "first turn"},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+            ]},
+        ]
+        assert messages_have_user_image_content(msgs) is True
+
+
+class TestLLMClientSecondaryVisionPreflight:
+    @staticmethod
+    async def _empty_stream():
+        if False:
+            yield None
+
+    @staticmethod
+    def _vision_text_client():
+        from pyclaw.core.agent.llm import LLMClient
+
+        providers = {
+            "openai": _ps_with_models(
+                {
+                    "azure_openai/gpt-5.4": {
+                        "modalities": {"input": ["text", "image"], "output": ["text"]}
+                    },
+                    "azure_openai/gpt-5.3-codex": {
+                        "modalities": {"input": ["text"], "output": ["text"]}
+                    },
+                },
+                api_key="ok",
+                base_url="ob",
+                prefixes=["azure_openai"],
+            ),
+        }
+        return LLMClient(default_model="azure_openai/gpt-5.4", providers=providers)
+
+    @pytest.mark.asyncio
+    async def test_secondary_allows_vision_capable_model_with_image(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientSecondaryVisionPreflight._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = self._vision_text_client()
+        msgs = [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+            {"type": "text", "text": "what is this"},
+        ]}]
+        async for _ in client.stream(messages=msgs, model="azure_openai/gpt-5.4"):
+            pass
+        assert captured["model"] == "azure_openai/gpt-5.4"
+
+    @pytest.mark.asyncio
+    async def test_secondary_rejects_non_vision_model_with_image(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def fake_acompletion(**kwargs):
+            raise AssertionError("acompletion should NOT be called")
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = self._vision_text_client()
+        msgs = [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+        ]}]
+        with pytest.raises(LLMError) as excinfo:
+            async for _ in client.stream(messages=msgs, model="azure_openai/gpt-5.3-codex"):
+                pass
+        assert excinfo.value.code == LLMErrorCode.VISION_NOT_SUPPORTED
+        assert "azure_openai/gpt-5.3-codex" in str(excinfo.value)
+
+    @pytest.mark.asyncio
+    async def test_secondary_passes_for_text_only_with_non_vision_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientSecondaryVisionPreflight._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = self._vision_text_client()
+        msgs = [{"role": "user", "content": "plain text only"}]
+        async for _ in client.stream(messages=msgs, model="azure_openai/gpt-5.3-codex"):
+            pass
+        assert captured["model"] == "azure_openai/gpt-5.3-codex"
+
+    @pytest.mark.asyncio
+    async def test_secondary_complete_path_inherits_check(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def fake_acompletion(**kwargs):
+            raise AssertionError("acompletion should NOT be called")
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = self._vision_text_client()
+        msgs = [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+        ]}]
+        with pytest.raises(LLMError) as excinfo:
+            await client.complete(messages=msgs, model="azure_openai/gpt-5.3-codex")
+        assert excinfo.value.code == LLMErrorCode.VISION_NOT_SUPPORTED
+
+    @pytest.mark.asyncio
+    async def test_secondary_legacy_signature_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from pyclaw.core.agent.llm import LLMClient
+
+        captured: dict[str, object] = {}
+
+        async def fake_acompletion(**kwargs):
+            captured.update(kwargs)
+            return TestLLMClientSecondaryVisionPreflight._empty_stream()
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = LLMClient(default_model="legacy", api_key="lk", api_base="lb")
+        msgs = [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+        ]}]
+        async for _ in client.stream(messages=msgs, model="anything"):
+            pass
+        assert captured["model"] == "anything"
+
+    @pytest.mark.asyncio
+    async def test_secondary_error_message_lists_vision_models(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def fake_acompletion(**kwargs):
+            raise AssertionError
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = self._vision_text_client()
+        msgs = [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+        ]}]
+        with pytest.raises(LLMError) as excinfo:
+            async for _ in client.stream(messages=msgs, model="azure_openai/gpt-5.3-codex"):
+                pass
+        msg = str(excinfo.value)
+        assert "azure_openai/gpt-5.4" in msg
+        assert "openai" in msg
+
+    @pytest.mark.asyncio
+    async def test_secondary_outside_try_block_preserves_code(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def fake_acompletion(**kwargs):
+            raise AssertionError
+
+        monkeypatch.setattr("litellm.acompletion", fake_acompletion)
+        client = self._vision_text_client()
+        msgs = [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+        ]}]
+        with pytest.raises(LLMError) as excinfo:
+            async for _ in client.stream(messages=msgs, model="azure_openai/gpt-5.3-codex"):
+                pass
+        assert classify_error(excinfo.value) == LLMErrorCode.VISION_NOT_SUPPORTED
