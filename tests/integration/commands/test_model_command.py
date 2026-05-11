@@ -223,3 +223,90 @@ async def test_model_runner_three_level_fallback_priority() -> None:
         or "default-from-llm-client"
     )
     assert expected_default == "default-from-llm-client"
+
+
+def _make_vision_text_settings() -> AgentSettings:
+    return AgentSettings(
+        providers={
+            "openai": ProviderSettings(
+                api_key="sk-x",
+                prefixes=["azure_openai"],
+                models={
+                    "azure_openai/gpt-5.4": ModelEntry(
+                        modalities=ModelModalities(input={"text", "image"}, output={"text"})
+                    ),
+                    "azure_openai/gpt-5.3-codex": ModelEntry(
+                        modalities=ModelModalities(input={"text"}, output={"text"})
+                    ),
+                },
+            ),
+        }
+    )
+
+
+class TestCmdModelModalityUX:
+    @pytest.mark.asyncio
+    async def test_model_no_args_shows_image_tag_for_vision_model(self) -> None:
+        ctx, reply, _ = await _make_ctx(agent_settings=_make_vision_text_settings())
+        await cmd_model("", ctx)
+        msg = reply.await_args[0][0]
+        assert "azure_openai/gpt-5.4 (image)" in msg
+
+    @pytest.mark.asyncio
+    async def test_model_no_args_omits_tag_for_text_only_model(self) -> None:
+        ctx, reply, _ = await _make_ctx(agent_settings=_make_vision_text_settings())
+        await cmd_model("", ctx)
+        msg = reply.await_args[0][0]
+        assert "azure_openai/gpt-5.3-codex" in msg
+        codex_line = next(
+            line for line in msg.splitlines()
+            if "azure_openai/gpt-5.3-codex" in line
+        )
+        assert "(" not in codex_line
+
+    @pytest.mark.asyncio
+    async def test_model_no_args_sorted_modalities_in_tag(self) -> None:
+        settings = AgentSettings(
+            providers={
+                "anthropic": ProviderSettings(
+                    api_key="sk",
+                    prefixes=["anthropic"],
+                    models={
+                        "anthropic/claude-opus-4-7": ModelEntry(
+                            modalities=ModelModalities(
+                                input={"text", "image", "pdf"}, output={"text"}
+                            )
+                        ),
+                    },
+                )
+            }
+        )
+        ctx, reply, _ = await _make_ctx(agent_settings=settings)
+        await cmd_model("", ctx)
+        msg = reply.await_args[0][0]
+        assert "anthropic/claude-opus-4-7 (image, pdf)" in msg
+
+    @pytest.mark.asyncio
+    async def test_switch_to_non_vision_model_appends_warning(self) -> None:
+        ctx, reply, _ = await _make_ctx(agent_settings=_make_vision_text_settings())
+        await cmd_model("azure_openai/gpt-5.3-codex", ctx)
+        msg = reply.await_args[0][0]
+        assert "✓" in msg
+        assert "ℹ️" in msg
+        assert "不支持图片处理" in msg
+
+    @pytest.mark.asyncio
+    async def test_switch_to_vision_model_no_warning(self) -> None:
+        ctx, reply, _ = await _make_ctx(agent_settings=_make_vision_text_settings())
+        await cmd_model("azure_openai/gpt-5.4", ctx)
+        msg = reply.await_args[0][0]
+        assert "✓" in msg
+        assert "ℹ️" not in msg
+
+    @pytest.mark.asyncio
+    async def test_switch_to_undeclared_model_appends_warning_conservative(self) -> None:
+        ctx, reply, _ = await _make_ctx(agent_settings=_make_vision_text_settings())
+        await cmd_model("azure_openai/some-unknown-model", ctx)
+        msg = reply.await_args[0][0]
+        assert "✓" in msg
+        assert "ℹ️" in msg

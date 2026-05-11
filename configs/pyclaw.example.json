@@ -36,19 +36,31 @@
         "apiKey": null,
         "baseURL": null,
         "prefixes": ["anthropic"],
-        "models": []
+        "models": {
+          "anthropic/ppio/pa/claude-sonnet-4-6": { "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] } },
+          "anthropic/ppio/pa/claude-opus-4-7":   { "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] } }
+        }
       },
       "openai": {
         "apiKey": null,
         "baseURL": null,
         "prefixes": ["openai", "azure_openai", "minimax", "zhipuai", "xiaomi", "moonshot", "volcengine_maas", "deepseek"],
-        "models": []
+        "models": {
+          "azure_openai/gpt-5.4":         { "modalities": { "input": ["text", "image"], "output": ["text"] } },
+          "azure_openai/gpt-5.4-pro":     { "modalities": { "input": ["text", "image"], "output": ["text"] } },
+          "azure_openai/gpt-5.3-codex":   { "modalities": { "input": ["text"],          "output": ["text"] } },
+          "azure_openai/gpt-4o":          { "modalities": { "input": ["text", "image"], "output": ["text"] } },
+          "azure_openai/gpt-4o-mini":     { "modalities": { "input": ["text", "image"], "output": ["text"] } }
+        }
       },
       "gemini": {
         "apiKey": null,
         "baseURL": null,
         "prefixes": ["gemini", "vertex_ai"],
-        "models": []
+        "models": {
+          "vertex_ai/gemini-2.5-pro":   { "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] } },
+          "vertex_ai/gemini-2.5-flash": { "modalities": { "input": ["text", "image"],        "output": ["text"] } }
+        }
       }
     },
     "max_iterations": 50,

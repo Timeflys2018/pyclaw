@@ -142,8 +142,10 @@ async def cmd_model(args: str, ctx: CommandContext) -> None:
     from pyclaw.core.agent.llm import (
         LLMError,
         LLMErrorCode,
+        model_supports_input,
         resolve_provider_for_model,
     )
+    from pyclaw.core.commands._helpers import list_available_models_with_modalities
     from pyclaw.models import ModelChangeEntry, generate_entry_id, now_iso
 
     target = args.strip()
@@ -156,12 +158,15 @@ async def cmd_model(args: str, ctx: CommandContext) -> None:
         ) or getattr(ctx.deps.llm, "default_model", "(unknown)")
 
         lines = [f"🤖 当前模型: `{current}`", ""]
-        if available:
+        available_with_modalities = list_available_models_with_modalities(ctx.agent_settings)
+        if available_with_modalities:
             lines.append("可用模型:")
-            for provider, models in sorted(available.items()):
+            for provider, pairs in sorted(available_with_modalities.items()):
                 lines.append(f"  📦 {provider}")
-                for m in models:
-                    lines.append(f"    • {m}")
+                for mid, modalities in pairs:
+                    non_text_inputs = sorted(modalities.input - {"text"})
+                    tag = f" ({', '.join(non_text_inputs)})" if non_text_inputs else ""
+                    lines.append(f"    • {mid}{tag}")
         else:
             lines.append("⚠️ 配置中尚未声明可用模型列表 (agent.providers.<name>.models)。")
         await ctx.reply("\n".join(lines))
@@ -205,7 +210,21 @@ async def cmd_model(args: str, ctx: CommandContext) -> None:
     )
     await ctx.deps.session_store.append_entry(ctx.session_id, entry, leaf_id=entry.id)
 
-    await ctx.reply(f"✓ 模型已切换为 `{target}`（下次对话生效）")
+    has_vision = False
+    if ctx.agent_settings.providers:
+        try:
+            has_vision = model_supports_input(
+                target,
+                ctx.agent_settings.providers,
+                "image",
+                default_provider=None,
+                unknown_prefix_policy="fail",
+            )
+        except LLMError:
+            has_vision = False
+
+    warning = "\nℹ️ 该模型不支持图片处理" if not has_vision else ""
+    await ctx.reply(f"✓ 模型已切换为 `{target}`（下次对话生效）{warning}")
 
 
 async def cmd_compact(args: str, ctx: CommandContext) -> None:
