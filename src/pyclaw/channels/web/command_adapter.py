@@ -45,6 +45,7 @@ class WebCommandAdapter:
         nudge_hook: Any = None,
         session_queue: Any = None,
         agent_settings: Any = None,
+        admin_user_ids: list[str] | None = None,
     ) -> bool:
         if not text or not text.strip().startswith("/"):
             return False
@@ -121,6 +122,7 @@ class WebCommandAdapter:
                 "tool_workspace_path": workspace_base / f"web_{user_id}",
             },
             session_queue=session_queue,
+            admin_user_ids=list(admin_user_ids or []),
         )
 
         try:

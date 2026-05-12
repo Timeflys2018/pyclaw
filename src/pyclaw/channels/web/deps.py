@@ -32,6 +32,7 @@ class WebDeps:
     llm_client: Any = None
     agent_settings: Any = None
     worker_registry: "WorkerRegistry | None" = None
+    admin_user_ids: list[str] = field(default_factory=list)
 
 
 def get_web_deps(request: Request) -> WebDeps:

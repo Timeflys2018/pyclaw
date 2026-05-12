@@ -601,3 +601,16 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             requires_idle=True,
         )
     )
+    from pyclaw.core.commands.tasks import cmd_tasks
+
+    registry.register(
+        CommandSpec(
+            name="/tasks",
+            handler=cmd_tasks,
+            category="inspection",
+            help_text="查看/管理后台任务（当前会话 scope；--all 仅 admin）",
+            args_hint="list [--all] | kill <id> [--confirm]",
+            channels=ALL_CHANNELS,
+            requires_idle=False,
+        )
+    )

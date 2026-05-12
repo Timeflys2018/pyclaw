@@ -356,6 +356,7 @@ async def test_register_builtin_includes_all_nine() -> None:
         "/new",
         "/reset",
         "/status",
+        "/tasks",
         "/whoami",
     ]
     assert registry.get("/learn") is registry.get("/extract")

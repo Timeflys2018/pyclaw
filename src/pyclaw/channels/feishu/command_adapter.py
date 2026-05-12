@@ -115,6 +115,7 @@ class FeishuCommandAdapter:
                 "tool_workspace_path": ctx.workspace_base / workspace_id,
             },
             queue_registry=ctx.queue_registry,
+            admin_user_ids=ctx.admin_user_ids,
         )
 
         try:

@@ -43,6 +43,7 @@ class FeishuContext:
     evolution_settings: Any = None
     nudge_hook: Any = None
     agent_settings: Any = None
+    admin_user_ids: list[str] = field(default_factory=list)
 
 
 def build_session_key(app_id: str, event: Any, scope: str) -> str:

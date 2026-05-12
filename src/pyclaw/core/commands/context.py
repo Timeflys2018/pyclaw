@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -37,3 +37,4 @@ class CommandContext:
     command_timeout: float = 30.0
     queue_registry: Any = None
     session_queue: Any = None
+    admin_user_ids: list[str] = field(default_factory=list)
