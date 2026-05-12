@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from pyclaw.channels.web.websocket import ConnectionRegistry
     from pyclaw.core.agent.runner import AgentRunnerDeps
     from pyclaw.gateway.worker_registry import WorkerRegistry
+    from pyclaw.infra.settings import Settings
     from pyclaw.storage.session.base import SessionStore
 
 
@@ -23,6 +24,7 @@ class WebDeps:
     runner_deps: "AgentRunnerDeps"
     session_queue: "SessionQueue"
     connection_registry: "ConnectionRegistry"
+    settings_full: "Settings"
 
     redis_client: Any = None
     memory_store: Any = None

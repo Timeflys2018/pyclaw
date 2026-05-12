@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.curator import cmd_curator
 from pyclaw.core.curator_admin import (
@@ -45,6 +46,7 @@ def _ctx(
         reply=reply or AsyncMock(),
         dispatch_user_message=AsyncMock(),
         raw={},
+        settings=Settings(),
         redis_client=redis_client,
     )
 

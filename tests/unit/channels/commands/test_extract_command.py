@@ -12,7 +12,7 @@ from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.commands.builtin import register_builtin_commands
 from pyclaw.core.commands.registry import CommandRegistry
 from pyclaw.core.sop_extraction import ExtractionResult
-from pyclaw.infra.settings import EvolutionSettings, FeishuSettings
+from pyclaw.infra.settings import EvolutionSettings, FeishuSettings, Settings
 from pyclaw.storage.session.base import InMemorySessionStore
 
 _PATCH_SYNC = "pyclaw.core.sop_extraction.extract_sops_sync"
@@ -53,6 +53,7 @@ def _make_ctx(
     queue_registry.enqueue = AsyncMock(return_value=None)
     return FeishuContext(
         settings=FeishuSettings(enabled=True, app_id="cli_x", app_secret="s"),
+        settings_full=Settings(),
         feishu_client=feishu_client,
         deps=deps,
         dedup=MagicMock(),

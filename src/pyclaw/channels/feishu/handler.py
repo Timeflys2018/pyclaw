@@ -14,7 +14,7 @@ from pyclaw.channels.feishu.multimodal import feishu_image_to_block
 from pyclaw.channels.feishu.queue import FeishuQueueRegistry
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.agent.runner import AgentRunnerDeps
-from pyclaw.infra.settings import FeishuSettings
+from pyclaw.infra.settings import FeishuSettings, Settings
 from pyclaw.models import AgentEvent, Done, ErrorEvent, ImageBlock, TextChunk, ToolCallStart
 from pyclaw.storage.workspace.base import WorkspaceStore
 
@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FeishuContext:
     settings: FeishuSettings
+    settings_full: Settings
     feishu_client: FeishuClient
     deps: AgentRunnerDeps
     dedup: FeishuDedup

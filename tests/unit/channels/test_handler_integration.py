@@ -10,7 +10,7 @@ from pyclaw.channels.feishu.dedup import FeishuDedup
 from pyclaw.channels.feishu.handler import FeishuContext, handle_feishu_message
 from pyclaw.channels.feishu.queue import FeishuQueueRegistry
 from pyclaw.channels.session_router import SessionRouter
-from pyclaw.infra.settings import FeishuSettings
+from pyclaw.infra.settings import FeishuSettings, Settings
 from pyclaw.infra.task_manager import TaskManager
 from pyclaw.models import Done, TextChunk
 from pyclaw.storage.session.base import InMemorySessionStore
@@ -82,6 +82,7 @@ def _make_ctx(store: InMemorySessionStore, tmp_path: Path) -> FeishuContext:
     queue_registry = FeishuQueueRegistry(task_manager=tm)
     return FeishuContext(
         settings=settings,
+        settings_full=Settings(),
         feishu_client=feishu_client,
         deps=deps,
         dedup=dedup,
@@ -295,6 +296,7 @@ def _make_ctx_with_workspace_store(store: InMemorySessionStore, tmp_path: Path) 
 
     return FeishuContext(
         settings=FeishuSettings(enabled=True, app_id="cli_x", app_secret="s"),
+        settings_full=Settings(),
         feishu_client=MagicMock(reply_text=AsyncMock(return_value=None), _client=MagicMock()),
         deps=deps,
         dedup=dedup,
@@ -393,6 +395,7 @@ async def test_workspace_base_comes_from_context_not_hardcoded(tmp_path: Path) -
 
     ctx = FeishuContext(
         settings=FeishuSettings(enabled=True, app_id="cli_x", app_secret="s"),
+        settings_full=Settings(),
         feishu_client=MagicMock(reply_text=AsyncMock(return_value=None), _client=MagicMock()),
         deps=deps, dedup=dedup, workspace_store=ws_store,
         bot_open_id="bot", session_router=router,

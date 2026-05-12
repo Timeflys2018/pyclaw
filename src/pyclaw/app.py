@@ -120,6 +120,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             runner_deps,
             dedup,
             workspace_store,
+            settings_full=settings,
             bootstrap_files=settings.workspaces.bootstrap_files,
             workspace_base=workspace_base,
             memory_store=memory_store,
@@ -143,6 +144,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         from pyclaw.gateway.worker_registry import WorkerRegistry
 
         app.state.web_settings = settings.channels.web
+        app.state.settings = settings
 
         from pyclaw.core.agent.hooks.memory_nudge_hook import MemoryNudgeHook
 
@@ -218,6 +220,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             runner_deps=runner_deps,
             session_queue=web_session_queue,
             connection_registry=web_connection_registry,
+            settings_full=settings,
             redis_client=redis_client,
             memory_store=memory_store,
             task_manager=task_manager,

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pyclaw.infra.settings import Settings
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.commands.builtin import cmd_export
 from pyclaw.core.commands.context import CommandContext
@@ -52,6 +53,7 @@ async def _make_ctx(workspace_path: Path, *, channel: str = "web") -> tuple[Comm
         reply=reply,
         dispatch_user_message=AsyncMock(),
         raw={"channel": channel, "tool_workspace_path": workspace_path},
+        settings=Settings(),
     )
     return ctx, reply, store
 
@@ -136,6 +138,7 @@ async def test_export_inline_truncates_to_8192_utf8_bytes() -> None:
         reply=reply,
         dispatch_user_message=AsyncMock(),
         raw={"channel": "web", "tool_workspace_path": workspace},
+        settings=Settings(),
     )
 
     await cmd_export("inline", ctx)
@@ -210,6 +213,7 @@ async def test_export_session_not_found_replies_error() -> None:
         reply=reply,
         dispatch_user_message=AsyncMock(),
         raw={"channel": "web", "tool_workspace_path": workspace},
+        settings=Settings(),
     )
 
     await cmd_export("", ctx)

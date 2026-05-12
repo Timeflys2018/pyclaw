@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.memory import cmd_memory
 from pyclaw.storage.memory.base import MemoryEntry
@@ -42,6 +43,7 @@ def _ctx(*, memory_store=None, reply=None) -> CommandContext:
         reply=reply or AsyncMock(),
         dispatch_user_message=AsyncMock(),
         raw={},
+        settings=Settings(),
         memory_store=memory_store,
     )
 

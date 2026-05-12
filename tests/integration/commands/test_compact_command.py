@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pyclaw.infra.settings import Settings
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.commands.builtin import cmd_compact
 from pyclaw.core.commands.context import CommandContext
@@ -128,6 +129,7 @@ async def _make_ctx(
         reply=reply,
         dispatch_user_message=AsyncMock(),
         raw={"channel": "web"},
+        settings=Settings(),
         redis_client=redis_client,
     )
     return ctx, reply, store, fake_engine, used_hook
@@ -200,6 +202,7 @@ async def test_compact_empty_session_friendly_reply() -> None:
         reply=reply,
         dispatch_user_message=AsyncMock(),
         raw={"channel": "web"},
+        settings=Settings(),
     )
 
     await cmd_compact("", ctx)

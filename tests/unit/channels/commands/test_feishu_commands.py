@@ -13,7 +13,7 @@ from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.commands._helpers import parse_idle_duration
 from pyclaw.core.commands.builtin import register_builtin_commands
 from pyclaw.core.commands.registry import CommandRegistry
-from pyclaw.infra.settings import FeishuSettings
+from pyclaw.infra.settings import FeishuSettings, Settings
 from pyclaw.storage.session.base import InMemorySessionStore
 
 
@@ -37,6 +37,7 @@ def _make_ctx(store: InMemorySessionStore | None = None) -> FeishuContext:
     queue_registry.enqueue = AsyncMock(return_value=None)
     return FeishuContext(
         settings=feishu_settings,
+        settings_full=Settings(),
         feishu_client=feishu_client,
         deps=deps,
         dedup=MagicMock(),

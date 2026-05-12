@@ -17,7 +17,7 @@ from pyclaw.channels.feishu.handler import FeishuContext, handle_feishu_message
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.agent.runner import AgentRunnerDeps
 from pyclaw.core.memory_archive import archive_session_background
-from pyclaw.infra.settings import FeishuSettings
+from pyclaw.infra.settings import FeishuSettings, Settings
 from pyclaw.storage.memory.base import MemoryStore
 from pyclaw.storage.workspace.base import WorkspaceStore
 
@@ -34,6 +34,8 @@ class FeishuChannelPlugin:
         deps: AgentRunnerDeps,
         dedup: FeishuDedup,
         workspace_store: WorkspaceStore,
+        *,
+        settings_full: Settings,
         bootstrap_files: list[str] | None = None,
         workspace_base: Path | None = None,
         memory_store: MemoryStore | None = None,
@@ -43,6 +45,7 @@ class FeishuChannelPlugin:
         admin_user_ids: list[str] | None = None,
     ) -> None:
         self._settings = settings
+        self._settings_full = settings_full
         self._feishu_client = feishu_client
         self._deps = deps
         self._dedup = dedup
@@ -139,6 +142,7 @@ class FeishuChannelPlugin:
         )
         ctx = FeishuContext(
             settings=self._settings,
+            settings_full=self._settings_full,
             feishu_client=self._feishu_client,
             deps=self._deps,
             dedup=self._dedup,

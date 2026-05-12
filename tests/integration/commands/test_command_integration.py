@@ -14,7 +14,7 @@ from pyclaw.core.commands.builtin import register_builtin_commands
 from pyclaw.core.commands.registry import CommandRegistry
 from pyclaw.core.commands.spec import CommandSpec
 from pyclaw.core.sop_extraction import ExtractionResult
-from pyclaw.infra.settings import EvolutionSettings, FeishuSettings
+from pyclaw.infra.settings import EvolutionSettings, FeishuSettings, Settings
 from pyclaw.storage.session.base import InMemorySessionStore
 
 
@@ -53,6 +53,7 @@ def _make_feishu_ctx(store: InMemorySessionStore | None = None) -> FeishuContext
     queue_registry.enqueue = AsyncMock(side_effect=_enqueue)
     return FeishuContext(
         settings=FeishuSettings(enabled=True, app_id="cli_x", app_secret="s"),
+        settings_full=Settings(),
         feishu_client=feishu_client,
         deps=deps,
         dedup=MagicMock(),
@@ -244,6 +245,7 @@ async def test_web_adapter_status_integration() -> None:
         deps=deps,
         session_router=router,
         workspace_base=Path("/tmp"),
+        settings=Settings(),
     )
 
     assert handled is True
@@ -271,6 +273,7 @@ async def test_web_adapter_whoami_uses_user_id() -> None:
         deps=deps,
         session_router=router,
         workspace_base=Path("/tmp"),
+        settings=Settings(),
     )
 
     envelope = state.ws.send_json.await_args[0][0]
@@ -297,6 +300,7 @@ async def test_web_adapter_idle_30m() -> None:
         deps=deps,
         session_router=router,
         workspace_base=Path("/tmp"),
+        settings=Settings(),
     )
 
     tree = await store.load(sid)
@@ -324,6 +328,7 @@ async def test_web_adapter_history_integration() -> None:
         deps=deps,
         session_router=router,
         workspace_base=Path("/tmp"),
+        settings=Settings(),
     )
 
     envelope = state.ws.send_json.await_args[0][0]
@@ -349,6 +354,7 @@ async def test_web_adapter_help_integration() -> None:
         deps=deps,
         session_router=router,
         workspace_base=Path("/tmp"),
+        settings=Settings(),
     )
 
     envelope = state.ws.send_json.await_args[0][0]
@@ -370,6 +376,7 @@ async def test_web_adapter_unknown_falls_through() -> None:
         deps=deps,
         session_router=MagicMock(),
         workspace_base=Path("/tmp"),
+        settings=Settings(),
     )
     assert handled is False
 
@@ -403,6 +410,7 @@ async def test_web_adapter_alias_learn() -> None:
             deps=deps,
             session_router=router,
             workspace_base=Path("/tmp"),
+            settings=Settings(),
             redis_client=redis,
             memory_store=MagicMock(),
             evolution_settings=EvolutionSettings(enabled=True),
@@ -442,6 +450,7 @@ async def test_web_adapter_channel_restriction_replies_error() -> None:
         deps=deps,
         session_router=MagicMock(),
         workspace_base=Path("/tmp"),
+        settings=Settings(),
     )
     assert handled is True
     envelope = state.ws.send_json.await_args[0][0]
@@ -501,6 +510,7 @@ async def test_extract_consistency_three_channels_call_same_helper() -> None:
             deps=deps_web,
             session_router=router,
             workspace_base=Path("/tmp"),
+            settings=Settings(),
             redis_client=redis,
             memory_store=memory_store,
             evolution_settings=settings,

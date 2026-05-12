@@ -8,7 +8,7 @@ import pytest
 from pyclaw.channels.feishu.handler import FeishuContext, handle_stop_feishu
 from pyclaw.channels.feishu.queue import FeishuQueueRegistry
 from pyclaw.channels.session_router import SessionRouter
-from pyclaw.infra.settings import FeishuSettings
+from pyclaw.infra.settings import FeishuSettings, Settings
 from pyclaw.infra.task_manager import TaskManager
 from pyclaw.storage.session.base import InMemorySessionStore
 
@@ -22,6 +22,7 @@ def _make_ctx(queue_registry: FeishuQueueRegistry) -> FeishuContext:
     deps.session_store = store
     return FeishuContext(
         settings=settings,
+        settings_full=Settings(),
         feishu_client=feishu_client,
         deps=deps,
         dedup=MagicMock(),

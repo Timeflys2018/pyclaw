@@ -82,7 +82,7 @@ async def cmd_curator(args: str, ctx: CommandContext) -> None:
 
 
 async def _cmd_curator_list(rest: list[str], ctx: CommandContext) -> None:
-    settings = _full_settings(ctx)
+    settings = ctx.settings
     if settings is None:
         await ctx.reply("❌ Settings 未注入")
         return
@@ -126,7 +126,7 @@ async def _cmd_curator_list(rest: list[str], ctx: CommandContext) -> None:
 
 
 async def _cmd_curator_preview(ctx: CommandContext) -> None:
-    settings = _full_settings(ctx)
+    settings = ctx.settings
     if settings is None:
         await ctx.reply("❌ Settings 未注入")
         return
@@ -149,7 +149,7 @@ async def _cmd_curator_restore(rest: list[str], ctx: CommandContext) -> None:
         await ctx.reply("用法: /curator restore <id> [--confirm]")
         return
 
-    settings = _full_settings(ctx)
+    settings = ctx.settings
     if settings is None:
         await ctx.reply("❌ Settings 未注入")
         return
@@ -186,7 +186,7 @@ async def _cmd_curator_review_status(ctx: CommandContext) -> None:
 
 
 async def _cmd_curator_review_trigger(rest: list[str], ctx: CommandContext) -> None:
-    settings = _full_settings(ctx)
+    settings = ctx.settings
     if settings is None:
         await ctx.reply("❌ Settings 未注入")
         return
@@ -251,18 +251,6 @@ async def _cmd_curator_review_trigger(rest: list[str], ctx: CommandContext) -> N
     await ctx.reply(
         f"✓ 已启动 task `{task_id}`；用 `/tasks list` 查看进度"
     )
-
-
-def _full_settings(ctx: CommandContext) -> Any:
-    settings = getattr(ctx.deps, "settings", None)
-    if settings is not None:
-        return settings
-    from pyclaw.infra.settings import load_settings
-
-    try:
-        return load_settings()
-    except Exception:
-        return None
 
 
 def _memory_base_dir(settings: Any):

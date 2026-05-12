@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.builtin import cmd_help, register_builtin_commands
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.registry import CommandRegistry
@@ -24,6 +25,7 @@ def _make_ctx(registry: CommandRegistry) -> tuple[CommandContext, AsyncMock]:
         reply=reply,
         dispatch_user_message=AsyncMock(),
         raw={"channel": "web"},
+        settings=Settings(),
         registry=registry,
     )
     return ctx, reply

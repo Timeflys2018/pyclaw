@@ -99,6 +99,7 @@ class FeishuCommandAdapter:
             deps=ctx.deps,
             session_router=ctx.session_router,
             workspace_base=ctx.workspace_base,
+            settings=ctx.settings_full,
             redis_client=ctx.redis_client,
             memory_store=ctx.memory_store,
             evolution_settings=ctx.evolution_settings,

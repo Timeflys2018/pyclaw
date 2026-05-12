@@ -239,6 +239,7 @@ async def _try_slash_command(
             deps=web_deps.runner_deps,
             session_router=web_deps.session_router,
             workspace_base=web_deps.workspace_base,
+            settings=web_deps.settings_full,
             redis_client=web_deps.redis_client,
             memory_store=web_deps.memory_store,
             evolution_settings=web_deps.evolution_settings,
@@ -264,6 +265,7 @@ async def _try_slash_command(
 
     deps = _get_runner_deps(state)
     workspace_base: Path = state.ws.app.state.workspace_base
+    app_settings = state.ws.app.state.settings
 
     adapter = WebCommandAdapter()
     return await adapter.handle(
@@ -274,6 +276,7 @@ async def _try_slash_command(
         deps=deps,
         session_router=router,
         workspace_base=workspace_base,
+        settings=app_settings,
         redis_client=_redis_client,
         memory_store=_memory_store,
         evolution_settings=_evolution_settings,

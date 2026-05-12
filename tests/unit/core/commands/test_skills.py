@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.skills import cmd_skills
 from pyclaw.skills.management import (
@@ -33,6 +34,7 @@ def _ctx(*, reply=None, channel="web", deps=None) -> CommandContext:
         reply=reply or AsyncMock(),
         dispatch_user_message=AsyncMock(),
         raw={},
+        settings=Settings(),
     )
 
 

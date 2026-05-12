@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.context import CommandContext
 
 
@@ -21,6 +22,7 @@ def _minimal_context(**overrides) -> CommandContext:
         reply=AsyncMock(),
         dispatch_user_message=AsyncMock(),
         raw={},
+        settings=Settings(),
     )
     kwargs.update(overrides)
     return CommandContext(**kwargs)

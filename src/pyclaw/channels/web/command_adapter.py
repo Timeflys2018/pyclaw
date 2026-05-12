@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from pyclaw.channels.session_router import SessionRouter
     from pyclaw.channels.web.websocket import ConnectionState
     from pyclaw.core.agent.runner import AgentRunnerDeps
+    from pyclaw.infra.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class WebCommandAdapter:
         deps: "AgentRunnerDeps",
         session_router: "SessionRouter",
         workspace_base: Any,
+        settings: "Settings",
         redis_client: Any = None,
         memory_store: Any = None,
         evolution_settings: Any = None,
@@ -107,6 +109,7 @@ class WebCommandAdapter:
             deps=deps,
             session_router=session_router,
             workspace_base=workspace_base,
+            settings=settings,
             redis_client=redis_client,
             memory_store=memory_store,
             evolution_settings=evolution_settings,

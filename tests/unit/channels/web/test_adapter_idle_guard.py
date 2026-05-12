@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from pyclaw.channels.web.command_adapter import WebCommandAdapter
+from pyclaw.infra.settings import Settings
 from pyclaw.channels.web.protocol import SERVER_CHAT_DONE
 from pyclaw.channels.web.websocket import ConnectionState
 from pyclaw.core.commands.registry import CommandRegistry
@@ -72,6 +73,7 @@ async def test_busy_state_blocks_requires_idle_command_with_friendly_reply() -> 
         deps=MagicMock(),
         session_router=MagicMock(),
         workspace_base=mock_ws.app.state.workspace_base,
+        settings=Settings(),
         session_queue=queue,
     )
 
@@ -119,6 +121,7 @@ async def test_idle_state_passes_requires_idle_through_to_handler() -> None:
         deps=MagicMock(),
         session_router=MagicMock(),
         workspace_base=Path("/tmp"),
+        settings=Settings(),
         session_queue=queue,
     )
 
@@ -159,6 +162,7 @@ async def test_requires_idle_false_bypasses_idle_check() -> None:
         deps=MagicMock(),
         session_router=MagicMock(),
         workspace_base=Path("/tmp"),
+        settings=Settings(),
         session_queue=queue,
     )
 

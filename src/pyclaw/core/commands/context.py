@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from pyclaw.channels.session_router import SessionRouter
     from pyclaw.core.agent.runner import AgentRunnerDeps
     from pyclaw.core.commands.registry import CommandRegistry
+    from pyclaw.infra.settings import Settings
 
 
 @dataclass
@@ -27,6 +28,8 @@ class CommandContext:
     dispatch_user_message: Callable[[str], Awaitable[None]]
 
     raw: dict[str, Any]
+
+    settings: "Settings"
 
     redis_client: Any = None
     memory_store: Any = None

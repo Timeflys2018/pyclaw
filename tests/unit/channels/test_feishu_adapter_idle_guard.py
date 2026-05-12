@@ -11,7 +11,7 @@ from pyclaw.channels.feishu.handler import FeishuContext
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.commands.registry import CommandRegistry
 from pyclaw.core.commands.spec import ALL_CHANNELS, CommandSpec
-from pyclaw.infra.settings import FeishuSettings
+from pyclaw.infra.settings import FeishuSettings, Settings
 from pyclaw.storage.session.base import InMemorySessionStore
 
 
@@ -38,6 +38,7 @@ def _make_ctx(*, queue_idle: bool) -> FeishuContext:
 
     return FeishuContext(
         settings=settings,
+        settings_full=Settings(),
         feishu_client=feishu_client,
         deps=deps,
         dedup=MagicMock(),

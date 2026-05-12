@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.registry import CommandRegistry
 from pyclaw.core.commands.spec import ALL_CHANNELS, CommandSpec
@@ -24,6 +25,7 @@ def _make_ctx(reply: AsyncMock, *, command_timeout: float = 30.0) -> CommandCont
         reply=reply,
         dispatch_user_message=AsyncMock(),
         raw={"channel": "web"},
+        settings=Settings(),
         command_timeout=command_timeout,
     )
 

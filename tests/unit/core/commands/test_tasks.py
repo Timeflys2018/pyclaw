@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.tasks import cmd_tasks
 from pyclaw.infra.task_manager import TaskManager
@@ -43,6 +44,7 @@ def _ctx(
         reply=reply or AsyncMock(),
         dispatch_user_message=AsyncMock(),
         raw={},
+        settings=Settings(),
         admin_user_ids=admin_user_ids or [],
     )
 

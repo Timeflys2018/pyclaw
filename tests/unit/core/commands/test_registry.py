@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.registry import CommandRegistry
 from pyclaw.core.commands.spec import ALL_CHANNELS, CommandSpec
@@ -25,6 +26,7 @@ def _make_ctx(channel: str = "feishu", **overrides) -> CommandContext:
         reply=reply,
         dispatch_user_message=dispatch,
         raw={"channel": channel},
+        settings=Settings(),
     )
     base.update(overrides)
     return CommandContext(**base)

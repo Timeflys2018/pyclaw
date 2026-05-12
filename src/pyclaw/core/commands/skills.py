@@ -47,16 +47,7 @@ def _workspace_path(ctx: CommandContext) -> Path:
 
 
 async def _cmd_skills_list(ctx: CommandContext) -> None:
-    settings = getattr(ctx.deps, "settings", None)
-    if settings is None:
-        from pyclaw.infra.settings import load_settings
-
-        try:
-            settings = load_settings()
-        except Exception:
-            await ctx.reply("❌ Settings 未注入")
-            return
-
+    settings = ctx.settings
     skill_settings = getattr(settings, "skills", None)
     skills = list_discovered(_workspace_path(ctx), skill_settings)
     if not skills:
@@ -152,16 +143,7 @@ async def _cmd_skills_install(rest: list[str], ctx: CommandContext) -> None:
 
 
 async def _cmd_skills_check(rest: list[str], ctx: CommandContext) -> None:
-    settings = getattr(ctx.deps, "settings", None)
-    if settings is None:
-        from pyclaw.infra.settings import load_settings
-
-        try:
-            settings = load_settings()
-        except Exception:
-            await ctx.reply("❌ Settings 未注入")
-            return
-
+    settings = ctx.settings
     skill_settings = getattr(settings, "skills", None)
     name = rest[0] if rest else None
     reports = check_eligibility(_workspace_path(ctx), skill_settings, name=name)

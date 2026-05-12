@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from pyclaw.infra.settings import Settings
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.commands.builtin import (
     cmd_extract,
@@ -59,6 +60,7 @@ def _build_ctx(
             dispatch_user_message=dispatch,
             registry=registry,
             raw=raw or {"channel": channel},
+            settings=Settings(),
         ),
         reply,
         dispatch,

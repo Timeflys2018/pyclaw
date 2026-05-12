@@ -9,7 +9,13 @@ import pytest
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.commands.builtin import cmd_model
 from pyclaw.core.commands.context import CommandContext
-from pyclaw.infra.settings import AgentSettings, ModelEntry, ModelModalities, ProviderSettings
+from pyclaw.infra.settings import (
+    AgentSettings,
+    ModelEntry,
+    ModelModalities,
+    ProviderSettings,
+    Settings,
+)
 from pyclaw.models import (
     ModelChangeEntry,
     SessionHeader,
@@ -70,6 +76,7 @@ async def _make_ctx(
         reply=reply,
         dispatch_user_message=AsyncMock(),
         raw={"channel": "web"},
+        settings=Settings(),
         agent_settings=agent_settings,
     )
     return ctx, reply, store
