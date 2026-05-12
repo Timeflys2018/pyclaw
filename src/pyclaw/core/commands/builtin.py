@@ -614,3 +614,17 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             requires_idle=False,
         )
     )
+
+    from pyclaw.core.commands.memory import cmd_memory
+
+    registry.register(
+        CommandSpec(
+            name="/memory",
+            handler=cmd_memory,
+            category="inspection",
+            help_text="查看当前会话记忆（L1/L2/L3/L4 分层；按 kind 过滤；stats 汇总）",
+            args_hint="list [--facts|--procedures|--all] [--limit N] | search <q> | stats",
+            channels=ALL_CHANNELS,
+            requires_idle=False,
+        )
+    )

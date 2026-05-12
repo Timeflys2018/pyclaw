@@ -352,6 +352,7 @@ async def test_register_builtin_includes_all_nine() -> None:
         "/help",
         "/history",
         "/idle",
+        "/memory",
         "/model",
         "/new",
         "/reset",
