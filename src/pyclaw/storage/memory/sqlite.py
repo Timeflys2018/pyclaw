@@ -15,6 +15,7 @@ from pyclaw.storage.memory.jieba_tokenizer import (
     build_safe_match_query,
     register_jieba_tokenizer,
 )
+from pyclaw.storage.memory.naming import DbFileNamingPolicy, HumanReadableNaming
 
 if TYPE_CHECKING:
     from pyclaw.storage.memory.embedding import EmbeddingClient
@@ -102,10 +103,12 @@ class SqliteMemoryBackend:
         embedding: EmbeddingClient | None = None,
         *,
         fts_min_query_chars: int = 3,
+        naming: DbFileNamingPolicy | None = None,
     ) -> None:
         self._base_dir = base_dir
         self._embedding = embedding
         self._fts_min_query_chars = fts_min_query_chars
+        self._naming: DbFileNamingPolicy = naming or HumanReadableNaming()
         self._connections: dict[str, apsw.Connection] = {}
         self._vec_loaded: set[str] = set()
         self._migrated: set[str] = set()
@@ -113,8 +116,13 @@ class SqliteMemoryBackend:
     def _get_conn_sync(self, session_key: str) -> apsw.Connection:
         if session_key in self._connections:
             return self._connections[session_key]
-        db_name = session_key.replace(":", "_") + ".db"
+        db_name = self._naming.filename_for(session_key)
         db_path = self._base_dir / db_name
+        resolved = db_path.resolve()
+        if not resolved.is_relative_to(self._base_dir.resolve()):
+            raise ValueError(
+                f"session_key {session_key!r} produced out-of-base db path: {resolved}",
+            )
         conn = apsw.Connection(str(db_path))
         conn.execute("PRAGMA journal_mode=WAL")
         register_jieba_tokenizer(conn)

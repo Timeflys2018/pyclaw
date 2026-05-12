@@ -8,6 +8,16 @@ from pathlib import Path
 from typing import Any
 
 from pyclaw.core.curator_state import CuratorStateStore
+from pyclaw.storage.memory.naming import (
+    DbFileNamingPolicy,
+    HashOnlyNaming,
+    HumanReadableNaming,
+)
+
+
+def _naming_policy_from_settings(settings: Any) -> DbFileNamingPolicy:
+    policy = getattr(getattr(settings, "memory", None), "naming_policy", "human")
+    return HashOnlyNaming() if policy == "hash" else HumanReadableNaming()
 
 
 @dataclass
@@ -50,8 +60,14 @@ def _get_memory_dbs(settings: Any, *, session_key: str | None = None) -> list[Pa
     if not base.is_dir():
         return []
     if session_key is not None:
-        db_name = session_key.replace(":", "_") + ".db"
+        naming = _naming_policy_from_settings(settings)
+        db_name = naming.filename_for(session_key)
         candidate = base / db_name
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(base.resolve()):
+            raise ValueError(
+                f"session_key {session_key!r} produced out-of-base db path: {resolved}",
+            )
         return [candidate] if candidate.is_file() else []
     return sorted(p for p in base.glob("*.db") if not p.name.endswith(("-wal", "-shm")))
 

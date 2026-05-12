@@ -74,6 +74,7 @@ class MemorySettings(BaseSettings):
     archive_min_similarity: float = 0.5
     archive_min_results: int = 1
     archive_enabled: bool = True
+    naming_policy: Literal["human", "hash"] = Field("human", alias="namingPolicy")
 
     model_config = SettingsConfigDict(env_prefix="PYCLAW_MEMORY_")
 

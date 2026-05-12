@@ -25,6 +25,7 @@ def create_memory_store(
             raise ValueError(msg)
         from pyclaw.storage.memory.composite import CompositeMemoryStore
         from pyclaw.storage.memory.embedding import EmbeddingClient
+        from pyclaw.storage.memory.naming import HashOnlyNaming, HumanReadableNaming
         from pyclaw.storage.memory.redis_index import RedisL1Index
         from pyclaw.storage.memory.sqlite import SqliteMemoryBackend
 
@@ -36,6 +37,11 @@ def create_memory_store(
             api_key=embedding_settings.api_key,
             api_base=embedding_settings.base_url,
             dimensions=embedding_settings.dimensions,
+        )
+        naming = (
+            HashOnlyNaming()
+            if memory_settings.naming_policy == "hash"
+            else HumanReadableNaming()
         )
         return CompositeMemoryStore(
             l1=RedisL1Index(
@@ -49,6 +55,7 @@ def create_memory_store(
                 base_dir,
                 embedding,
                 fts_min_query_chars=memory_settings.search_fts_min_query_chars,
+                naming=naming,
             ),
         )
     raise ValueError(f"unknown memory_backend: {backend!r}")
