@@ -285,7 +285,7 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         await ctx.session_router.update_last_interaction(session_id)
 
     assert ctx.queue_registry is not None, "queue_registry must be set on FeishuContext"
-    await ctx.queue_registry.enqueue(session_id, _run())
+    await ctx.queue_registry.enqueue(session_id, _run(), owner=session_key)
 
 
 async def _dispatch_and_reply(

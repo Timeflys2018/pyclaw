@@ -18,13 +18,20 @@ class FeishuQueueRegistry:
         self._busy: dict[str, bool] = {}
         self._run_controls: dict[str, RunControl] = {}
 
-    async def enqueue(self, session_id: str, coro: Coroutine[Any, Any, None]) -> None:
+    async def enqueue(
+        self,
+        session_id: str,
+        coro: Coroutine[Any, Any, None],
+        *,
+        owner: str | None = None,
+    ) -> None:
         if session_id not in self._entries:
             q: asyncio.Queue[Coroutine[Any, Any, None]] = asyncio.Queue()
             task_id = self._task_manager.spawn(
                 f"feishu-consumer:{session_id}",
                 self._consume(session_id, q),
                 category="consumer",
+                owner=owner,
             )
             self._entries[session_id] = (q, task_id)
         queue, _tid = self._entries[session_id]

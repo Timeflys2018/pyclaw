@@ -85,6 +85,7 @@ class SessionQueue:
                 f"web-consumer:{conversation_id}",
                 self._consume(conversation_id),
                 category="consumer",
+                owner=conversation_id,
             )
             self._consumers[conversation_id] = task_id
 

@@ -102,10 +102,16 @@ class FeishuChannelPlugin:
             except Exception:
                 logger.warning("queue cleanup failed for %s", old_session_id, exc_info=True)
             if memory_store is not None:
+                archive_owner = (
+                    old_session_id.split(":s:", 1)[0]
+                    if ":s:" in old_session_id
+                    else None
+                )
                 task_manager.spawn(
                     f"archive:{old_session_id}",
                     archive_session_background(memory_store, session_store, old_session_id),
                     category="archive",
+                    owner=archive_owner,
                 )
                 if (
                     redis_client is not None

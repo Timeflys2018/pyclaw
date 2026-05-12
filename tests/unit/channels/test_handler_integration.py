@@ -102,7 +102,7 @@ async def test_handle_feishu_message_creates_session_and_enqueues(tmp_path: Path
     enqueued: list[str] = []
     _original = ctx.queue_registry.enqueue
 
-    async def _capture_enqueue(session_id: str, coro) -> None:
+    async def _capture_enqueue(session_id: str, coro, **_kw) -> None:
         enqueued.append(session_id)
         await coro
 
@@ -125,7 +125,7 @@ async def test_handle_feishu_message_dedup_skips_duplicate(tmp_path: Path) -> No
 
     enqueued: list[str] = []
 
-    async def _capture_enqueue(session_id: str, coro) -> None:
+    async def _capture_enqueue(session_id: str, coro, **_kw) -> None:
         enqueued.append(session_id)
         await coro
 
@@ -144,7 +144,7 @@ async def test_handle_feishu_message_group_no_mention_skipped(tmp_path: Path) ->
 
     enqueued: list[str] = []
 
-    async def _capture_enqueue(session_id: str, coro) -> None:
+    async def _capture_enqueue(session_id: str, coro, **_kw) -> None:
         enqueued.append(session_id)
         await coro
 
@@ -163,7 +163,7 @@ async def test_handle_feishu_message_slash_command_intercepted(tmp_path: Path) -
 
     enqueued = []
 
-    async def _capture_enqueue(session_id: str, coro) -> None:
+    async def _capture_enqueue(session_id: str, coro, **_kw) -> None:
         enqueued.append(session_id)
         await coro
 
@@ -182,7 +182,7 @@ async def test_handle_feishu_message_updates_last_interaction(tmp_path: Path) ->
     ctx = _make_ctx(store, tmp_path)
     event = _make_text_event("hello update", message_id="msg_update_001")
 
-    async def _run_immediately(session_id: str, coro) -> None:
+    async def _run_immediately(session_id: str, coro, **_kw) -> None:
         await coro
 
     with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
@@ -243,7 +243,7 @@ async def test_cmd_new_with_args_rotates_and_enqueues_followup(tmp_path: Path) -
 
     all_enqueued: list[tuple[str, Any]] = []
 
-    async def _capture_enqueue(session_id: str, coro) -> None:
+    async def _capture_enqueue(session_id: str, coro, **_kw) -> None:
         all_enqueued.append((session_id, coro))
         coro.close()
 
@@ -322,7 +322,7 @@ async def test_channel_skips_bootstrap_when_deps_has_workspace_store(tmp_path: P
     async def _capture_dispatch_and_reply(inbound, ctx, message_id, workspace_path, extra_system):
         extra_systems_seen.append(extra_system)
 
-    async def _run_immediately(session_id: str, coro) -> None:
+    async def _run_immediately(session_id: str, coro, **_kw) -> None:
         await coro
 
     with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
@@ -349,7 +349,7 @@ async def test_channel_no_longer_passes_bootstrap_via_extra_system(tmp_path: Pat
     async def _capture_dispatch_and_reply(inbound, ctx, message_id, workspace_path, extra_system):
         extra_systems_seen.append(extra_system)
 
-    async def _run_immediately(session_id: str, coro) -> None:
+    async def _run_immediately(session_id: str, coro, **_kw) -> None:
         await coro
 
     with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
@@ -407,7 +407,7 @@ async def test_workspace_base_comes_from_context_not_hardcoded(tmp_path: Path) -
     async def _capture(inbound, ctx, message_id, workspace_path, extra_system):
         workspace_paths_seen.append(workspace_path)
 
-    async def _run_immediately(session_id: str, coro) -> None:
+    async def _run_immediately(session_id: str, coro, **_kw) -> None:
         await coro
 
     with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
@@ -478,7 +478,7 @@ async def test_handle_post_with_one_image_attaches(tmp_path: Path) -> None:
     async def fake_dispatch(inbound, ctx_, message_id, workspace_path, extra_system):
         captured["inbound"] = inbound
 
-    async def _run_immediately(session_id, coro):
+    async def _run_immediately(session_id, coro, **_kw):
         await coro
 
     with patch("pyclaw.channels.feishu.handler.feishu_image_to_block",
@@ -516,7 +516,7 @@ async def test_handle_seven_images_truncated_to_five_with_warning(
     async def fake_dispatch(inbound, ctx_, message_id, workspace_path, extra_system):
         captured["inbound"] = inbound
 
-    async def _run_immediately(session_id, coro):
+    async def _run_immediately(session_id, coro, **_kw):
         await coro
 
     import logging
@@ -549,7 +549,7 @@ async def test_handle_pure_image_no_text_forces_empty_string(tmp_path: Path) -> 
     async def fake_dispatch(inbound, ctx_, message_id, workspace_path, extra_system):
         captured["inbound"] = inbound
 
-    async def _run_immediately(session_id, coro):
+    async def _run_immediately(session_id, coro, **_kw):
         await coro
 
     with patch("pyclaw.channels.feishu.handler.feishu_image_to_block",

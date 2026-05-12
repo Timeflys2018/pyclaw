@@ -155,10 +155,12 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
                 return
             from pyclaw.core.memory_archive import archive_session_background
 
+            archive_owner = old_session_id.split(":s:", 1)[0] if ":s:" in old_session_id else None
             task_manager.spawn(
                 f"archive:{old_session_id}",
                 archive_session_background(memory_store, app.state.session_store, old_session_id),
                 category="archive",
+                owner=archive_owner,
             )
             if redis_client is not None and settings.evolution.enabled:
                 from pyclaw.core.sop_extraction import maybe_spawn_extraction

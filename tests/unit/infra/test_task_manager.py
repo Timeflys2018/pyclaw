@@ -372,3 +372,45 @@ async def test_spawn_from_event_loop_succeeds(tm: TaskManager) -> None:
     assert tid is not None
     await asyncio.sleep(0.01)
     assert tm.get_state(tid) == "done"
+
+
+@pytest.mark.asyncio
+async def test_spawn_records_owner(tm: TaskManager) -> None:
+    async def hang():
+        await asyncio.sleep(10)
+
+    tid = tm.spawn("with-owner", hang(), owner="web:user_x")
+    infos = tm.list_tasks()
+    matches = [i for i in infos if i.task_id == tid]
+    assert len(matches) == 1
+    assert matches[0].owner == "web:user_x"
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_filter_by_owner(tm: TaskManager) -> None:
+    async def hang():
+        await asyncio.sleep(10)
+
+    tm.spawn("a", hang(), owner="web:user_a")
+    tm.spawn("b", hang(), owner="web:user_b")
+    tm.spawn("sys", hang())
+
+    user_a = tm.list_tasks(owner="web:user_a")
+    assert len(user_a) == 1
+    assert user_a[0].name == "a"
+
+    user_nobody = tm.list_tasks(owner="web:user_nobody")
+    assert user_nobody == []
+
+    all_tasks = tm.list_tasks(owner=None)
+    assert len(all_tasks) == 3
+
+
+@pytest.mark.asyncio
+async def test_task_info_owner_default_none(tm: TaskManager) -> None:
+    async def hang():
+        await asyncio.sleep(10)
+
+    tid = tm.spawn("no-owner", hang())
+    info = next(i for i in tm.list_tasks() if i.task_id == tid)
+    assert info.owner is None

@@ -36,6 +36,7 @@ class TaskInfo:
     created_at: float
     duration_s: float
     exception: str | None
+    owner: str | None = None
 
 
 @dataclass
@@ -47,6 +48,7 @@ class TaskHandle:
     asyncio_task: asyncio.Task  # type: ignore[type-arg]
     created_at: float
     exception: str | None = None
+    owner: str | None = None
 
 
 @dataclass
@@ -76,6 +78,7 @@ class TaskManager:
         self, name: str, coro: Coroutine,  # type: ignore[type-arg]
         *, category: TaskCategory = "generic",
         on_error: Callable[[BaseException], None] | None = None,
+        owner: str | None = None,
     ) -> str:
         """Spawn a coroutine as a managed task; returns task_id."""
         self._maybe_prune()
@@ -88,8 +91,9 @@ class TaskManager:
         self._tasks[task_id] = TaskHandle(
             task_id=task_id, name=name, category=category,
             asyncio_task=asyncio_task, created_at=time.monotonic(),
+            owner=owner,
         )
-        logger.debug("spawned task_id=%s name=%s category=%s", task_id, name, category)
+        logger.debug("spawned task_id=%s name=%s category=%s owner=%s", task_id, name, category, owner)
         return task_id
 
     async def _wrap(
@@ -140,8 +144,13 @@ class TaskManager:
 
     def list_tasks(
         self, *, category: TaskCategory | None = None, include_done: bool = False,
+        owner: str | None = None,
     ) -> list[TaskInfo]:
-        """List managed tasks with optional category/state filtering."""
+        """List managed tasks with optional category/owner/state filtering.
+
+        When ``owner`` is None, no owner filtering is applied (returns all).
+        When ``owner`` is a string, only tasks with matching ``handle.owner`` are returned.
+        """
         now = time.monotonic()
         result: list[TaskInfo] = []
         for handle in self._tasks.values():
@@ -150,10 +159,13 @@ class TaskManager:
                 continue
             if category is not None and handle.category != category:
                 continue
+            if owner is not None and handle.owner != owner:
+                continue
             result.append(TaskInfo(
                 task_id=handle.task_id, name=handle.name, category=handle.category,
                 state=state, created_at=handle.created_at,
                 duration_s=now - handle.created_at, exception=handle.exception,
+                owner=handle.owner,
             ))
         return result
 

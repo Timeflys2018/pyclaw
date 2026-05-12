@@ -148,6 +148,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         f"ws-heartbeat:{state.ws_session_id}",
         _heartbeat_loop(state, settings),
         category="heartbeat",
+        owner=f"web:{user_id}",
     )
 
     try:
@@ -195,6 +196,7 @@ async def _dispatch_loop(
                 enqueue_chat(state, msg, settings),
                 category="generic",
                 on_error=lambda e: logger.warning("ws-enqueue failed: %s", e),
+                owner=f"web:{state.user_id}",
             )
 
         elif isinstance(msg, ChatAbortMessage):
