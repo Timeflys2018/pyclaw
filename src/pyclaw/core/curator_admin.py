@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pyclaw.core.curator import CURATOR_LLM_REVIEW_KEY
+from pyclaw.core.curator_state import CuratorStateStore
 
 
 @dataclass
@@ -177,10 +177,4 @@ def restore_sop(
 async def last_review_timestamp(redis_client: Any) -> int | None:
     if redis_client is None:
         return None
-    raw = await redis_client.get(CURATOR_LLM_REVIEW_KEY)
-    if raw is None:
-        return None
-    try:
-        return int(float(raw))
-    except (ValueError, TypeError):
-        return None
+    return await CuratorStateStore(redis_client).get_last_review_at()

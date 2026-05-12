@@ -16,6 +16,7 @@ from pyclaw.core.curator import (
     run_llm_review,
     should_run_llm_review,
 )
+from pyclaw.core.curator_state import CuratorStateStore
 from pyclaw.storage.memory.jieba_tokenizer import register_jieba_tokenizer
 
 
@@ -78,7 +79,8 @@ class TestShouldRunLlmReview:
     async def test_disabled_returns_false(self) -> None:
         settings = FakeSettings(llm_review_enabled=False)
         redis = AsyncMock()
-        assert await should_run_llm_review(settings, redis) is False
+        store = CuratorStateStore(redis)
+        assert await should_run_llm_review(settings, store) is False
         redis.get.assert_not_called()
 
     @pytest.mark.asyncio
@@ -86,28 +88,32 @@ class TestShouldRunLlmReview:
         settings = FakeSettings(llm_review_enabled=True)
         redis = AsyncMock()
         redis.get.return_value = None
-        assert await should_run_llm_review(settings, redis) is True
+        store = CuratorStateStore(redis)
+        assert await should_run_llm_review(settings, store) is True
 
     @pytest.mark.asyncio
     async def test_enabled_recent_run_returns_false(self) -> None:
         settings = FakeSettings(llm_review_enabled=True, llm_review_interval_seconds=3600)
         redis = AsyncMock()
         redis.get.return_value = str(time.time() - 100)
-        assert await should_run_llm_review(settings, redis) is False
+        store = CuratorStateStore(redis)
+        assert await should_run_llm_review(settings, store) is False
 
     @pytest.mark.asyncio
     async def test_enabled_old_run_returns_true(self) -> None:
         settings = FakeSettings(llm_review_enabled=True, llm_review_interval_seconds=3600)
         redis = AsyncMock()
         redis.get.return_value = str(time.time() - 7200)
-        assert await should_run_llm_review(settings, redis) is True
+        store = CuratorStateStore(redis)
+        assert await should_run_llm_review(settings, store) is True
 
     @pytest.mark.asyncio
     async def test_corrupted_last_run_returns_true(self) -> None:
         settings = FakeSettings(llm_review_enabled=True)
         redis = AsyncMock()
         redis.get.return_value = "not-a-number"
-        assert await should_run_llm_review(settings, redis) is True
+        store = CuratorStateStore(redis)
+        assert await should_run_llm_review(settings, store) is True
 
 
 class TestParseReviewDecisions:

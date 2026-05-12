@@ -14,6 +14,7 @@ from typing import Any, Literal
 import apsw
 import redis.exceptions
 
+from pyclaw.core.curator_state import CuratorStateStore
 from pyclaw.storage.lock.redis import LockAcquireError, LockLostError
 from pyclaw.storage.memory.jieba_tokenizer import register_jieba_tokenizer
 
@@ -111,6 +112,7 @@ async def run_curator_cycle(
         ``lock_lost`` (heartbeat failure mid-cycle) or ``review_skipped_interval``
         (gate denied).
     """
+    state_store = CuratorStateStore(redis_client)
     try:
         token = await lock_manager.acquire(CURATOR_CYCLE_LOCK_KEY)
     except LockAcquireError:
@@ -192,7 +194,7 @@ async def run_curator_cycle(
         elif llm_client is None or workspace_base_dir is None:
             pass
         else:
-            should_run = force_review or await should_run_llm_review(settings, redis_client)
+            should_run = force_review or await should_run_llm_review(settings, state_store)
             if not should_run:
                 error = "review_skipped_interval"
             else:
@@ -242,9 +244,9 @@ async def run_curator_cycle(
 
         if error != "lock_lost":
             if mode == "scan_and_review":
-                await redis_client.set(CURATOR_LAST_RUN_KEY, str(time.time()))
+                await state_store.mark_scan_completed()
             if review_completed_full_traversal:
-                await redis_client.set(CURATOR_LLM_REVIEW_KEY, str(int(time.time())))
+                await state_store.mark_review_fully_completed()
 
     finally:
         try:
@@ -329,20 +331,15 @@ async def create_curator_loop(
     except (TypeError, ValueError):
         pass
 
-    existing = await redis_client.get(CURATOR_LAST_RUN_KEY)
-    if existing is None:
-        await redis_client.set(CURATOR_LAST_RUN_KEY, str(time.time()))
+    state_store = CuratorStateStore(redis_client)
+    await state_store.seed_if_missing()
 
     try:
         while True:
             await asyncio.sleep(settings.check_interval_seconds)
 
-            raw_last_run = await redis_client.get(CURATOR_LAST_RUN_KEY)
-            if raw_last_run is not None:
-                try:
-                    last_run_at = float(raw_last_run)
-                except (ValueError, TypeError):
-                    last_run_at = 0.0
+            last_run_at = await state_store.get_last_scan_at()
+            if last_run_at is not None:
                 if time.time() - last_run_at < settings.interval_seconds:
                     continue
 
@@ -530,19 +527,15 @@ class ReviewDecision:
 
 
 async def should_run_llm_review(
-    settings: Any, redis_client: Any
+    settings: Any, state_store: CuratorStateStore
 ) -> bool:
     if not settings.llm_review_enabled:
         return False
 
-    last_run_raw = await redis_client.get(CURATOR_LLM_REVIEW_KEY)
-    if last_run_raw is not None:
-        try:
-            last_run = float(last_run_raw)
-            if time.time() - last_run < settings.llm_review_interval_seconds:
-                return False
-        except (ValueError, TypeError):
-            pass
+    last_run = await state_store.get_last_review_at()
+    if last_run is not None:
+        if time.time() - last_run < settings.llm_review_interval_seconds:
+            return False
 
     return True
 
