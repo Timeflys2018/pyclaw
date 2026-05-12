@@ -118,7 +118,6 @@ class DistributedMutex:
             hb_name,
             self._heartbeat(),
             category="heartbeat",
-            owner=self._owner_label or None,
         )
         await asyncio.sleep(0)
         return self

@@ -5,13 +5,12 @@ is preserved as a thin wrapper (Phase C3) to avoid breaking the 20+ call
 sites that expect it; new code should construct :class:`CuratorCycle`
 directly.
 
-This class still uses the inline heartbeat pattern from ``curator._heartbeat``.
-Phase D replaces that with :class:`DistributedMutex`.
+Lock management is delegated to :class:`DistributedMutex` (Phase D);
+this module no longer contains any heartbeat / CAS logic.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Callable
 from pathlib import Path
@@ -25,6 +24,7 @@ from pyclaw.core.curator import (
     CycleReport,
     ReviewOutcome,
 )
+from pyclaw.storage.lock.mutex import DistributedMutex
 from pyclaw.storage.lock.redis import LockAcquireError, LockLostError
 
 if TYPE_CHECKING:
@@ -85,61 +85,26 @@ class CuratorCycle:
             )
         self._executed = True
 
+        mutex = DistributedMutex(
+            self._lock_manager,
+            CURATOR_CYCLE_LOCK_KEY,
+            task_manager=self._task_manager,
+            owner_label=self._owner_label,
+        )
+
         try:
-            token = await self._lock_manager.acquire(CURATOR_CYCLE_LOCK_KEY)
+            async with mutex:
+                logger.info(
+                    "curator cycle acquired lock owner=%s mode=%s force=%s",
+                    self._owner_label, self._mode, self._force_review,
+                )
+                await self._run_critical_section(mutex.check_alive)
         except LockAcquireError:
             logger.debug(
                 "curator cycle lock busy owner=%s",
                 self._owner_label,
             )
             return CycleReport(acquired=False)
-
-        logger.info(
-            "curator cycle acquired lock owner=%s mode=%s force=%s",
-            self._owner_label, self._mode, self._force_review,
-        )
-
-        lock_lost_event = asyncio.Event()
-        heartbeat_task_id: str | None = None
-        try:
-            heartbeat_task_id = self._task_manager.spawn(
-                "curator-heartbeat",
-                _curator._heartbeat(
-                    self._lock_manager,
-                    CURATOR_CYCLE_LOCK_KEY,
-                    token,
-                    lock_lost_event,
-                ),
-                category="heartbeat",
-            )
-        except BaseException:
-            try:
-                await self._lock_manager.release(CURATOR_CYCLE_LOCK_KEY, token)
-            except Exception:
-                logger.debug("release after spawn failure errored", exc_info=True)
-            raise
-
-        await asyncio.sleep(0)
-        check_alive = self._make_check_alive(heartbeat_task_id, lock_lost_event)
-
-        try:
-            await self._run_critical_section(check_alive)
-        finally:
-            try:
-                await self._task_manager.cancel(heartbeat_task_id)
-            except Exception:
-                logger.debug(
-                    "heartbeat cancel errored (benign) owner=%s",
-                    self._owner_label, exc_info=True,
-                )
-            self._consume_heartbeat_exception(heartbeat_task_id)
-            try:
-                await self._lock_manager.release(CURATOR_CYCLE_LOCK_KEY, token)
-            except Exception:
-                logger.debug(
-                    "lock release errored (benign) owner=%s",
-                    self._owner_label, exc_info=True,
-                )
 
         return self._build_report()
 
@@ -247,47 +212,6 @@ class CuratorCycle:
             await self._state_store.mark_scan_completed()
         if self._review_completed_full_traversal:
             await self._state_store.mark_review_fully_completed()
-
-    def _make_check_alive(
-        self,
-        heartbeat_task_id: str,
-        lock_lost_event: asyncio.Event,
-    ) -> Callable[[], None]:
-        """Return a closure that raises LockLostError if the heartbeat has lost
-        the lock or the heartbeat task has terminated unexpectedly.
-
-        Fail-closed on a missing handle (behavior change matching
-        DistributedMutex semantics; see Phase D).
-        """
-        task_manager = self._task_manager
-
-        def _heartbeat_done() -> bool:
-            state = task_manager.get_state(heartbeat_task_id)
-            if state is None:
-                return True
-            return state != "running"
-
-        def check_alive() -> None:
-            if lock_lost_event.is_set() or _heartbeat_done():
-                raise LockLostError(CURATOR_CYCLE_LOCK_KEY)
-
-        return check_alive
-
-    def _consume_heartbeat_exception(self, heartbeat_task_id: str) -> None:
-        """Retrieve any stored heartbeat exception so asyncio does not log
-        ``Task exception was never retrieved`` at GC. Exceptions have
-        already been logged inside ``_heartbeat`` itself.
-        """
-        handle = self._task_manager._tasks.get(heartbeat_task_id)
-        if handle is None:
-            return
-        task = handle.asyncio_task
-        if not task.done() or task.cancelled():
-            return
-        try:
-            task.exception()
-        except Exception:
-            pass
 
     def _build_report(self) -> CycleReport:
         action_count = sum(

@@ -597,7 +597,7 @@ class TestRunCuratorCycleHeartbeat:
             )
 
         spawn_call = cycle_deps["task_manager"].spawn.call_args
-        assert spawn_call[0][0] == "curator-heartbeat"
+        assert "heartbeat" in spawn_call[0][0]
         assert asyncio.iscoroutine(spawn_call[0][1])
         # Clean up the unawaited coroutine
         spawn_call[0][1].close()

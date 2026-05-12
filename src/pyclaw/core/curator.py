@@ -13,10 +13,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 import apsw
-import redis.exceptions
 
 from pyclaw.core.curator_state import CuratorStateStore
-from pyclaw.storage.lock.redis import LockAcquireError, LockLostError
 from pyclaw.storage.memory.jieba_tokenizer import register_jieba_tokenizer
 
 logger = logging.getLogger(__name__)
@@ -40,35 +38,6 @@ CURATOR_LOCK_KEY = "pyclaw:curator:lock"
 CURATOR_LAST_RUN_KEY = "pyclaw:curator:last_run_at"
 CURATOR_LLM_REVIEW_KEY = "pyclaw:curator:llm_review_last_run_at"
 SCAN_CONCURRENCY = 10
-
-async def _heartbeat(
-    lock_manager: Any,
-    key: str,
-    token: str,
-    lock_lost_event: asyncio.Event,
-    interval_s: float = 10.0,
-    ttl_ms: int = 30_000,
-) -> None:
-    try:
-        while True:
-            await asyncio.sleep(interval_s)
-            try:
-                ok = await lock_manager.renew(key, token, ttl_ms)
-            except (
-                redis.exceptions.ConnectionError,
-                redis.exceptions.TimeoutError,
-                asyncio.TimeoutError,
-                OSError,
-            ) as exc:
-                lock_lost_event.set()
-                logger.error("curator heartbeat renew network error", exc_info=True)
-                raise LockLostError(key) from exc
-            if not ok:
-                lock_lost_event.set()
-                logger.error("curator heartbeat renew CAS failed")
-                raise LockLostError(key)
-    except asyncio.CancelledError:
-        raise
 
 
 async def run_curator_cycle(
@@ -106,7 +75,7 @@ async def run_curator_cycle(
         force_review=force_review,
         owner_label=owner_label,
     )
-    return await cycle.execute()
+    return await cycle.execute()  # pyright: ignore[reportReturnType]
 
 
 REVIEW_PROMPT_TEMPLATE = """\
