@@ -35,3 +35,5 @@ class CommandContext:
     agent_settings: Any = None
     registry: "CommandRegistry | None" = None
     command_timeout: float = 30.0
+    queue_registry: Any = None
+    session_queue: Any = None

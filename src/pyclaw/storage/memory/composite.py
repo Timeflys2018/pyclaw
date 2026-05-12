@@ -105,6 +105,11 @@ class CompositeMemoryStore:
             session_key, query, limit=limit, min_similarity=min_similarity
         )
 
+    async def count_by_layer(self, session_key: str) -> dict[str, int]:
+        l1_entries = await self._l1.index_get(session_key)
+        counts = await self._sqlite.count_by_layer(session_key)
+        return {"l1": len(l1_entries), **counts}
+
     async def close(self) -> None:
         for backend in (self._l1, self._sqlite):
             try:

@@ -171,3 +171,16 @@ async def test_composite_satisfies_protocol() -> None:
     l1, sqlite = _make_backends()
     store = CompositeMemoryStore(l1=l1, sqlite=sqlite)
     assert isinstance(store, MemoryStore)
+
+
+async def test_count_by_layer_delegates_to_sqlite_and_l1() -> None:
+    l1, sqlite = _make_backends()
+    l1.index_get = AsyncMock(return_value=[_make_entry("l1a"), _make_entry("l1b")])
+    sqlite.count_by_layer = AsyncMock(return_value={"l2": 7, "l3": 3, "l4": 2})
+
+    store = CompositeMemoryStore(l1=l1, sqlite=sqlite)
+    result = await store.count_by_layer("test:user_x")
+
+    assert result == {"l1": 2, "l2": 7, "l3": 3, "l4": 2}
+    l1.index_get.assert_awaited_once_with("test:user_x")
+    sqlite.count_by_layer.assert_awaited_once_with("test:user_x")

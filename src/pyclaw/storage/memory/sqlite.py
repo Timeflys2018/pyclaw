@@ -469,6 +469,28 @@ class SqliteMemoryBackend:
 
         return await asyncio.to_thread(_search_vec)
 
+    async def count_by_layer(self, session_key: str) -> dict[str, int]:
+        conn = await self._get_conn(session_key)
+
+        def _count_sync() -> dict[str, int]:
+            facts_row = list(conn.execute(
+                "SELECT COUNT(*) FROM facts WHERE session_key = ?", (session_key,)
+            ))
+            procs_row = list(conn.execute(
+                "SELECT COUNT(*) FROM procedures WHERE session_key = ? AND status = 'active'",
+                (session_key,),
+            ))
+            archives_row = list(conn.execute(
+                "SELECT COUNT(*) FROM archives WHERE session_key = ?", (session_key,)
+            ))
+            return {
+                "l2": int(facts_row[0][0]) if facts_row else 0,
+                "l3": int(procs_row[0][0]) if procs_row else 0,
+                "l4": int(archives_row[0][0]) if archives_row else 0,
+            }
+
+        return await asyncio.to_thread(_count_sync)
+
     async def close(self) -> None:
         for conn in self._connections.values():
             try:

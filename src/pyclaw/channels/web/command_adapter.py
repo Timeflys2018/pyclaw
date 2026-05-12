@@ -120,6 +120,7 @@ class WebCommandAdapter:
                 "web_conversation_id": conversation_id,
                 "tool_workspace_path": workspace_base / f"web_{user_id}",
             },
+            session_queue=session_queue,
         )
 
         try:

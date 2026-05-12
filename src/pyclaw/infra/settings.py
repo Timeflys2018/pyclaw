@@ -5,7 +5,7 @@ from pathlib import Path
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pyclaw.models import (
@@ -303,6 +303,7 @@ class Settings(BaseSettings):
     workspaces: WorkspaceSettings = Field(default_factory=WorkspaceSettings)
     skills: SkillSettings = Field(default_factory=SkillSettings)
     evolution: EvolutionSettings = Field(default_factory=EvolutionSettings)
+    admin_user_ids: list[str] = Field(default_factory=list)
     # Graceful shutdown timeout in seconds.  Matches the default K8s
     # SIGTERM→SIGKILL window (30 s) so that TaskManager drain completes
     # before the orchestrator force-kills the process.
@@ -311,6 +312,16 @@ class Settings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="PYCLAW_")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _flatten_admin(cls, data):
+        if isinstance(data, dict) and "admin" in data and isinstance(data["admin"], dict):
+            admin_block = data.pop("admin")
+            user_ids = admin_block.get("userIds") or admin_block.get("user_ids") or []
+            if "admin_user_ids" not in data:
+                data["admin_user_ids"] = list(user_ids)
+        return data
 
 
 def find_config_file() -> Path | None:

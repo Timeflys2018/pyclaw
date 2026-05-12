@@ -34,6 +34,25 @@ async def idle_guard_check(
     return True
 
 
+async def check_idle(
+    queue_obj: _IdleQueue,
+    key: str,
+    reply: Callable[[str], Awaitable[None]],
+) -> bool:
+    """Sub-command idle guard (spec-free).
+
+    Returns True when the handler should short-circuit (queue is busy and user
+    was informed). Returns False when the queue is idle and the handler may
+    proceed. Unlike :func:`idle_guard_check`, this helper does not read
+    ``CommandSpec.requires_idle`` — callers from within commands that declare
+    ``requires_idle=False`` use this for finer sub-command-level gating.
+    """
+    if queue_obj.is_idle(key):
+        return False
+    await reply("⏳ 任务运行中，请先 /stop 或等待结束")
+    return True
+
+
 def list_available_models(agent_settings: Any) -> dict[str, list[str]]:
     providers = getattr(agent_settings, "providers", None) or {}
     result: dict[str, list[str]] = {}
