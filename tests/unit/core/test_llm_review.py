@@ -9,9 +9,11 @@ from unittest.mock import AsyncMock, patch
 import apsw
 import pytest
 
+from dataclasses import FrozenInstanceError
+
 from pyclaw.core.curator import (
-    CURATOR_LLM_REVIEW_KEY,
     ReviewDecision,
+    ReviewOutcome,
     _parse_review_decisions,
     run_llm_review,
     should_run_llm_review,
@@ -72,6 +74,46 @@ def _create_test_db(path: Path, entries: list[dict]) -> None:
             ),
         )
     conn.close()
+
+
+class TestReviewOutcome:
+    """B1: ReviewOutcome dataclass is frozen and exposes per-action counts."""
+
+    def test_constructs_with_all_fields(self, tmp_path: Path) -> None:
+        db_file = tmp_path / "x.db"
+        outcome = ReviewOutcome(
+            db_file=db_file,
+            entries_reviewed=5,
+            promoted_count=1,
+            archived_count=2,
+            failed_count=0,
+        )
+        assert outcome.db_file == db_file
+        assert outcome.entries_reviewed == 5
+        assert outcome.promoted_count == 1
+        assert outcome.archived_count == 2
+        assert outcome.failed_count == 0
+
+    def test_is_frozen(self, tmp_path: Path) -> None:
+        outcome = ReviewOutcome(
+            db_file=tmp_path / "x.db",
+            entries_reviewed=0,
+            promoted_count=0,
+            archived_count=0,
+            failed_count=0,
+        )
+        with pytest.raises(FrozenInstanceError):
+            outcome.promoted_count = 99  # pyright: ignore[reportAttributeAccessIssue]
+
+    def test_total_actions_sums_promoted_plus_archived(self, tmp_path: Path) -> None:
+        outcome = ReviewOutcome(
+            db_file=tmp_path / "x.db",
+            entries_reviewed=10,
+            promoted_count=3,
+            archived_count=4,
+            failed_count=2,
+        )
+        assert outcome.total_actions == 7
 
 
 class TestShouldRunLlmReview:
@@ -172,12 +214,13 @@ class TestRunLlmReview:
         db_file = tmp_path / "test.db"
         _create_test_db(db_file, [])
         settings = FakeSettings(llm_review_enabled=True)
-        redis = AsyncMock()
         llm = AsyncMock()
         l1 = AsyncMock()
 
-        result = await run_llm_review(db_file, settings, redis, llm, l1, tmp_path)
-        assert result == 0
+        result = await run_llm_review(db_file, settings, llm, l1, tmp_path)
+        assert isinstance(result, ReviewOutcome)
+        assert result.entries_reviewed == 0
+        assert result.total_actions == 0
         llm.complete.assert_not_called()
 
     @pytest.mark.asyncio
@@ -205,11 +248,12 @@ class TestRunLlmReview:
         llm.complete.return_value = FakeLLMResponse(
             text=json.dumps([{"id": "entry_001", "decision": "archive", "reason": "low quality"}])
         )
-        redis = AsyncMock()
         l1 = AsyncMock()
 
-        result = await run_llm_review(db_file, settings, redis, llm, l1, tmp_path)
-        assert result == 1
+        result = await run_llm_review(db_file, settings, llm, l1, tmp_path)
+        assert result.archived_count == 1
+        assert result.promoted_count == 0
+        assert result.total_actions == 1
 
         conn = apsw.Connection(str(db_file))
         row = list(conn.execute("SELECT status, archive_reason FROM procedures WHERE id='entry_001'"))
@@ -218,9 +262,6 @@ class TestRunLlmReview:
         assert "llm_review:" in row[0][1]
 
         l1.index_remove.assert_called_once_with("ws:default", "entry_001")
-        redis.set.assert_called_once()
-        call_args = redis.set.call_args[0]
-        assert call_args[0] == CURATOR_LLM_REVIEW_KEY
 
     @pytest.mark.asyncio
     async def test_promote_decision_triggers_graduation(self, tmp_path: Path) -> None:
@@ -247,13 +288,14 @@ class TestRunLlmReview:
         llm.complete.return_value = FakeLLMResponse(
             text=json.dumps([{"id": "entry_002", "decision": "promote", "reason": "high quality"}])
         )
-        redis = AsyncMock()
         l1 = AsyncMock()
 
         with patch("pyclaw.core.skill_graduation.graduate_single_sop", return_value=(True, "/tmp/skill")) as mock_grad:
-            result = await run_llm_review(db_file, settings, redis, llm, l1, tmp_path)
+            result = await run_llm_review(db_file, settings, llm, l1, tmp_path)
 
-        assert result == 1
+        assert result.promoted_count == 1
+        assert result.archived_count == 0
+        assert result.total_actions == 1
         mock_grad.assert_called_once_with(
             entry_id="entry_002",
             content="my-skill\nA good skill\nStep 1: do something\nStep 2: finish",
@@ -285,12 +327,11 @@ class TestRunLlmReview:
         settings = FakeSettings(llm_review_enabled=True)
         llm = AsyncMock()
         llm.complete.side_effect = RuntimeError("API down")
-        redis = AsyncMock()
         l1 = AsyncMock()
 
-        result = await run_llm_review(db_file, settings, redis, llm, l1, tmp_path)
-        assert result == 0
-        redis.set.assert_not_called()
+        result = await run_llm_review(db_file, settings, llm, l1, tmp_path)
+        assert result.total_actions == 0
+        assert result.failed_count == 1
 
     @pytest.mark.asyncio
     async def test_keep_decision_no_action(self, tmp_path: Path) -> None:
@@ -317,11 +358,11 @@ class TestRunLlmReview:
         llm.complete.return_value = FakeLLMResponse(
             text=json.dumps([{"id": "entry_004", "decision": "keep", "reason": "fine"}])
         )
-        redis = AsyncMock()
         l1 = AsyncMock()
 
-        result = await run_llm_review(db_file, settings, redis, llm, l1, tmp_path)
-        assert result == 0
+        result = await run_llm_review(db_file, settings, llm, l1, tmp_path)
+        assert result.total_actions == 0
+        assert result.entries_reviewed == 1
 
         conn = apsw.Connection(str(db_file))
         row = list(conn.execute("SELECT status FROM procedures WHERE id='entry_004'"))

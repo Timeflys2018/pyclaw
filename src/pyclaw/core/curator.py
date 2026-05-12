@@ -7,6 +7,7 @@ import json as _json
 import logging
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -205,19 +206,19 @@ async def run_curator_cycle(
                     for db_file in db_files:
                         _check_lock_alive()
                         try:
-                            reviewed = await run_llm_review(
+                            outcome = await run_llm_review(
                                 db_file=db_file,
                                 settings=settings,
-                                redis_client=redis_client,
                                 llm_client=llm_client,
                                 l1_index=l1_index,
                                 workspace_base_dir=workspace_base_dir,
+                                check_alive=_check_lock_alive,
                             )
-                            review_action_count += reviewed
-                            if reviewed > 0:
+                            review_action_count += outcome.total_actions
+                            if outcome.total_actions > 0:
                                 logger.info(
                                     "curator llm review actions=%d db=%s owner_label=%s",
-                                    reviewed, db_file.name, owner_label,
+                                    outcome.total_actions, db_file.name, owner_label,
                                     extra={"owner_label": owner_label},
                                 )
                         except LockLostError:
@@ -526,6 +527,26 @@ class ReviewDecision:
     reason: str
 
 
+@dataclass(frozen=True)
+class ReviewOutcome:
+    """Per-db result of :func:`run_llm_review`.
+
+    Replaces the legacy ``int`` action_count return to preserve information
+    for observability (promoted vs archived vs failed) and for the future
+    ``persist-curator-review-metadata`` change (per proposal D3).
+    """
+
+    db_file: Path
+    entries_reviewed: int
+    promoted_count: int
+    archived_count: int
+    failed_count: int
+
+    @property
+    def total_actions(self) -> int:
+        return self.promoted_count + self.archived_count
+
+
 async def should_run_llm_review(
     settings: Any, state_store: CuratorStateStore
 ) -> bool:
@@ -550,11 +571,24 @@ def _open_review_db(db_file: Path) -> apsw.Connection:
 async def run_llm_review(
     db_file: Path,
     settings: Any,
-    redis_client: Any,
     llm_client: Any,
     l1_index: Any,
     workspace_base_dir: Path,
-) -> int:
+    *,
+    check_alive: Callable[[], None] = lambda: None,
+) -> ReviewOutcome:
+    """Per-db LLM review — pure function, no Redis side effects.
+
+    ``check_alive`` is called at function entry, before the LLM request, and
+    before each UPDATE statement. Its default is a no-op for standalone test
+    use; the curator cycle wires it to ``DistributedMutex.check_alive`` so
+    lock loss shrinks the UPDATE race window from seconds (legacy) to
+    sub-millisecond.
+
+    Returns ``ReviewOutcome`` describing how many entries were promoted,
+    archived, or failed. Callers sum ``total_actions`` across databases.
+    """
+    check_alive()
     conn = await asyncio.to_thread(_open_review_db, db_file)
 
     try:
@@ -569,7 +603,10 @@ async def run_llm_review(
 
         entries = await asyncio.to_thread(_get_entries)
         if not entries:
-            return 0
+            return ReviewOutcome(
+                db_file=db_file, entries_reviewed=0,
+                promoted_count=0, archived_count=0, failed_count=0,
+            )
 
         entries_text = "\n".join(
             f"[id={eid}, use_count={uc}]\n{content[:200]}\n---"
@@ -582,6 +619,7 @@ async def run_llm_review(
         )
 
         model = settings.llm_review_model
+        check_alive()
         try:
             response = await asyncio.wait_for(
                 llm_client.complete(
@@ -593,10 +631,15 @@ async def run_llm_review(
             llm_output = response.text
         except Exception as exc:
             logger.warning("LLM review call failed: %s", exc)
-            return 0
+            return ReviewOutcome(
+                db_file=db_file, entries_reviewed=len(entries),
+                promoted_count=0, archived_count=0, failed_count=1,
+            )
 
         decisions = _parse_review_decisions(llm_output, settings.llm_review_actions)
-        action_count = 0
+        promoted_count = 0
+        archived_count = 0
+        failed_count = 0
         entry_map = {eid: (sk, content) for eid, sk, content, _uc in entries}
 
         for decision in decisions:
@@ -627,14 +670,17 @@ async def run_llm_review(
                             "UPDATE procedures SET status='graduated' WHERE id=?", (eid,)
                         )
 
+                    check_alive()
                     await asyncio.to_thread(_mark_graduated)
                     if l1_index:
                         try:
                             await l1_index.index_remove(session_key, decision.id)
                         except Exception:
                             pass
-                    action_count += 1
+                    promoted_count += 1
                     logger.info("LLM review promoted %s", decision.id[:8])
+                else:
+                    failed_count += 1
 
             elif decision.decision == "archive" and "archive" in settings.llm_review_actions:
                 eid_archive = decision.id
@@ -647,18 +693,23 @@ async def run_llm_review(
                         (ts, reason, eid),
                     )
 
+                check_alive()
                 await asyncio.to_thread(_mark_archived)
                 if l1_index:
                     try:
                         await l1_index.index_remove(session_key, decision.id)
                     except Exception:
                         pass
-                action_count += 1
+                archived_count += 1
                 logger.info("LLM review archived %s: %s", decision.id[:8], decision.reason[:50])
 
-        await redis_client.set(CURATOR_LLM_REVIEW_KEY, str(int(time.time())))
-
-        return action_count
+        return ReviewOutcome(
+            db_file=db_file,
+            entries_reviewed=len(entries),
+            promoted_count=promoted_count,
+            archived_count=archived_count,
+            failed_count=failed_count,
+        )
     finally:
         conn.close()
 
