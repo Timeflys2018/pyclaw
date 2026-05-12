@@ -19,7 +19,7 @@ from pyclaw.storage.memory.jieba_tokenizer import register_jieba_tokenizer
 
 logger = logging.getLogger(__name__)
 
-CycleError = Literal["lock_lost", "review_skipped_interval", "memory_base_dir_missing"] | None
+CycleError = Literal["lock_lost", "review_skipped_interval"] | None
 
 
 @dataclass
@@ -108,8 +108,8 @@ async def run_curator_cycle(
     CycleReport
         ``acquired=False`` means another instance holds the lock (normal,
         caller decides to skip/retry). ``error`` field discriminates
-        ``lock_lost`` (heartbeat failure mid-cycle), ``review_skipped_interval``
-        (gate denied), or ``memory_base_dir_missing``.
+        ``lock_lost`` (heartbeat failure mid-cycle) or ``review_skipped_interval``
+        (gate denied).
     """
     try:
         token = await lock_manager.acquire(CURATOR_CYCLE_LOCK_KEY)

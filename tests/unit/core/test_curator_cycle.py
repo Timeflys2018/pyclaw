@@ -39,12 +39,6 @@ class TestCycleReport:
         report = CycleReport(acquired=True, error="review_skipped_interval")
         assert report.error == "review_skipped_interval"
 
-    def test_error_memory_base_dir_missing(self) -> None:
-        from pyclaw.core.curator import CycleReport
-
-        report = CycleReport(acquired=True, error="memory_base_dir_missing")
-        assert report.error == "memory_base_dir_missing"
-
     def test_defaults(self) -> None:
         from pyclaw.core.curator import CycleReport
 
