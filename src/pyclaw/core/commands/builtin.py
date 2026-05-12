@@ -642,3 +642,17 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             requires_idle=False,
         )
     )
+
+    from pyclaw.core.commands.skills import cmd_skills
+
+    registry.register(
+        CommandSpec(
+            name="/skills",
+            handler=cmd_skills,
+            category="skills",
+            help_text="管理本 workspace 的 skills（发现/搜索/安装/可用性检查）",
+            args_hint="list | search <q> | install <slug> [--version V] [--confirm] | check [name]",
+            channels=ALL_CHANNELS,
+            requires_idle=False,
+        )
+    )

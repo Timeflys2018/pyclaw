@@ -357,6 +357,7 @@ async def test_register_builtin_includes_all_nine() -> None:
         "/model",
         "/new",
         "/reset",
+        "/skills",
         "/status",
         "/tasks",
         "/whoami",
