@@ -34,6 +34,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     settings = load_settings()
     redis_client = None
+    lock_manager: RedisLockManager | None = None
 
     if settings.storage.session_backend == "redis":
         redis_client = await get_client(settings.redis)
@@ -83,6 +84,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         task_manager=task_manager,
         memory_store=memory_store,
         redis_client=redis_client,
+        lock_manager=lock_manager,
     )
     app.state.runner_deps = runner_deps
 
@@ -232,20 +234,26 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         logger.info("Web channel enabled (worker=%s)", worker_id)
 
-    # Curator background loop
-    if settings.evolution.enabled and settings.evolution.curator.enabled and redis_client is not None:
+    if (
+        settings.evolution.enabled
+        and settings.evolution.curator.enabled
+        and redis_client is not None
+        and lock_manager is not None
+    ):
         from pyclaw.core.curator import create_curator_loop
 
         memory_base_dir = Path(settings.memory.base_dir).expanduser()
         _l1_index = getattr(memory_store, '_l1', None) if memory_store else None
         if _l1_index is not None:
             task_manager.spawn(
-                "curator",
+                "curator-scan",
                 create_curator_loop(
                     settings=settings.evolution.curator,
                     memory_base_dir=memory_base_dir,
                     redis_client=redis_client,
                     l1_index=_l1_index,
+                    lock_manager=lock_manager,
+                    task_manager=task_manager,
                     workspace_base_dir=workspace_base,
                     llm_client=runner_deps.llm,
                 ),

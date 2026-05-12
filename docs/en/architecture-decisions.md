@@ -285,3 +285,11 @@ When implementing Memory Store, memory keys **MUST** include session_key prefix:
 - Delete operations affect only current user
 
 Design pattern: `memory:{session_key}:{chunk_id}` or per-user SQLite db file.
+
+## D27: Curator uses RedisLockManager with heartbeat renewal, not naked SETNX
+
+**Decision**: The curator distributed lock migrated from `redis.set(..., nx=True)` + naked `DELETE` to `RedisLockManager` (Lua-CAS `acquire/release/renew`) with a 10s-interval heartbeat coroutine renewing a 30s TTL.
+
+**Rationale**: The old design had four structural flaws: (1) lock covered only the scan phase, leaving `run_llm_review` unprotected under multi-instance deployments; (2) TTL was set to `interval_seconds` (default 7 days) instead of a hold-aware value; (3) `last_run_at` timestamp writes were scattered across scan and review; (4) lock release used `DELETE` instead of CAS, risking deletion of another instance's lock after expiry. The new `run_curator_cycle(...)` wraps scan + review in a single critical section keyed on `pyclaw:curator:cycle`, with a double fail-safe (`lock_lost_event` + `heartbeat_task.done()`) checked at each review iteration boundary.
+
+**Consumer**: `create_curator_loop` is a thin scheduler delegating to `run_curator_cycle(mode="scan_and_review")`; manual-trigger callers (e.g. `/curator review-trigger`) use `run_curator_cycle(mode="review_only", force_review=True)`. Both paths share the same lock.

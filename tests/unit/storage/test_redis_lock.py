@@ -72,3 +72,28 @@ async def test_renew_wrong_token_returns_false() -> None:
 def test_key_prefix_applied() -> None:
     mgr = RedisLockManager(AsyncMock(), key_prefix="pyclaw:")
     assert mgr._full_key("session:abc") == "pyclaw:session:abc"
+
+
+# ─── LockLostError ───────────────────────────────────────────────────────────
+
+
+class TestLockLostError:
+    """A1.1: LockLostError is importable, subclasses Exception, str contains key."""
+
+    def test_importable(self) -> None:
+        from pyclaw.storage.lock.redis import LockLostError
+        assert LockLostError is not None
+
+    def test_is_exception_subclass(self) -> None:
+        from pyclaw.storage.lock.redis import LockLostError
+        assert issubclass(LockLostError, Exception)
+
+    def test_str_contains_key(self) -> None:
+        from pyclaw.storage.lock.redis import LockLostError
+        err = LockLostError("curator:cycle")
+        assert "curator:cycle" in str(err)
+
+    def test_has_key_attribute(self) -> None:
+        from pyclaw.storage.lock.redis import LockLostError
+        err = LockLostError("curator:cycle")
+        assert err.key == "curator:cycle"

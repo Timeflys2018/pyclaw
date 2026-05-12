@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import apsw
 import pytest
@@ -163,64 +163,59 @@ class TestScanSingleDb:
 
 
 class TestCuratorLoopBehavior:
-    """Tests for create_curator_loop lock/interval logic (mocked Redis)."""
+    """Smoke tests for create_curator_loop seed and interval behaviors."""
 
     @pytest.mark.asyncio
     async def test_lock_competition_skip(self) -> None:
-        """When redis.set(nx=True) returns None, scan is skipped (lock held by another)."""
+        """When run_curator_cycle returns acquired=False, loop continues without side effects."""
         import asyncio
+        from unittest.mock import patch
 
-        from pyclaw.core.curator import create_curator_loop
+        from pyclaw.core.curator import CycleReport, create_curator_loop
 
         redis_client = AsyncMock()
-        # First call: redis.get(CURATOR_LAST_RUN_KEY) exists
-        redis_client.get = AsyncMock(return_value=None)
-        # exists returns True so no seed
-        redis_client.exists = AsyncMock(return_value=True)
-        # set for seed
-        redis_client.set = AsyncMock(return_value=None)  # nx=True returns None => not acquired
+        redis_client.get = AsyncMock(return_value="0")
+        redis_client.set = AsyncMock(return_value=True)
 
         settings = AsyncMock()
         settings.check_interval_seconds = 0.01
         settings.interval_seconds = 3600
         settings.archive_after_days = 90
 
-        # Override redis_client.get to return old timestamp so interval is reached
-        redis_client.get = AsyncMock(return_value="0")
+        lock_manager = AsyncMock()
+        task_manager = MagicMock()
 
-        # Lock not acquired
-        redis_client.set = AsyncMock(return_value=None)
+        with patch("pyclaw.core.curator.run_curator_cycle", new_callable=AsyncMock) as mock_cycle:
+            mock_cycle.return_value = CycleReport(acquired=False)
 
-        task = asyncio.create_task(
-            create_curator_loop(
-                settings=settings,
-                memory_base_dir=Path("/nonexistent"),
-                redis_client=redis_client,
-                l1_index=AsyncMock(),
+            task = asyncio.create_task(
+                create_curator_loop(
+                    settings=settings,
+                    memory_base_dir=Path("/nonexistent"),
+                    redis_client=redis_client,
+                    l1_index=AsyncMock(),
+                    lock_manager=lock_manager,
+                    task_manager=task_manager,
+                )
             )
-        )
-        await asyncio.sleep(0.05)
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+            await asyncio.sleep(0.05)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
-        # set was called for seed (existing is None from first get) + lock attempt
-        # The important thing: no scan was run (lock not acquired)
-        # We just verify it didn't crash and set was called with nx
-        calls = redis_client.set.call_args_list
-        assert len(calls) >= 1
+        mock_cycle.assert_awaited()
 
     @pytest.mark.asyncio
     async def test_first_startup_seed(self) -> None:
         """On first startup, if CURATOR_LAST_RUN_KEY doesn't exist, seed it."""
         import asyncio
+        from unittest.mock import patch
 
         from pyclaw.core.curator import CURATOR_LAST_RUN_KEY, create_curator_loop
 
         redis_client = AsyncMock()
-        # First get returns None (no existing last_run)
         redis_client.get = AsyncMock(return_value=None)
         redis_client.set = AsyncMock(return_value=True)
 
@@ -229,65 +224,64 @@ class TestCuratorLoopBehavior:
         settings.interval_seconds = 3600
         settings.archive_after_days = 90
 
-        task = asyncio.create_task(
-            create_curator_loop(
-                settings=settings,
-                memory_base_dir=Path("/nonexistent"),
-                redis_client=redis_client,
-                l1_index=AsyncMock(),
+        with patch("pyclaw.core.curator.run_curator_cycle", new_callable=AsyncMock):
+            task = asyncio.create_task(
+                create_curator_loop(
+                    settings=settings,
+                    memory_base_dir=Path("/nonexistent"),
+                    redis_client=redis_client,
+                    l1_index=AsyncMock(),
+                    lock_manager=AsyncMock(),
+                    task_manager=MagicMock(),
+                )
             )
-        )
-        await asyncio.sleep(0.05)
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+            await asyncio.sleep(0.05)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
-        # Verify redis.set was called with CURATOR_LAST_RUN_KEY for seeding
         first_set_call = redis_client.set.call_args_list[0]
         assert first_set_call[0][0] == CURATOR_LAST_RUN_KEY
 
     @pytest.mark.asyncio
     async def test_interval_not_reached_skip(self) -> None:
-        """When last_run_at is recent, scan doesn't execute."""
+        """When last_run_at is recent, run_curator_cycle is not invoked."""
         import asyncio
+        from unittest.mock import patch
 
         from pyclaw.core.curator import create_curator_loop
 
         redis_client = AsyncMock()
-        # First get for seed check returns existing value
         recent_ts = str(time.time())
         redis_client.get = AsyncMock(return_value=recent_ts)
         redis_client.set = AsyncMock(return_value=True)
 
         settings = AsyncMock()
         settings.check_interval_seconds = 0.01
-        settings.interval_seconds = 3600  # 1 hour
+        settings.interval_seconds = 3600
         settings.archive_after_days = 90
 
-        task = asyncio.create_task(
-            create_curator_loop(
-                settings=settings,
-                memory_base_dir=Path("/nonexistent"),
-                redis_client=redis_client,
-                l1_index=AsyncMock(),
+        with patch("pyclaw.core.curator.run_curator_cycle", new_callable=AsyncMock) as mock_cycle:
+            task = asyncio.create_task(
+                create_curator_loop(
+                    settings=settings,
+                    memory_base_dir=Path("/nonexistent"),
+                    redis_client=redis_client,
+                    l1_index=AsyncMock(),
+                    lock_manager=AsyncMock(),
+                    task_manager=MagicMock(),
+                )
             )
-        )
-        await asyncio.sleep(0.05)
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+            await asyncio.sleep(0.05)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
-        # set should NOT have been called with the lock key (only maybe seed)
-        # Since get returned a value, no seed; since interval not reached, no lock attempt
-        # The only set calls should be none (get returned existing, interval not reached)
-        lock_set_calls = [
-            c for c in redis_client.set.call_args_list if len(c[0]) > 0 and c[0][0] != "pyclaw:curator:last_run_at"
-        ]
-        assert len(lock_set_calls) == 0
+        mock_cycle.assert_not_awaited()
 
 
 # ─── Task 3.7: Parallel Scan Tests ──────────────────────────────────────────

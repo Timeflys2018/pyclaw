@@ -79,6 +79,7 @@ class AgentRunnerDeps:
     skill_provider: SkillProvider | None = field(default=None)
     tool_approval_hook: ToolApprovalHook | None = field(default=None)
     task_manager: TaskManager | None = field(default=None)
+    lock_manager: Any = field(default=None)
 
 
 @dataclass

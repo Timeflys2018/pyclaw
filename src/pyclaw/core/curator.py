@@ -9,18 +9,266 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import apsw
+import redis.exceptions
 
+from pyclaw.storage.lock.redis import LockAcquireError, LockLostError
 from pyclaw.storage.memory.jieba_tokenizer import register_jieba_tokenizer
 
 logger = logging.getLogger(__name__)
 
+CycleError = Literal["lock_lost", "review_skipped_interval", "memory_base_dir_missing"] | None
+
+
+@dataclass
+class CycleReport:
+    acquired: bool
+    scan_report: CuratorReport | None = None
+    review_action_count: int = 0
+    error: CycleError = None
+
+
+CURATOR_CYCLE_LOCK_KEY = "curator:cycle"
+
 CURATOR_LOCK_KEY = "pyclaw:curator:lock"
+"""Deprecated: use CURATOR_CYCLE_LOCK_KEY with RedisLockManager instead."""
 CURATOR_LAST_RUN_KEY = "pyclaw:curator:last_run_at"
 CURATOR_LLM_REVIEW_KEY = "pyclaw:curator:llm_review_last_run_at"
 SCAN_CONCURRENCY = 10
+
+async def _heartbeat(
+    lock_manager: Any,
+    key: str,
+    token: str,
+    lock_lost_event: asyncio.Event,
+    interval_s: float = 10.0,
+    ttl_ms: int = 30_000,
+) -> None:
+    try:
+        while True:
+            await asyncio.sleep(interval_s)
+            try:
+                ok = await lock_manager.renew(key, token, ttl_ms)
+            except (
+                redis.exceptions.ConnectionError,
+                redis.exceptions.TimeoutError,
+                asyncio.TimeoutError,
+                OSError,
+            ) as exc:
+                lock_lost_event.set()
+                logger.error("curator heartbeat renew network error", exc_info=True)
+                raise LockLostError(key) from exc
+            if not ok:
+                lock_lost_event.set()
+                logger.error("curator heartbeat renew CAS failed")
+                raise LockLostError(key)
+    except asyncio.CancelledError:
+        raise
+
+
+async def run_curator_cycle(
+    *,
+    memory_base_dir: Path,
+    settings: Any,
+    redis_client: Any,
+    lock_manager: Any,
+    task_manager: Any,
+    l1_index: Any,
+    workspace_base_dir: Path | None = None,
+    llm_client: Any = None,
+    mode: Literal["scan_and_review", "review_only"] = "scan_and_review",
+    force_review: bool = False,
+    owner_label: str = "timed",
+) -> CycleReport:
+    """Execute one curator cycle holding CURATOR_CYCLE_LOCK_KEY throughout.
+
+    Acquires via RedisLockManager (Lua CAS), spawns a heartbeat task to renew
+    the lock every 10s, runs scan + review in a single critical section, and
+    releases on completion.
+
+    Parameters
+    ----------
+    mode : "scan_and_review" | "review_only"
+        ``scan_and_review`` (default) is used by the timed loop; it runs the
+        scan pass and then, if ``should_run_llm_review`` permits, runs review.
+        ``review_only`` skips scan entirely — used by manual-trigger callers
+        (e.g. ``/curator review-trigger``).
+    force_review : bool
+        When True, bypass the ``should_run_llm_review`` interval gate. Does
+        NOT override ``settings.llm_review_enabled`` (that flag remains a
+        hard gate).
+    owner_label : str
+        Logged with cycle events. ``"timed"`` for the scheduled loop; manual
+        callers pass ``f"manual:{session_key}"``.
+
+    Returns
+    -------
+    CycleReport
+        ``acquired=False`` means another instance holds the lock (normal,
+        caller decides to skip/retry). ``error`` field discriminates
+        ``lock_lost`` (heartbeat failure mid-cycle), ``review_skipped_interval``
+        (gate denied), or ``memory_base_dir_missing``.
+    """
+    try:
+        token = await lock_manager.acquire(CURATOR_CYCLE_LOCK_KEY)
+    except LockAcquireError:
+        logger.debug(
+            "curator cycle lock busy, skipping",
+            extra={"owner_label": owner_label},
+        )
+        return CycleReport(acquired=False)
+
+    logger.info(
+        "curator cycle acquired lock owner_label=%s mode=%s force_review=%s",
+        owner_label, mode, force_review,
+        extra={"owner_label": owner_label},
+    )
+
+    lock_lost_event = asyncio.Event()
+    try:
+        heartbeat_task_id = task_manager.spawn(
+            "curator-heartbeat",
+            _heartbeat(lock_manager, CURATOR_CYCLE_LOCK_KEY, token, lock_lost_event),
+            category="heartbeat",
+        )
+    except BaseException:
+        try:
+            await lock_manager.release(CURATOR_CYCLE_LOCK_KEY, token)
+        except Exception:
+            logger.debug("release after spawn failure errored", exc_info=True)
+        raise
+
+    scan_report: CuratorReport | None = None
+    review_action_count = 0
+    error: CycleError = None
+
+    def _heartbeat_task_done() -> bool:
+        handle = task_manager._tasks.get(heartbeat_task_id)
+        if handle is None:
+            return False
+        try:
+            return bool(handle.asyncio_task.done())
+        except Exception:
+            return False
+
+    def _check_lock_alive() -> None:
+        """Double fail-safe: raise LockLostError if event set OR heartbeat task terminated."""
+        if lock_lost_event.is_set() or _heartbeat_task_done():
+            raise LockLostError(CURATOR_CYCLE_LOCK_KEY)
+
+    try:
+        if mode == "scan_and_review":
+            scan_report = await run_curator_scan(
+                memory_base_dir=memory_base_dir,
+                archive_days=settings.archive_after_days,
+                l1_index=l1_index,
+                workspace_base_dir=workspace_base_dir,
+                settings=settings,
+            )
+            _log_fn = logger.info if (
+                scan_report.total_archived > 0 or scan_report.total_graduated > 0
+            ) else logger.debug
+            _log_fn(
+                "curator scan complete scanned=%d archived=%d graduated=%d errors=%d owner_label=%s",
+                scan_report.total_scanned,
+                scan_report.total_archived,
+                scan_report.total_graduated,
+                len(scan_report.errors),
+                owner_label,
+                extra={"owner_label": owner_label},
+            )
+            for err in scan_report.errors[:5]:
+                logger.warning(
+                    "curator scan error %s owner_label=%s",
+                    err, owner_label,
+                    extra={"owner_label": owner_label},
+                )
+
+        review_completed_full_traversal = False
+        if not getattr(settings, "llm_review_enabled", True):
+            error = "review_skipped_interval"
+        elif llm_client is None or workspace_base_dir is None:
+            pass
+        else:
+            should_run = force_review or await should_run_llm_review(settings, redis_client)
+            if not should_run:
+                error = "review_skipped_interval"
+            else:
+                completed_db_count = 0
+                db_files = sorted(memory_base_dir.glob("*.db"))
+                try:
+                    _check_lock_alive()
+                    for db_file in db_files:
+                        _check_lock_alive()
+                        try:
+                            reviewed = await run_llm_review(
+                                db_file=db_file,
+                                settings=settings,
+                                redis_client=redis_client,
+                                llm_client=llm_client,
+                                l1_index=l1_index,
+                                workspace_base_dir=workspace_base_dir,
+                            )
+                            review_action_count += reviewed
+                            if reviewed > 0:
+                                logger.info(
+                                    "curator llm review actions=%d db=%s owner_label=%s",
+                                    reviewed, db_file.name, owner_label,
+                                    extra={"owner_label": owner_label},
+                                )
+                        except LockLostError:
+                            raise
+                        except Exception:
+                            logger.warning(
+                                "curator llm review failed db=%s owner_label=%s",
+                                db_file.name, owner_label,
+                                exc_info=True,
+                                extra={"owner_label": owner_label},
+                            )
+                        completed_db_count += 1
+                    review_completed_full_traversal = completed_db_count > 0
+                except LockLostError:
+                    error = "lock_lost"
+                    logger.warning(
+                        "curator cycle lock loss owner_label=%s completed_db_count=%d",
+                        owner_label, completed_db_count,
+                        extra={
+                            "owner_label": owner_label,
+                            "completed_db_count": completed_db_count,
+                        },
+                    )
+
+        if error != "lock_lost":
+            if mode == "scan_and_review":
+                await redis_client.set(CURATOR_LAST_RUN_KEY, str(time.time()))
+            if review_completed_full_traversal:
+                await redis_client.set(CURATOR_LLM_REVIEW_KEY, str(int(time.time())))
+
+    finally:
+        try:
+            await task_manager.cancel(heartbeat_task_id)
+        except Exception:
+            logger.debug(
+                "heartbeat cancel errored (benign) owner_label=%s",
+                owner_label, exc_info=True,
+            )
+        try:
+            await lock_manager.release(CURATOR_CYCLE_LOCK_KEY, token)
+        except Exception:
+            logger.debug(
+                "lock release errored (benign) owner_label=%s",
+                owner_label, exc_info=True,
+            )
+
+    return CycleReport(
+        acquired=True,
+        scan_report=scan_report,
+        review_action_count=review_action_count,
+        error=error,
+    )
+
 
 REVIEW_PROMPT_TEMPLATE = """\
 你是一个 SOP 质量审查员。审查以下自动生成的 SOPs，对每条给出决策：
@@ -58,9 +306,15 @@ async def create_curator_loop(
     memory_base_dir: Path,
     redis_client: Any,
     l1_index: Any,
+    *,
+    lock_manager: Any,
+    task_manager: Any,
     workspace_base_dir: Path | None = None,
     llm_client: Any = None,
 ) -> None:
+    logger.info(
+        "curator cycle using RedisLockManager (key: pyclaw:curator:cycle)",
+    )
 
     try:
         archive_days = int(getattr(settings, "archive_after_days", 90))
@@ -92,56 +346,24 @@ async def create_curator_loop(
                 if time.time() - last_run_at < settings.interval_seconds:
                     continue
 
-            acquired = await redis_client.set(
-                CURATOR_LOCK_KEY,
-                "1",
-                ex=settings.interval_seconds,
-                nx=True,
+            report = await run_curator_cycle(
+                memory_base_dir=memory_base_dir,
+                settings=settings,
+                redis_client=redis_client,
+                lock_manager=lock_manager,
+                task_manager=task_manager,
+                l1_index=l1_index,
+                workspace_base_dir=workspace_base_dir,
+                llm_client=llm_client,
+                mode="scan_and_review",
+                force_review=False,
+                owner_label="timed",
             )
-            if not acquired:
+
+            if not report.acquired:
                 continue
-
-            try:
-                report = await run_curator_scan(
-                    memory_base_dir=memory_base_dir,
-                    archive_days=settings.archive_after_days,
-                    l1_index=l1_index,
-                    workspace_base_dir=workspace_base_dir,
-                    settings=settings,
-                )
-                await redis_client.set(CURATOR_LAST_RUN_KEY, str(time.time()))
-                _log_fn = logger.info if (report.total_archived > 0 or report.total_graduated > 0) else logger.debug
-                _log_fn(
-                    "Curator scan complete: scanned=%d archived=%d graduated=%d errors=%d",
-                    report.total_scanned,
-                    report.total_archived,
-                    report.total_graduated,
-                    len(report.errors),
-                )
-                if report.errors:
-                    for err in report.errors[:5]:
-                        logger.warning("Curator scan error: %s", err)
-            finally:
-                try:
-                    await redis_client.delete(CURATOR_LOCK_KEY)
-                except Exception:
-                    logger.debug("Curator lock release failed", exc_info=True)
-
-            if llm_client and workspace_base_dir and await should_run_llm_review(settings, redis_client):
-                for db_file in sorted(memory_base_dir.glob("*.db")):
-                    try:
-                        reviewed = await run_llm_review(
-                            db_file=db_file,
-                            settings=settings,
-                            redis_client=redis_client,
-                            llm_client=llm_client,
-                            l1_index=l1_index,
-                            workspace_base_dir=workspace_base_dir,
-                        )
-                        if reviewed > 0:
-                            logger.info("LLM review: %d actions on %s", reviewed, db_file.name)
-                    except Exception:
-                        logger.warning("LLM review failed for %s", db_file.name, exc_info=True)
+            if report.error == "lock_lost":
+                logger.warning("curator cycle aborted: lock_lost (timed)")
     except asyncio.CancelledError:
         return
 

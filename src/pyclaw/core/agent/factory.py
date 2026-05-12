@@ -24,6 +24,7 @@ async def create_agent_runner_deps(
     task_manager: TaskManager | None = None,
     memory_store: MemoryStore | None = None,
     redis_client=None,
+    lock_manager=None,
 ) -> AgentRunnerDeps:
     llm = LLMClient(
         default_model=settings.agent.default_model,
@@ -132,4 +133,5 @@ async def create_agent_runner_deps(
         workspace_store=workspace_store,
         skill_provider=skill_provider,
         task_manager=task_manager,
+        lock_manager=lock_manager,
     )

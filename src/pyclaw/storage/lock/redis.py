@@ -27,6 +27,12 @@ class LockAcquireError(Exception):
         self.key = key
 
 
+class LockLostError(Exception):
+    def __init__(self, key: str) -> None:
+        super().__init__(f"lock lost: {key!r}")
+        self.key = key
+
+
 class RedisLockManager:
     def __init__(self, client: aioredis.Redis, *, key_prefix: str = "pyclaw:") -> None:
         self._client = client

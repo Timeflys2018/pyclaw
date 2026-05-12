@@ -11,11 +11,14 @@ from pathlib import Path
 import pytest
 
 from pyclaw.core.curator import (
+    CURATOR_CYCLE_LOCK_KEY,
     CURATOR_LAST_RUN_KEY,
     CURATOR_LOCK_KEY,
     create_curator_loop,
 )
 from pyclaw.infra.settings import CuratorSettings
+from pyclaw.infra.task_manager import TaskManager
+from pyclaw.storage.lock.redis import RedisLockManager
 from pyclaw.storage.memory.base import MemoryEntry
 from pyclaw.storage.memory.composite import CompositeMemoryStore
 from pyclaw.storage.memory.redis_index import RedisL1Index
@@ -55,8 +58,11 @@ async def redis_client():
 
     yield client
 
-    # Cleanup curator keys
-    await client.delete(CURATOR_LOCK_KEY, CURATOR_LAST_RUN_KEY)
+    await client.delete(
+        CURATOR_LOCK_KEY,
+        CURATOR_LAST_RUN_KEY,
+        f"pyclaw:{CURATOR_CYCLE_LOCK_KEY}",
+    )
     # Cleanup L1 keys with our test prefix
     keys = await client.keys(f"{KEY_PREFIX}*")
     if keys:
@@ -96,6 +102,18 @@ def short_settings():
     )
 
 
+@pytest.fixture
+def lock_manager(redis_client):
+    return RedisLockManager(redis_client, key_prefix="pyclaw:")
+
+
+@pytest.fixture
+async def task_manager():
+    tm = TaskManager()
+    yield tm
+    await tm.shutdown(grace_s=1.0)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -131,7 +149,7 @@ def _make_procedure_entry(
 
 @pytest.mark.asyncio
 async def test_curator_loop_archives_expired_entries(
-    tmp_path: Path, redis_client, l1_index, short_settings
+    tmp_path: Path, redis_client, l1_index, short_settings, lock_manager, task_manager
 ):
     """Full E2E: start curator loop with short interval → verify archive happens."""
     # 1. Store a procedure created 100 days ago directly in SQLite
@@ -155,6 +173,8 @@ async def test_curator_loop_archives_expired_entries(
             memory_base_dir=tmp_path,
             redis_client=redis_client,
             l1_index=l1_index,
+            lock_manager=lock_manager,
+            task_manager=task_manager,
         )
     )
 
@@ -256,7 +276,7 @@ async def test_forget_via_composite_store(
 
 @pytest.mark.asyncio
 async def test_curator_preserves_fresh_entries(
-    tmp_path: Path, redis_client, l1_index, short_settings
+    tmp_path: Path, redis_client, l1_index, short_settings, lock_manager, task_manager
 ):
     """Fresh procedures (created recently) should NOT be archived."""
     # 1. Store a procedure created just now
@@ -276,6 +296,8 @@ async def test_curator_preserves_fresh_entries(
             memory_base_dir=tmp_path,
             redis_client=redis_client,
             l1_index=l1_index,
+            lock_manager=lock_manager,
+            task_manager=task_manager,
         )
     )
 
@@ -317,37 +339,33 @@ async def test_curator_preserves_fresh_entries(
 
 @pytest.mark.asyncio
 async def test_curator_lock_prevents_concurrent_execution(
-    tmp_path: Path, redis_client, l1_index, short_settings
+    tmp_path: Path, redis_client, l1_index, short_settings, lock_manager, task_manager
 ):
     """Only one curator instance should execute when lock is held."""
-    # 1. Store a stale procedure
     entry = _make_procedure_entry(created_days_ago=100, content="lock test procedure")
     sqlite = SqliteMemoryBackend(base_dir=tmp_path, embedding=None)
     store = CompositeMemoryStore(l1=l1_index, sqlite=sqlite)
 
     await store.store(SESSION_KEY, entry)
 
-    # 2. Force last_run to be old enough to trigger scan
     await redis_client.set(CURATOR_LAST_RUN_KEY, str(time.time() - 100))
 
-    # 3. Acquire the curator lock manually (simulating another instance)
-    acquired = await redis_client.set(CURATOR_LOCK_KEY, "1", ex=10, nx=True)
-    assert acquired, "Should be able to acquire lock initially"
+    holder_token = await lock_manager.acquire(CURATOR_CYCLE_LOCK_KEY, ttl_ms=10_000)
+    assert holder_token, "Should be able to acquire the cycle lock initially"
 
-    # 4. Start curator loop with short interval
     task = asyncio.create_task(
         create_curator_loop(
             settings=short_settings,
             memory_base_dir=tmp_path,
             redis_client=redis_client,
             l1_index=l1_index,
+            lock_manager=lock_manager,
+            task_manager=task_manager,
         )
     )
 
-    # 5. Wait for a check cycle — lock should block execution
     await asyncio.sleep(3)
 
-    # 6. Verify: no archiving occurred (lock blocked it)
     import apsw
 
     from pyclaw.storage.memory.jieba_tokenizer import register_jieba_tokenizer
@@ -361,8 +379,7 @@ async def test_curator_lock_prevents_concurrent_execution(
     )
     assert row[0][0] == "active", "Entry should still be active while lock is held"
 
-    # 7. Release lock and force last_run to be stale again
-    await redis_client.delete(CURATOR_LOCK_KEY)
+    await lock_manager.release(CURATOR_CYCLE_LOCK_KEY, holder_token)
     await redis_client.set(CURATOR_LAST_RUN_KEY, str(time.time() - 100))
 
     # 8. Wait for next check cycle
