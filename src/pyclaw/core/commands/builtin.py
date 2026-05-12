@@ -628,3 +628,17 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             requires_idle=False,
         )
     )
+
+    from pyclaw.core.commands.curator import cmd_curator
+
+    registry.register(
+        CommandSpec(
+            name="/curator",
+            handler=cmd_curator,
+            category="evolution",
+            help_text="管理自演化 SOP（列表/晋升预览/恢复归档/手动 LLM review）",
+            args_hint="list --auto|--stale|--archived | preview | restore <id> [--confirm] | review-status | review-trigger [--confirm]",
+            channels=ALL_CHANNELS,
+            requires_idle=False,
+        )
+    )
