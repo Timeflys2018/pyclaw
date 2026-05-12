@@ -57,6 +57,16 @@ class TestCycleReport:
         assert report.scan_report is None
         assert report.review_action_count == 0
         assert report.error is None
+        assert report.unexpected_exception is False
+
+    def test_unexpected_exception_field(self) -> None:
+        """C1b: observability flag for Decision 3 exception swallowing."""
+        from pyclaw.core.curator import CycleReport
+
+        report = CycleReport(acquired=True, unexpected_exception=True)
+        assert report.unexpected_exception is True
+        assert report.error is None
+        assert report.acquired is True
 
 
 class TestCuratorCycleLockKey:
@@ -138,12 +148,23 @@ def cycle_deps(tmp_path: Path):
 
     task_manager.spawn = MagicMock(side_effect=_spawn_closing)
     task_manager.cancel = AsyncMock(return_value=True)
+
     # Provide a _tasks dict with a mock handle for heartbeat task access
     mock_asyncio_task = MagicMock()
     mock_asyncio_task.done = MagicMock(return_value=False)
     mock_handle = MagicMock()
     mock_handle.asyncio_task = mock_asyncio_task
     task_manager._tasks = {"t000001": mock_handle}
+
+    # get_state derives from asyncio_task.done() so tests that mock done() for
+    # this handle (e.g. "heartbeat stopped after N ticks") keep working.
+    def _get_state(task_id: str) -> str | None:
+        handle = task_manager._tasks.get(task_id)
+        if handle is None:
+            return None
+        return "done" if handle.asyncio_task.done() else "running"
+
+    task_manager.get_state = MagicMock(side_effect=_get_state)
 
     l1_index = AsyncMock()
 
@@ -470,7 +491,7 @@ class TestRunCuratorCycleReviewEdgeCases:
             call_count += 1
             if call_count == 2:
                 raise RuntimeError("internal explosion")
-            return 1
+            return _outcome(1, db_file=kwargs.get("db_file"))
 
         with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock), \
              patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
@@ -828,7 +849,7 @@ class TestRunCuratorCycleOwnerLabel:
              patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock, return_value=False):
             mock_scan.return_value = CuratorReport(total_scanned=0)
 
-            with caplog.at_level(logging.DEBUG, logger="pyclaw.core.curator"):
+            with caplog.at_level(logging.DEBUG, logger="pyclaw.core.curator_cycle"):
                 await run_curator_cycle(
                     memory_base_dir=cycle_deps["memory_base_dir"],
                     settings=cycle_deps["settings"],
@@ -844,6 +865,6 @@ class TestRunCuratorCycleOwnerLabel:
             getattr(record, "owner_label", None) == "manual:web:user_x"
             or "manual:web:user_x" in record.getMessage()
             for record in caplog.records
-            if record.name == "pyclaw.core.curator"
+            if record.name in ("pyclaw.core.curator", "pyclaw.core.curator_cycle")
         )
         assert found, "owner_label not found in any log record"
