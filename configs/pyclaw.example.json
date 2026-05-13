@@ -158,8 +158,6 @@
       "heartbeatInterval": 30,
       "pongTimeout": 10,
       "maxConnectionsPerUser": 3,
-      "bufferTtlSeconds": 300,
-      "bufferMaxEntries": 1000,
       "toolsRequiringApproval": ["bash", "write"],
       "allowedTools": ["read"],
       "corsOrigins": ["http://localhost:5173"],

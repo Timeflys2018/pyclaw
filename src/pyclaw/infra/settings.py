@@ -239,8 +239,6 @@ class WebSettings(BaseSettings):
     heartbeat_interval: int = Field(30, alias="heartbeatInterval")
     pong_timeout: int = Field(10, alias="pongTimeout")
     max_connections_per_user: int = Field(3, alias="maxConnectionsPerUser")
-    buffer_ttl_seconds: int = Field(300, alias="bufferTtlSeconds")
-    buffer_max_entries: int = Field(1000, alias="bufferMaxEntries")
     tools_requiring_approval: list[str] = Field(
         default_factory=lambda: ["bash", "write"], alias="toolsRequiringApproval"
     )
