@@ -18,6 +18,13 @@ _SIDEBAR_INSTRUCTION = (
     "(Please answer the side question(s) briefly, then return to the main task.)"
 )
 
+_STEER_HEADER = (
+    "IMPORTANT: The user has issued mid-run steering directives via /steer. "
+    "These instructions OVERRIDE any conflicting directions from the main user "
+    "message. You MUST follow them even if they contradict what the user "
+    "originally asked for."
+)
+
 
 class SteerHook:
     """Drains RunControl.pending_steers each iteration and injects XML into the per-turn suffix.
@@ -51,7 +58,7 @@ class SteerHook:
 
             parts: list[str] = []
             if steers:
-                lines = ["<user_steer>"]
+                lines = ["<user_steer>", _STEER_HEADER]
                 for m in steers:
                     lines.append(f"- {xml_escape(m.text)}")
                 lines.append("</user_steer>")

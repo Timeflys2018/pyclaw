@@ -53,6 +53,43 @@ async def test_single_steer_renders_user_steer_block():
 
 
 @pytest.mark.asyncio
+async def test_steer_block_contains_forcing_header():
+    """Oracle post-E2E fix: steer block must have IMPORTANT/OVERRIDE/MUST language
+    to make LLM reliably follow steer when it conflicts with user message."""
+    hook = SteerHook()
+    rc = RunControl()
+    await hook.on_run_start("sess_a", rc)
+    rc.pending_steers.append(SteerMessage(kind="steer", text="only return filenames"))
+
+    result = await hook.before_prompt_build(_ctx())
+
+    assert result is not None
+    rendered = result.append
+    assert "IMPORTANT" in rendered
+    assert "OVERRIDE" in rendered
+    assert "MUST" in rendered
+    assert "/steer" in rendered
+
+
+@pytest.mark.asyncio
+async def test_sidebar_block_does_not_have_forcing_header():
+    """/btw is soft-isolation by design; no OVERRIDE language.
+    Only /steer has forcing directive per Oracle D12 recommendation."""
+    hook = SteerHook()
+    rc = RunControl()
+    await hook.on_run_start("sess_a", rc)
+    rc.pending_steers.append(SteerMessage(kind="sidebar", text="what's the time?"))
+
+    result = await hook.before_prompt_build(_ctx())
+
+    assert result is not None
+    rendered = result.append
+    assert "OVERRIDE" not in rendered
+    assert "MUST" not in rendered
+    assert "briefly" in rendered.lower()
+
+
+@pytest.mark.asyncio
 async def test_single_sidebar_renders_with_trailing_instruction():
     hook = SteerHook()
     rc = RunControl()
