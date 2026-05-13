@@ -6,7 +6,7 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pyclaw.channels.feishu.dispatch import dispatch_message
 from pyclaw.channels.base import InboundMessage
@@ -268,6 +268,72 @@ async def handle_stop_feishu(ctx: "FeishuContext", session_id: str, message_id: 
         await ctx.feishu_client.reply_text(message_id, "⚠️ 没有正在运行的任务")
 
 
+async def _handle_injection_feishu(
+    ctx: "FeishuContext",
+    session_id: str,
+    message_id: str,
+    args: str,
+    kind: Literal["steer", "sidebar"],
+    command: str,
+    arg_hint: str,
+    accepted_msg: str,
+) -> None:
+    from pyclaw.core.agent.run_control import SteerMessage
+    from pyclaw.core.commands.steering import enforce_cap
+
+    payload = args.strip()
+    if not payload:
+        await ctx.feishu_client.reply_text(
+            message_id, f"⚠ {command} 需要参数：{command} {arg_hint}"
+        )
+        return
+
+    assert ctx.queue_registry is not None, "queue_registry must be set on FeishuContext"
+    rc = ctx.queue_registry.get_run_control(session_id)
+    if not rc.is_active():
+        await ctx.feishu_client.reply_text(message_id, "⚠ 没有正在运行的 agent")
+        return
+
+    ok, warning = enforce_cap(rc, payload)
+    if not ok:
+        await ctx.feishu_client.reply_text(message_id, warning)
+        return
+
+    rc.pending_steers.append(SteerMessage(kind=kind, text=payload))
+    reply = accepted_msg if not warning else f"{accepted_msg}\n{warning}"
+    await ctx.feishu_client.reply_text(message_id, reply)
+
+
+async def handle_steer_feishu(
+    ctx: "FeishuContext", session_id: str, message_id: str, args: str
+) -> None:
+    await _handle_injection_feishu(
+        ctx,
+        session_id,
+        message_id,
+        args,
+        kind="steer",
+        command="/steer",
+        arg_hint="<message>",
+        accepted_msg="✓ 已接收 steer 指令 (将在下一轮生效)",
+    )
+
+
+async def handle_btw_feishu(
+    ctx: "FeishuContext", session_id: str, message_id: str, args: str
+) -> None:
+    await _handle_injection_feishu(
+        ctx,
+        session_id,
+        message_id,
+        args,
+        kind="sidebar",
+        command="/btw",
+        arg_hint="<question>",
+        accepted_msg="✓ 已接收 side question (将在下一轮简短作答)",
+    )
+
+
 async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
     if not event.event or not event.event.message:
         return
@@ -330,6 +396,28 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
     if text is not None and text.strip().lower() == "/stop":
         await handle_stop_feishu(ctx, session_id, message_id)
         return
+
+    if text is not None:
+        from pyclaw.channels.web.message_classifier import PROTOCOL_OP_PREFIX_REGEX
+
+        stripped_text = text.strip()
+        lowered_text = stripped_text.lower()
+        if lowered_text == "/steer":
+            await handle_steer_feishu(ctx, session_id, message_id, "")
+            return
+        if lowered_text == "/btw":
+            await handle_btw_feishu(ctx, session_id, message_id, "")
+            return
+        m = PROTOCOL_OP_PREFIX_REGEX.match(lowered_text)
+        if m is not None:
+            prefix = m.group(1)
+            args = stripped_text[m.end():].strip()
+            if prefix == "/steer":
+                await handle_steer_feishu(ctx, session_id, message_id, args)
+                return
+            if prefix == "/btw":
+                await handle_btw_feishu(ctx, session_id, message_id, args)
+                return
 
     if text is not None and text.startswith("/"):
         from pyclaw.channels.feishu.command_adapter import FeishuCommandAdapter

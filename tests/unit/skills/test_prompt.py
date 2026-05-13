@@ -7,9 +7,9 @@ import pytest
 
 from pyclaw.infra.settings import SkillSettings
 from pyclaw.skills.models import SkillManifest
+from pyclaw.core.utils.xml import xml_escape
 from pyclaw.skills.prompt import (
     _compact_home_path,
-    _xml_escape,
     build_skills_prompt,
     format_skills_compact,
     format_skills_full,
@@ -93,14 +93,14 @@ class TestCompactFormat:
 
 class TestXmlEscaping:
     def test_xml_escape_all_chars(self) -> None:
-        assert _xml_escape('a & b') == 'a &amp; b'
-        assert _xml_escape('a < b') == 'a &lt; b'
-        assert _xml_escape('a > b') == 'a &gt; b'
-        assert _xml_escape('a "b"') == 'a &quot;b&quot;'
-        assert _xml_escape("a 'b'") == "a &apos;b&apos;"
+        assert xml_escape('a & b') == 'a &amp; b'
+        assert xml_escape('a < b') == 'a &lt; b'
+        assert xml_escape('a > b') == 'a &gt; b'
+        assert xml_escape('a "b"') == 'a &quot;b&quot;'
+        assert xml_escape("a 'b'") == "a &apos;b&apos;"
 
     def test_xml_escape_combined(self) -> None:
-        assert _xml_escape('<a & "b">') == '&lt;a &amp; &quot;b&quot;&gt;'
+        assert xml_escape('<a & "b">') == '&lt;a &amp; &quot;b&quot;&gt;'
 
     def test_xml_escape_in_full_format(self) -> None:
         skill = _skill("R&D <team>", 'Use "special" tools', "/path/with<brackets>/SKILL.md")

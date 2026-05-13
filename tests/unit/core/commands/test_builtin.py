@@ -348,6 +348,7 @@ async def test_register_builtin_includes_all_commands() -> None:
     register_builtin_commands(registry)
     primary = sorted(s.name for s in registry.list_all())
     assert primary == [
+        "/btw",
         "/compact",
         "/context",
         "/curator",
@@ -364,6 +365,7 @@ async def test_register_builtin_includes_all_commands() -> None:
         "/resume",
         "/skills",
         "/status",
+        "/steer",
         "/tasks",
         "/tools",
         "/whoami",
@@ -374,3 +376,7 @@ async def test_register_builtin_includes_all_commands() -> None:
     assert registry.get("/queue").requires_idle is False
     assert registry.get("/context").requires_idle is False
     assert registry.get("/resume").requires_idle is True
+    assert registry.get("/steer").requires_idle is False
+    assert registry.get("/btw").requires_idle is False
+    assert registry.get("/steer").category == "steering"
+    assert registry.get("/btw").category == "steering"

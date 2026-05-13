@@ -665,3 +665,146 @@ System-zone budget: `M,MMM` tokens → `P%` used.
 - [ ] Phase 1/2 E2E 脚本无回归：`python scripts/e2e_phase1_redis.py` 12/12 + `python scripts/e2e_phase2_curator.py` 3/3
 - [ ] `/help` 输出显示 `/tools` `/queue` `/context` 在 inspection 组、`/resume` 在 session 组
 - [ ] 单元 + 集成测试：`pytest tests/ --ignore=tests/e2e -q` 全绿（预期 ~1757 passed）
+
+---
+
+## Phase 3B: Mid-run Steering Commands (`add-agent-steer-injection`)
+
+> **2026-05-14 added.** 2 个新 mid-run injection 命令：`/steer` 和 `/btw`。
+>
+> **测试先决条件**：服务正跑新代码（uvicorn reloader 已吃掉本轮改动 → `lsof -iTCP:8000` 看 worker PID 比启动时新；或 `./scripts/start.sh` 强制重启）。
+>
+> **关键差别 vs 3A**：这些命令只在 **agent 正在流式** 时生效（`rc.is_active()`）。
+> Idle 时发 `/steer xxx` 会立即得到 `⚠ 没有正在运行的 agent`。
+>
+> **观察手段**：飞书 bot 正在流式的同时，**迅速切回 bot 对话窗口** 再发 `/steer` —— 要抢在 LLM 调用结束前。
+>
+> **Grep 验证**：观察服务 log 里 `<user_steer>` / `<user_sidebar>` XML 是否出现在下一轮 system prompt 里。
+
+### 3B.1 — `/steer <msg>` 在 agent 流式中生效
+
+**准备**：先发送一条长消息（触发 agent 流式 30s+），例如：
+```
+写一篇 1000 字的关于 Python async 的技术文章，要有详细的代码例子。
+```
+
+**操作**：**立即**（agent 还在流式时）发送：
+```
+/steer 实际上，只要写 300 字，重点讲 asyncio.gather 就够了
+```
+
+**期望立刻收到**（<1s）：`✓ 已接收 steer 指令 (将在下一轮生效)`
+
+**期望行为**：
+1. Agent **不打断**当前正在流式的那一段
+2. 当前 iteration 结束后，agent 开始下一个 iteration —— 读到 `<user_steer>` 块
+3. Agent 改变策略，开始**简短地**谈 `asyncio.gather`，**不**继续写 1000 字长文
+
+**Log 验证**：
+```
+DEBUG SteerHook.before_prompt_build drained: 1 steer, 0 sidebar
+(或等价 log)
+```
+
+**Grep 验证（可选）**：
+```bash
+# 实时看 system prompt 里有没有 <user_steer>
+tail -f /tmp/pyclaw.log 2>/dev/null | grep "user_steer"
+# 如果无 log file，可以在服务 stdout 抓
+```
+
+- [ ] **PASS 3B.1** — `/steer` 立即接收 + 下一轮生效，agent 确实换方向
+
+### 3B.2 — `/btw <q>` 侧问软隔离
+
+**准备**：同 3B.1，发长 prompt 先触发流式。
+
+**操作**：流式中发送：
+```
+/btw PyClaw 的 Redis key 前缀是什么？
+```
+
+**期望立即收到**：`✓ 已接收 side question (将在下一轮简短作答)`
+
+**期望行为**：
+1. 当前 iteration 不打断
+2. 下一 iteration 里 agent 简短回答 "pyclaw:" 或类似
+3. **关键**：回答后 agent **回到**原来写文章的主任务
+
+**Log 验证**：`<user_sidebar>` 块 + trailing "briefly" instruction。
+
+- [ ] **PASS 3B.2** — agent 简短作答后确实回到主任务
+
+### 3B.3 — Clear-on-stop：/stop 后 buffer 应清空
+
+**场景**：
+1. 开始长 prompt → agent 流式
+2. 发 `/steer foo` → 收到 ACK
+3. 立即发 `/stop` → 收到 `🛑 已停止`
+4. 开始新 prompt `你好` → agent 开始流式
+
+**期望**：新 prompt 的 agent 流式中**不应**看到任何跟 "foo" 相关的内容（`rc.stop()` 已清空 `pending_steers`）。
+
+**Log 验证**：
+```
+INFO agent run aborted
+INFO agent run started (new run)
+(no <user_steer> in next system prompt)
+```
+
+- [ ] **PASS 3B.3** — `/stop` 干净清空 buffer
+
+### 3B.4 — Buffer cap: 5 msgs / 2000 chars
+
+**场景**（需要快速敲字）：流式中连续发 6 个：
+```
+/steer m1
+/steer m2
+/steer m3
+/steer m4
+/steer m5
+/steer m6
+```
+
+**期望**：第 6 个回复里带 `⚠ 已接收，但 buffer 满，丢弃最旧的 steer`（或同义 warning）。
+
+**Log 验证**：`len(rc.pending_steers)` 稳定在 5。
+
+- [ ] **PASS 3B.4** — 第 6 个收到 drop-oldest warning
+
+### 3B.5 — 空参数 `/steer` / `/btw`
+
+**操作**：任何时候发送 `/steer`（无参数）。
+
+**期望**：`⚠ /steer 需要参数：/steer <message>`
+
+同样 `/btw` → `⚠ /btw 需要参数：/btw <question>`
+
+- [ ] **PASS 3B.5** — 空参数给出 usage 提示
+
+### 3B.6 — Web 路径同步验证
+
+在 `http://localhost:8000` 登录 Web 面板：
+
+- [ ] 流式中发送 `/steer <msg>` 得到 ACK + 下一轮生效
+- [ ] `/btw <q>` 同理
+- [ ] `/stop` 清空 buffer 行为一致
+
+**关键差异**：Web 支持**多行** paste（pattern: `/steer\n<text>`）。测试：
+1. 在 Web 输入框里输入 `/steer`，按 Shift+Enter 换行，继续输入 `实际上只要写 300 字`，点发送
+2. 期望 ✅ 同 3B.1（多行 textarea 兼容 — Adversarial Invariant 10 fix）
+
+- [ ] **PASS 3B.6** — Web 多行 paste 被正确分类为 protocol_op
+
+### 3B.7 — Regression on /stop
+
+- [ ] `/stop` 依然只在 active run 时生效，idle 时回复 `⚠️ 没有正在运行的任务`（未回归）
+- [ ] `/stop` 不被误识别为 `/steer` 或 `/btw`（分类器正确）
+
+### 3B.8 — Regression on unit+integration tests
+
+```bash
+.venv/bin/python -m pytest tests/ --ignore=tests/e2e -q
+```
+
+- [ ] 预期 **1880 passed, 30 skipped** — 无回归

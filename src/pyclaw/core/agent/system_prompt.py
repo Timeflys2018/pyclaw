@@ -8,6 +8,7 @@ from typing import Sequence
 logger = logging.getLogger(__name__)
 
 from pyclaw.core.hooks import HookRegistry, PromptBuildContext
+from pyclaw.core.utils.xml import xml_escape
 
 
 @dataclass
@@ -81,9 +82,9 @@ def skills_section(inputs: PromptInputs) -> str | None:
     ]
     for skill in inputs.skills:
         lines.append("  <skill>")
-        lines.append(f"    <name>{_xml_escape(skill.name)}</name>")
-        lines.append(f"    <description>{_xml_escape(skill.description)}</description>")
-        lines.append(f"    <location>{_xml_escape(skill.location)}</location>")
+        lines.append(f"    <name>{xml_escape(skill.name)}</name>")
+        lines.append(f"    <description>{xml_escape(skill.description)}</description>")
+        lines.append(f"    <location>{xml_escape(skill.location)}</location>")
         lines.append("  </skill>")
     lines.append("</available_skills>")
     return "\n".join(lines)
@@ -104,16 +105,6 @@ def runtime_section(inputs: PromptInputs) -> str:
     return (
         "## Runtime\n"
         f"agent={inputs.agent_id} | model={inputs.model} | session={inputs.session_id} | time={now}"
-    )
-
-
-def _xml_escape(value: str) -> str:
-    return (
-        value.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&apos;")
     )
 
 

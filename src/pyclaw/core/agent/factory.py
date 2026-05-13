@@ -123,6 +123,10 @@ async def create_agent_runner_deps(
                 nudge_hook=nudge_hook,
             ))
 
+    from pyclaw.core.agent.hooks.steer_hook import SteerHook
+
+    hooks.register(SteerHook())
+
     return AgentRunnerDeps(
         llm=llm,
         tools=tools,

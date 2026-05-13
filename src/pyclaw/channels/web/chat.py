@@ -18,6 +18,7 @@ from pyclaw.channels.web.protocol import (
     SERVER_ERROR,
     SERVER_TOOL_APPROVE_REQUEST,
 )
+from pyclaw.channels.web.message_classifier import PROTOCOL_OP_PREFIX_REGEX
 from pyclaw.channels.web.websocket import ConnectionState, send_event
 from pyclaw.core.agent.run_control import RunControl
 from pyclaw.core.agent.runner import RunRequest, run_agent_stream, AgentRunnerDeps
@@ -195,16 +196,61 @@ def _get_session_queue(state: ConnectionState) -> SessionQueue:
     return _session_queue
 
 
+async def _dispatch_protocol_op(state: ConnectionState, msg: ChatSendMessage) -> None:
+    from pyclaw.channels.web.protocol_ops import (
+        handle_btw_command,
+        handle_steer_command,
+        handle_stop_command,
+    )
+
+    content = msg.content or ""
+    stripped = content.strip()
+    lowered = stripped.lower()
+
+    if lowered == "/stop":
+        await handle_stop_command(state, msg.conversation_id)
+        return
+
+    if lowered == "/steer":
+        await handle_steer_command(state, msg.conversation_id, "")
+        return
+    if lowered == "/btw":
+        await handle_btw_command(state, msg.conversation_id, "")
+        return
+
+    m = PROTOCOL_OP_PREFIX_REGEX.match(lowered)
+    if m is not None:
+        prefix = m.group(1)
+        args = stripped[m.end():].strip()
+        if prefix == "/steer":
+            await handle_steer_command(state, msg.conversation_id, args)
+            return
+        if prefix == "/btw":
+            await handle_btw_command(state, msg.conversation_id, args)
+            return
+
+    logger.error("unhandled protocol_op: %r", content)
+    await send_event(
+        state,
+        SERVER_CHAT_DONE,
+        msg.conversation_id,
+        {
+            "final_message": "❌ 内部错误：未识别的 protocol_op",
+            "usage": {},
+            "aborted": True,
+        },
+    )
+
+
 async def enqueue_chat(
     state: ConnectionState,
     msg: ChatSendMessage,
     settings: WebSettings,
 ) -> None:
     from pyclaw.channels.web.message_classifier import classify
-    from pyclaw.channels.web.protocol_ops import handle_stop_command
 
     if classify(msg.content or "") == "protocol_op":
-        await handle_stop_command(state, msg.conversation_id)
+        await _dispatch_protocol_op(state, msg)
         return
 
     session_queue = _get_session_queue(state)

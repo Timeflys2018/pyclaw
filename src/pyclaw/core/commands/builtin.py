@@ -705,3 +705,28 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             requires_idle=True,
         )
     )
+
+    from pyclaw.core.commands.steering import cmd_btw, cmd_steer
+
+    registry.register(
+        CommandSpec(
+            name="/steer",
+            handler=cmd_steer,
+            category="steering",
+            help_text="在 agent 运行中注入指令（不打断当前 LLM call，下一轮生效）",
+            args_hint="<message>",
+            channels=ALL_CHANNELS,
+            requires_idle=False,
+        )
+    )
+    registry.register(
+        CommandSpec(
+            name="/btw",
+            handler=cmd_btw,
+            category="steering",
+            help_text="在 agent 运行中插入侧问（软隔离，agent 简短作答后回到主任务）",
+            args_hint="<question>",
+            channels=ALL_CHANNELS,
+            requires_idle=False,
+        )
+    )

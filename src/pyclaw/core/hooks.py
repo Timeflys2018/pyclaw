@@ -78,10 +78,17 @@ class HookRegistry:
         return list(self._hooks)
 
     async def collect_prompt_additions(self, context: PromptBuildContext) -> PromptBuildResult:
+        import logging
+
+        logger = logging.getLogger(__name__)
         prepends: list[str] = []
         appends: list[str] = []
         for hook in self._hooks:
-            result = await hook.before_prompt_build(context)
+            try:
+                result = await hook.before_prompt_build(context)
+            except Exception:
+                logger.exception("before_prompt_build hook failed: %r", hook)
+                continue
             if result is None:
                 continue
             if result.prepend:
@@ -94,8 +101,14 @@ class HookRegistry:
         )
 
     async def notify_response(self, observation: ResponseObservation) -> None:
+        import logging
+
+        logger = logging.getLogger(__name__)
         for hook in self._hooks:
-            await hook.after_response(observation)
+            try:
+                await hook.after_response(observation)
+            except Exception:
+                logger.exception("after_response hook failed: %r", hook)
 
     async def notify_before_compaction(self, context: CompactionContext) -> None:
         import logging

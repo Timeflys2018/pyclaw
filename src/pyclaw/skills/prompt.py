@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+from pyclaw.core.utils.xml import xml_escape
 from pyclaw.infra.settings import SkillSettings
 from pyclaw.skills.models import SkillManifest
 
@@ -30,17 +31,6 @@ _INDEX_PREAMBLE = (
 _OVERHEAD_RESERVE = 150
 
 
-def _xml_escape(value: str) -> str:
-    return (
-        value
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&apos;")
-    )
-
-
 def _compact_home_path(file_path: str) -> str:
     home = str(Path.home())
     prefix = home + "/"
@@ -52,9 +42,9 @@ def _compact_home_path(file_path: str) -> str:
 def _render_skill_full(skill: SkillManifest) -> str:
     lines = [
         "  <skill>",
-        "    <name>" + _xml_escape(skill.name) + "</name>",
-        "    <description>" + _xml_escape(skill.description) + "</description>",
-        "    <location>" + _xml_escape(skill.file_path) + "</location>",
+        "    <name>" + xml_escape(skill.name) + "</name>",
+        "    <description>" + xml_escape(skill.description) + "</description>",
+        "    <location>" + xml_escape(skill.file_path) + "</location>",
         "  </skill>",
     ]
     return "\n".join(lines)
@@ -63,8 +53,8 @@ def _render_skill_full(skill: SkillManifest) -> str:
 def _render_skill_compact(skill: SkillManifest) -> str:
     lines = [
         "  <skill>",
-        "    <name>" + _xml_escape(skill.name) + "</name>",
-        "    <location>" + _xml_escape(skill.file_path) + "</location>",
+        "    <name>" + xml_escape(skill.name) + "</name>",
+        "    <location>" + xml_escape(skill.file_path) + "</location>",
         "  </skill>",
     ]
     return "\n".join(lines)
@@ -83,8 +73,8 @@ def format_skills_full(skills: list[SkillManifest]) -> str:
 def _render_skill_index(skill: SkillManifest) -> str:
     lines = [
         "  <skill>",
-        "    <name>" + _xml_escape(skill.name) + "</name>",
-        "    <description>" + _xml_escape(skill.description) + "</description>",
+        "    <name>" + xml_escape(skill.name) + "</name>",
+        "    <description>" + xml_escape(skill.description) + "</description>",
         "  </skill>",
     ]
     return "\n".join(lines)
