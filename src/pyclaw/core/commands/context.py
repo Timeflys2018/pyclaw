@@ -41,3 +41,4 @@ class CommandContext:
     queue_registry: Any = None
     session_queue: Any = None
     admin_user_ids: list[str] = field(default_factory=list)
+    last_usage: dict[str, int] | None = None

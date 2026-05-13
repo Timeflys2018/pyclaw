@@ -570,3 +570,98 @@ Phase 3 Result:
 > - Phase 1+2 自动化脚本: `scripts/e2e_phase1_redis.py` / `scripts/e2e_phase2_curator.py`
 > - Refactor 决策: `openspec/changes/archive/2026-05-12-refactor-curator-architecture/`
 > - 16 命令架构: `DailyWork/wechat/drafts/E8-command-registry-architecture-v2.md`
+
+---
+
+## Phase 3A: Read-only Agent Commands (`add-readonly-agent-commands`)
+
+4 个新 read-only 命令 (2026-05-13 +)。**测试顺序不敏感；都可以在任何 session 状态下发起**（除 `/resume` 需要 idle）。
+
+### 3A.1 — `/tools` 列出工具
+
+**准备**：任何 session，可以是刚 /new 的空会话。
+**操作**：发送 `/tools`。
+**期望回复**格式：
+```
+🛠️ 当前可用工具 (N)
+
+Safe (read-only):
+- `read` — ...
+
+Side-effect:
+- `bash` — ...
+- `edit` — ...
+- `write` — ...
+- (若有) `memorize` / `forget` / `update_working_memory` / `skill_view`
+```
+**通过标准**：
+- [ ] 至少列出 `bash`、`read`、`write`、`edit` 4 个 builtin tool
+- [ ] `read` 出现在 "Safe" 组
+- [ ] `bash` / `write` / `edit` 出现在 "Side-effect" 组
+- [ ] 组内字母序排列
+
+### 3A.2 — `/queue` 查看队列位置
+
+**场景 a**（idle）：
+- 操作：`/queue`
+- 期望回复：`📮 队列空闲（0 pending, idle）。`
+- [ ] 通过
+
+**场景 b**（busy）：先发送一条会流式生成的消息（如 "写首 1000 字的短文"），在 agent 流式输出过程中立即再发送 `/queue`。
+- 期望：Web — `/queue` 在 agent 完成后执行，回复 `📮 队列：1 个任务运行中` (或 position ≥ 1)
+- 期望：Feishu — 相同语义，依赖 FeishuQueueRegistry.queue_position()
+- [ ] Web 通过
+- [ ] Feishu 通过
+
+### 3A.3 — `/context` token 使用量
+
+**准备**：先发送一条普通消息（如 "你好"），等 agent 回复完成。
+**操作**：发送 `/context`。
+**期望回复**：
+```
+📊 Context usage (last completed run)
+- Input tokens:       `N,NNN`
+- Output tokens:      `N`
+- Cache created:      `N`
+- Cache read:         `N`
+
+System-zone budget: `M,MMM` tokens → `P%` used.
+```
+**通过标准**：
+- [ ] 4 个 token 数字都显示（非 0 的至少 input/output）
+- [ ] 若 `agent.prompt_budget.system_zone_tokens > 0`，显示百分比
+- [ ] 冷启动（`/new` 后立即 `/context`）→ 回复 `📊 尚未有已完成的 run...`
+
+### 3A.4 — `/resume` 切换历史 session
+
+**准备**：至少 2 个历史 session。可以先 `/new` → 发一条消息 → 等回复 → `/new` → 发另一条 → 等回复。
+
+**场景 a**（列表）：
+- 操作：`/resume`（无参数）
+- 期望：`📜 最近 5 个历史 sessions\n[1] ...xxx — ... 分钟前，N 条消息\n[2] ...\n...`
+- [ ] 索引 [1] [2] 都显示
+- [ ] 相对时间合理（"刚刚" / "N 分钟前"）
+
+**场景 b**（按索引切换）：
+- 操作：`/resume 2`
+- 期望：`✓ 已切换到 session ...xxxxxxxx\n\n📜 最近消息：\n  user > ...\n  asst > ...`
+- [ ] 回显最近消息（user/asst 行，各 <= 80 字）
+- [ ] 下一次发送普通消息，应进入切换后的 session（可用 `/status` 验证 session_id）
+
+**场景 c**（后缀切换）：
+- 先记下 session_id 后 8 位（如从 `/resume` 列表抄，或 `/status`）
+- 操作：`/resume <后8位>`
+- 期望：同场景 b（成功切换）
+- [ ] 通过
+
+**场景 d**（错误情况）：
+- `/resume 99` → 期望 `⚠ 索引 99 无效（范围 1-N）`
+- `/resume xxxxxxx`（不存在的后缀）→ 期望 `⚠ 找不到后缀为 xxxxxxx 的 session`
+- `/resume current` → 期望 `✓ 当前已在此 session`
+- [ ] 3 种错误均有对应提示
+
+### 3A.5 — Regression
+
+- [ ] Phase 1/2 E2E 脚本无回归：`python scripts/e2e_phase1_redis.py` 12/12 + `python scripts/e2e_phase2_curator.py` 3/3
+- [ ] `/help` 输出显示 `/tools` `/queue` `/context` 在 inspection 组、`/resume` 在 session 组
+- [ ] 单元 + 集成测试：`pytest tests/ --ignore=tests/e2e -q` 全绿（预期 ~1757 passed）

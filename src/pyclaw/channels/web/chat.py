@@ -46,6 +46,7 @@ class SessionQueue:
         self._abort_events: dict[str, asyncio.Event] = {}
         self._run_controls: dict[str, RunControl] = {}
         self._approval_decisions: dict[str, bool] = {}
+        self._last_usage: dict[str, dict[str, int]] = {}
 
     def set_task_manager(self, tm: TaskManager) -> None:
         self._task_manager = tm
@@ -129,6 +130,12 @@ class SessionQueue:
         key = f"{conversation_id}:{tool_call_id}"
         return self._approval_decisions.get(key)
 
+    def set_last_usage(self, conversation_id: str, usage: dict[str, int]) -> None:
+        self._last_usage[conversation_id] = dict(usage)
+
+    def get_last_usage(self, conversation_id: str) -> dict[str, int] | None:
+        return self._last_usage.get(conversation_id)
+
     async def _consume(self, conversation_id: str) -> None:
         q = self._queues[conversation_id]
         try:
@@ -171,6 +178,7 @@ class SessionQueue:
         self._abort_events.clear()
         self._run_controls.clear()
         self._approval_decisions.clear()
+        self._last_usage.clear()
 
 
 _session_queue = SessionQueue()

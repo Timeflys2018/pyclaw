@@ -656,3 +656,52 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             requires_idle=False,
         )
     )
+
+    from pyclaw.core.commands.readonly import (
+        cmd_context,
+        cmd_queue,
+        cmd_resume,
+        cmd_tools,
+    )
+
+    registry.register(
+        CommandSpec(
+            name="/tools",
+            handler=cmd_tools,
+            category="inspection",
+            help_text="列出当前会话可用的工具（按副作用分组）",
+            channels=ALL_CHANNELS,
+            requires_idle=False,
+        )
+    )
+    registry.register(
+        CommandSpec(
+            name="/queue",
+            handler=cmd_queue,
+            category="inspection",
+            help_text="查看当前会话消息队列的位置 (pending + busy)",
+            channels=ALL_CHANNELS,
+            requires_idle=False,
+        )
+    )
+    registry.register(
+        CommandSpec(
+            name="/context",
+            handler=cmd_context,
+            category="inspection",
+            help_text="查看最近一次 run 的 token 使用量（input/output/cache）",
+            channels=ALL_CHANNELS,
+            requires_idle=False,
+        )
+    )
+    registry.register(
+        CommandSpec(
+            name="/resume",
+            handler=cmd_resume,
+            category="session",
+            help_text="切换到历史 session（支持 索引|后缀|current）",
+            args_hint="[索引|后缀|current]",
+            channels=ALL_CHANNELS,
+            requires_idle=True,
+        )
+    )

@@ -343,12 +343,13 @@ async def test_cmd_help_contains_d14_format() -> None:
 
 
 @pytest.mark.asyncio
-async def test_register_builtin_includes_all_nine() -> None:
+async def test_register_builtin_includes_all_commands() -> None:
     registry = CommandRegistry()
     register_builtin_commands(registry)
     primary = sorted(s.name for s in registry.list_all())
     assert primary == [
         "/compact",
+        "/context",
         "/curator",
         "/export",
         "/extract",
@@ -358,11 +359,18 @@ async def test_register_builtin_includes_all_nine() -> None:
         "/memory",
         "/model",
         "/new",
+        "/queue",
         "/reset",
+        "/resume",
         "/skills",
         "/status",
         "/tasks",
+        "/tools",
         "/whoami",
     ]
     assert registry.get("/learn") is registry.get("/extract")
     assert registry.get("/models") is registry.get("/model")
+    assert registry.get("/tools").requires_idle is False
+    assert registry.get("/queue").requires_idle is False
+    assert registry.get("/context").requires_idle is False
+    assert registry.get("/resume").requires_idle is True

@@ -17,6 +17,7 @@ class FeishuQueueRegistry:
         self._entries: dict[str, tuple[asyncio.Queue[Coroutine[Any, Any, None]], str]] = {}
         self._busy: dict[str, bool] = {}
         self._run_controls: dict[str, RunControl] = {}
+        self._last_usage: dict[str, dict[str, int]] = {}
 
     async def enqueue(
         self,
@@ -40,6 +41,18 @@ class FeishuQueueRegistry:
     def is_idle(self, session_id: str) -> bool:
         return not self._busy.get(session_id, False)
 
+    def queue_position(self, session_id: str) -> int:
+        entry = self._entries.get(session_id)
+        pending = entry[0].qsize() if entry is not None else 0
+        busy = self._busy.get(session_id, False)
+        return pending + (1 if busy else 0)
+
+    def set_last_usage(self, session_id: str, usage: dict[str, int]) -> None:
+        self._last_usage[session_id] = dict(usage)
+
+    def get_last_usage(self, session_id: str) -> dict[str, int] | None:
+        return self._last_usage.get(session_id)
+
     def get_run_control(self, session_id: str) -> RunControl:
         rc = self._run_controls.get(session_id)
         if rc is None:
@@ -51,6 +64,7 @@ class FeishuQueueRegistry:
         entry = self._entries.pop(session_id, None)
         self._busy.pop(session_id, None)
         self._run_controls.pop(session_id, None)
+        self._last_usage.pop(session_id, None)
         if entry is not None:
             _q, task_id = entry
             await self._task_manager.cancel(task_id)
