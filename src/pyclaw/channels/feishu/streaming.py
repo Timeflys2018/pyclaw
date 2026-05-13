@@ -5,6 +5,7 @@ import json
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from lark_oapi.api.cardkit.v1.model import (
@@ -50,6 +51,7 @@ class FeishuStreamingCard:
         lark_client: object,
         reply_to_message_id: str,
         streaming_config: StreamingConfig | None = None,
+        track_bot_message: "Callable[[str], None] | None" = None,
     ) -> None:
         self._client = lark_client  # type: ignore[misc]
         self._reply_to = reply_to_message_id
@@ -57,6 +59,7 @@ class FeishuStreamingCard:
         self._card_id: str | None = None
         self._seq = 1
         self._last_update: float = 0.0
+        self._track_bot_message = track_bot_message
 
     async def start(self) -> None:
         card_body = json.dumps(self._build_initial_card())
@@ -90,6 +93,8 @@ class FeishuStreamingCard:
         reply_resp = await self._client.im.v1.message.areply(reply_req)  # type: ignore[attr-defined]
         if not reply_resp.success():
             logger.warning("Failed to send card reply: %s %s", reply_resp.code, reply_resp.msg)
+        elif self._track_bot_message is not None and reply_resp.data and reply_resp.data.message_id:
+            self._track_bot_message(reply_resp.data.message_id)
 
     async def update(self, text: str) -> None:
         if not self._card_id:

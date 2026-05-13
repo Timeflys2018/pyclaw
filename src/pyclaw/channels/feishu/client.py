@@ -2,20 +2,26 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
+    CreateMessageReactionRequest,
+    CreateMessageReactionRequestBody,
     GetMessageResourceRequest,
     ListMessageRequest,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
+from lark_oapi.api.im.v1.model import Emoji
 from lark_oapi.core.enum import AccessTokenType, HttpMethod
 from lark_oapi.core.model.base_request import BaseRequest
 
 from pyclaw.infra.settings import FeishuSettings
 
 logger = logging.getLogger(__name__)
+
+_BOT_MSG_ID_TTL_SECONDS = 3600
 
 
 class FeishuClient:
@@ -27,6 +33,7 @@ class FeishuClient:
             .app_secret(settings.app_secret)
             .build()
         )
+        self._bot_sent_message_ids: dict[str, float] = {}
 
     async def probe_bot_identity(self) -> str:
         req = (
@@ -60,7 +67,49 @@ class FeishuClient:
         if not resp.success():
             logger.warning("reply_text failed: %s %s", resp.code, resp.msg)
             return None
-        return resp.data.message_id if resp.data else None
+        sent_id = resp.data.message_id if resp.data else None
+        if sent_id:
+            self._track_bot_message(sent_id)
+        return sent_id
+
+    def _track_bot_message(self, message_id: str) -> None:
+        now = time.time()
+        self._bot_sent_message_ids[message_id] = now
+        if len(self._bot_sent_message_ids) > 5000:
+            cutoff = now - _BOT_MSG_ID_TTL_SECONDS
+            self._bot_sent_message_ids = {
+                mid: ts for mid, ts in self._bot_sent_message_ids.items() if ts > cutoff
+            }
+
+    def is_bot_message(self, message_id: str) -> bool:
+        ts = self._bot_sent_message_ids.get(message_id)
+        if ts is None:
+            return False
+        if time.time() - ts > _BOT_MSG_ID_TTL_SECONDS:
+            self._bot_sent_message_ids.pop(message_id, None)
+            return False
+        return True
+
+    async def create_reaction(self, message_id: str, emoji_type: str) -> bool:
+        body = (
+            CreateMessageReactionRequestBody.builder()
+            .reaction_type(Emoji.builder().emoji_type(emoji_type).build())
+            .build()
+        )
+        req = (
+            CreateMessageReactionRequest.builder()
+            .message_id(message_id)
+            .request_body(body)
+            .build()
+        )
+        resp = await self._client.im.v1.message_reaction.acreate(req)
+        if not resp.success():
+            logger.warning(
+                "create_reaction failed msg=%s emoji=%s: %s %s",
+                message_id, emoji_type, resp.code, resp.msg,
+            )
+            return False
+        return True
 
     async def get_recent_messages(self, chat_id: str, limit: int = 20) -> list[dict]:  # type: ignore[type-arg]
         req = (

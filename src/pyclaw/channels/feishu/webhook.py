@@ -9,11 +9,15 @@ from typing import Any
 import lark_oapi as lark
 import lark_oapi.ws.client as _ws_client_module
 from lark_oapi import EventDispatcherHandler
-from lark_oapi.api.im.v1.model import P2ImMessageReceiveV1
+from lark_oapi.api.im.v1.model import P2ImMessageReactionCreatedV1, P2ImMessageReceiveV1
 
 from pyclaw.channels.feishu.client import FeishuClient
 from pyclaw.channels.feishu.dedup import FeishuDedup
-from pyclaw.channels.feishu.handler import FeishuContext, handle_feishu_message
+from pyclaw.channels.feishu.handler import (
+    FeishuContext,
+    handle_feishu_message,
+    handle_feishu_reaction_created,
+)
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.agent.runner import AgentRunnerDeps
 from pyclaw.core.memory_archive import archive_session_background
@@ -166,9 +170,18 @@ class FeishuChannelPlugin:
                 main_loop,
             )
 
+        def _sync_reaction_handler(event: P2ImMessageReactionCreatedV1) -> None:
+            asyncio.run_coroutine_threadsafe(
+                handle_feishu_reaction_created(event, ctx),
+                main_loop,
+            )
+
         dispatcher = (
             EventDispatcherHandler.builder("", "")
             .register_p2_im_message_receive_v1(_sync_handler)
+            .register_p2_im_message_reaction_created_v1(_sync_reaction_handler)
+            .register_p2_im_message_reaction_deleted_v1(lambda _: None)
+            .register_p2_im_message_recalled_v1(lambda _: None)
             .register_p2_im_message_message_read_v1(lambda _: None)
             .register_p2_im_chat_access_event_bot_p2p_chat_entered_v1(lambda _: None)
             .build()

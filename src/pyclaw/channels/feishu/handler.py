@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +24,50 @@ if TYPE_CHECKING:
     from pyclaw.channels.feishu.streaming import FeishuStreamingCard
 
 logger = logging.getLogger(__name__)
+
+_REACTION_DEDUP_WINDOW_S = 5.0
+_reaction_last_handled: dict[str, float] = {}
+
+
+def _reaction_should_handle(message_id: str) -> bool:
+    now = time.time()
+    last = _reaction_last_handled.get(message_id)
+    if last is not None and (now - last) < _REACTION_DEDUP_WINDOW_S:
+        return False
+    _reaction_last_handled[message_id] = now
+    if len(_reaction_last_handled) > 1000:
+        cutoff = now - _REACTION_DEDUP_WINDOW_S * 6
+        _reaction_last_handled.clear()
+        _reaction_last_handled[message_id] = now
+        _ = cutoff
+    return True
+
+
+async def handle_feishu_reaction_created(event: Any, ctx: FeishuContext) -> None:
+    try:
+        if not event.event:
+            return
+        data = event.event
+        message_id: str = getattr(data, "message_id", "") or ""
+        if not message_id:
+            return
+        if not ctx.feishu_client.is_bot_message(message_id):
+            return
+        if not _reaction_should_handle(message_id):
+            return
+        emoji_type: str = ""
+        if getattr(data, "reaction_type", None) is not None:
+            emoji_type = getattr(data.reaction_type, "emoji_type", "") or ""
+        if not emoji_type:
+            return
+        ok = await ctx.feishu_client.create_reaction(message_id, emoji_type)
+        if not ok:
+            logger.info(
+                "reaction mirror skipped (API failed) msg=%s emoji=%s",
+                message_id, emoji_type,
+            )
+    except Exception:
+        logger.exception("handle_feishu_reaction_created failed")
 
 
 @dataclass
@@ -310,7 +355,12 @@ async def _dispatch_and_reply(
         summary=sc.summary,
         throttle_ms=sc.throttle_ms,
     )
-    card = FeishuStreamingCard(ctx.feishu_client._client, message_id, streaming_config)
+    card = FeishuStreamingCard(
+        ctx.feishu_client._client,
+        message_id,
+        streaming_config,
+        track_bot_message=ctx.feishu_client._track_bot_message,
+    )
     try:
         await card.start()
         use_card = True
