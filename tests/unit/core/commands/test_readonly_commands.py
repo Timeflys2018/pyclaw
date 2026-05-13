@@ -168,29 +168,63 @@ async def test_context_shows_all_four_values() -> None:
 
 
 @pytest.mark.asyncio
-async def test_context_shows_percentage_with_budget() -> None:
+async def test_context_shows_budget_reservations_when_configured() -> None:
     settings = Settings()
     settings.agent.prompt_budget.system_zone_tokens = 30000
+    settings.agent.prompt_budget.dynamic_zone_tokens = 5000
     reply = AsyncMock()
     usage = {"input": 12000, "output": 1500, "cache_creation": 0, "cache_read": 0}
     ctx = _ctx(last_usage=usage, reply=reply)
     ctx.settings = settings
     await cmd_context("", ctx)
     text = reply.await_args[0][0]
-    assert "%" in text
+    assert "30,000" in text
+    assert "5,000" in text
+    assert "System zone" in text or "system zone" in text.lower()
+    assert "Dynamic zone" in text or "dynamic zone" in text.lower()
 
 
 @pytest.mark.asyncio
-async def test_context_without_budget_shows_raw_numbers_only() -> None:
+async def test_context_without_budget_omits_budget_section() -> None:
     settings = Settings()
     settings.agent.prompt_budget.system_zone_tokens = 0
+    settings.agent.prompt_budget.dynamic_zone_tokens = 0
     reply = AsyncMock()
     usage = {"input": 12000, "output": 1500, "cache_creation": 0, "cache_read": 0}
     ctx = _ctx(last_usage=usage, reply=reply)
     ctx.settings = settings
     await cmd_context("", ctx)
     text = reply.await_args[0][0]
-    assert "%" not in text or text.count("%") == 0
+    assert "Prompt budget" not in text
+    assert "System zone" not in text
+
+
+@pytest.mark.asyncio
+async def test_context_never_computes_misleading_input_vs_system_zone_percentage() -> None:
+    settings = Settings()
+    settings.agent.prompt_budget.system_zone_tokens = 4096
+    reply = AsyncMock()
+    usage = {"input": 4722, "output": 711, "cache_creation": 0, "cache_read": 0}
+    ctx = _ctx(last_usage=usage, reply=reply)
+    ctx.settings = settings
+    await cmd_context("", ctx)
+    text = reply.await_args[0][0]
+    assert "115" not in text
+    assert "%" not in text
+
+
+@pytest.mark.asyncio
+async def test_context_never_claims_percentage_of_budget_from_input_tokens() -> None:
+    settings = Settings()
+    settings.agent.prompt_budget.system_zone_tokens = 10000
+    reply = AsyncMock()
+    usage = {"input": 7500, "output": 500, "cache_creation": 0, "cache_read": 0}
+    ctx = _ctx(last_usage=usage, reply=reply)
+    ctx.settings = settings
+    await cmd_context("", ctx)
+    text = reply.await_args[0][0]
+    assert "75%" not in text
+    assert "75.0%" not in text
 
 
 def _make_tree(session_id: str, n_messages: int = 3) -> SessionTree:

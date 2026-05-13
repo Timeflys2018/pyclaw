@@ -77,14 +77,21 @@ async def cmd_context(args: str, ctx: CommandContext) -> None:
     lines.append(f"- Cache read:         `{cache_read:,}`")
 
     system_zone = 0
+    dynamic_zone = 0
     try:
         system_zone = int(ctx.settings.agent.prompt_budget.system_zone_tokens)
+        dynamic_zone = int(ctx.settings.agent.prompt_budget.dynamic_zone_tokens)
     except (AttributeError, TypeError, ValueError):
         system_zone = 0
-    if system_zone > 0 and input_tok > 0:
-        pct = round((input_tok / system_zone) * 100, 1)
+        dynamic_zone = 0
+    if system_zone > 0 or dynamic_zone > 0:
         lines.append("")
-        lines.append(f"System-zone budget: `{system_zone:,}` tokens → `{pct}%` used.")
+        lines.append("🎯 **Prompt budget reservations** (frozen+dynamic zones, per turn)")
+        if system_zone > 0:
+            lines.append(f"- System zone (frozen): `{system_zone:,}` tokens (identity/tools/skills/workspace/L1)")
+        if dynamic_zone > 0:
+            lines.append(f"- Dynamic zone: `{dynamic_zone:,}` tokens (memory search injection)")
+        lines.append("ℹ Input tokens above include frozen + per-turn + dynamic + message history; detailed per-zone breakdown is in server logs (`token_usage` line).")
 
     await ctx.reply("\n".join(lines))
 
