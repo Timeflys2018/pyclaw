@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_REACTION_DEDUP_WINDOW_S = 5.0
+_REACTION_DEDUP_WINDOW_S = 10.0
 _reaction_last_handled: dict[str, float] = {}
 
 
@@ -36,11 +36,17 @@ def _reaction_should_handle(message_id: str) -> bool:
         return False
     _reaction_last_handled[message_id] = now
     if len(_reaction_last_handled) > 1000:
-        cutoff = now - _REACTION_DEDUP_WINDOW_S * 6
         _reaction_last_handled.clear()
         _reaction_last_handled[message_id] = now
-        _ = cutoff
     return True
+
+
+def _synthetic_reaction_prompt(emoji_type: str) -> str:
+    return (
+        f"[SYSTEM SIGNAL: 用户刚才用 emoji `{emoji_type}` 对你的上一条回答做出了反应。"
+        "请结合对话上下文解读这个反应（表达情绪/态度/进一步诉求），并用一句话回应。"
+        "不需要重复原回答，聚焦用户可能想表达的意图。]"
+    )
 
 
 async def handle_feishu_reaction_created(event: Any, ctx: FeishuContext) -> None:
@@ -49,23 +55,57 @@ async def handle_feishu_reaction_created(event: Any, ctx: FeishuContext) -> None
             return
         data = event.event
         message_id: str = getattr(data, "message_id", "") or ""
-        if not message_id:
-            return
-        if not ctx.feishu_client.is_bot_message(message_id):
-            return
-        if not _reaction_should_handle(message_id):
-            return
         emoji_type: str = ""
         if getattr(data, "reaction_type", None) is not None:
             emoji_type = getattr(data.reaction_type, "emoji_type", "") or ""
-        if not emoji_type:
+        user_open_id = ""
+        if getattr(data, "user_id", None) is not None:
+            user_open_id = getattr(data.user_id, "open_id", "") or ""
+        logger.info(
+            "reaction received: msg=%s emoji=%s user=%s",
+            message_id, emoji_type, user_open_id,
+        )
+        if not (message_id and emoji_type and user_open_id):
+            logger.info("reaction: skip (missing required fields)")
             return
-        ok = await ctx.feishu_client.create_reaction(message_id, emoji_type)
-        if not ok:
+        if not ctx.feishu_client.is_bot_message(message_id):
+            logger.info("reaction: skip (not a bot message)")
+            return
+        if not _reaction_should_handle(message_id):
+            logger.info("reaction: skip (dedup window)")
+            return
+        session_key = f"feishu:{ctx.settings.app_id}:{user_open_id}"
+        workspace_id = session_key.replace(":", "_")
+        workspace_path = ctx.workspace_base / workspace_id
+        session_id = (
+            await ctx.session_router.store.get_current_session_id(session_key)
+        )
+        if session_id is None:
             logger.info(
-                "reaction mirror skipped (API failed) msg=%s emoji=%s",
-                message_id, emoji_type,
+                "reaction: skip (no active session for session_key=%s)", session_key,
             )
+            return
+        if ctx.queue_registry is None:
+            logger.info("reaction: skip (no queue_registry)")
+            return
+        synthetic_prompt = _synthetic_reaction_prompt(emoji_type)
+        inbound = InboundMessage(
+            session_id=session_id,
+            user_message=synthetic_prompt,
+            workspace_id=workspace_id,
+            channel="feishu",
+            attachments=[],
+        )
+
+        async def _run() -> None:
+            await _dispatch_and_reply(inbound, ctx, message_id, workspace_path, "")
+            await ctx.session_router.update_last_interaction(session_id)
+
+        await ctx.queue_registry.enqueue(session_id, _run(), owner=session_key)
+        logger.info(
+            "reaction: dispatched synthetic prompt for emoji=%s msg=%s",
+            emoji_type, message_id,
+        )
     except Exception:
         logger.exception("handle_feishu_reaction_created failed")
 
