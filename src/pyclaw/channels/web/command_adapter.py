@@ -100,6 +100,14 @@ class WebCommandAdapter:
         user_id = state.user_id or "unknown"
         session_key = f"web:{user_id}"
 
+        last_usage: dict[str, int] | None = None
+        if session_queue is not None:
+            get_usage = getattr(session_queue, "get_last_usage", None)
+            if callable(get_usage):
+                result = get_usage(conversation_id)
+                if isinstance(result, dict):
+                    last_usage = result
+
         cmd_ctx = CommandContext(
             session_id=session_id,
             session_key=session_key,
@@ -122,10 +130,12 @@ class WebCommandAdapter:
                 "channel": "web",
                 "web_state": state,
                 "web_conversation_id": conversation_id,
+                "conversation_id": conversation_id,
                 "tool_workspace_path": workspace_base / f"web_{user_id}",
             },
             session_queue=session_queue,
             admin_user_ids=list(admin_user_ids or []),
+            last_usage=last_usage,
         )
 
         try:

@@ -93,7 +93,7 @@ async def cmd_resume(args: str, ctx: CommandContext) -> None:
     arg = args.strip()
     store = ctx.deps.session_store
 
-    if arg == "current":
+    if arg.lower() == "current":
         suffix = ctx.session_id.rsplit(":", 1)[-1][-8:]
         await ctx.reply(f"✓ 当前已在此 session (`...{suffix}`)。")
         return

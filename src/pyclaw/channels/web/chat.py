@@ -130,8 +130,10 @@ class SessionQueue:
         key = f"{conversation_id}:{tool_call_id}"
         return self._approval_decisions.get(key)
 
-    def set_last_usage(self, conversation_id: str, usage: dict[str, int]) -> None:
-        self._last_usage[conversation_id] = dict(usage)
+    def set_last_usage(self, conversation_id: str, usage: dict[str, int] | None) -> None:
+        if not usage:
+            return
+        self._last_usage[conversation_id] = {str(k): int(v) for k, v in usage.items() if isinstance(v, (int, float))}
 
     def get_last_usage(self, conversation_id: str) -> dict[str, int] | None:
         return self._last_usage.get(conversation_id)
@@ -165,6 +167,7 @@ class SessionQueue:
             self._busy.pop(conversation_id, None)
             self._abort_events.pop(conversation_id, None)
             self._run_controls.pop(conversation_id, None)
+            self._last_usage.pop(conversation_id, None)
 
     def reset(self) -> None:
         if self._task_manager is not None:
@@ -380,6 +383,10 @@ async def _run_chat(
                     }
                 )
             elif isinstance(event, Done):
+                if event.usage:
+                    set_usage = getattr(session_queue, "set_last_usage", None)
+                    if callable(set_usage):
+                        set_usage(msg.conversation_id, event.usage)
                 await send_event(state, SERVER_CHAT_DONE, msg.conversation_id, {
                     "final_message": event.final_message,
                     "usage": event.usage,

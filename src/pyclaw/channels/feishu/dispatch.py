@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from pyclaw.channels.base import InboundMessage
 from pyclaw.core.agent.runner import AgentRunnerDeps, RunRequest, run_agent_stream
-from pyclaw.models import AgentEvent
+from pyclaw.models import AgentEvent, Done
 
 if TYPE_CHECKING:
     from pyclaw.channels.feishu.queue import FeishuQueueRegistry
@@ -35,6 +35,10 @@ async def dispatch_message(
         async for event in run_agent_stream(
             request, deps, tool_workspace_path=workspace_path, control=rc,
         ):
+            if isinstance(event, Done) and queue_registry is not None and event.usage:
+                set_usage = getattr(queue_registry, "set_last_usage", None)
+                if callable(set_usage):
+                    set_usage(inbound.session_id, event.usage)
             yield event
     finally:
         if rc is not None:

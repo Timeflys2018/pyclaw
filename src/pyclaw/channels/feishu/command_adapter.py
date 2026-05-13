@@ -90,6 +90,14 @@ class FeishuCommandAdapter:
             )
             await ctx.queue_registry.enqueue(new_sid, _run_followup())
 
+        last_usage: dict[str, int] | None = None
+        if ctx.queue_registry is not None:
+            get_usage = getattr(ctx.queue_registry, "get_last_usage", None)
+            if callable(get_usage):
+                result = get_usage(session_id)
+                if isinstance(result, dict):
+                    last_usage = result
+
         cmd_ctx = CommandContext(
             session_id=session_id,
             session_key=session_key,
@@ -117,6 +125,7 @@ class FeishuCommandAdapter:
             },
             queue_registry=ctx.queue_registry,
             admin_user_ids=ctx.admin_user_ids,
+            last_usage=last_usage,
         )
 
         try:
