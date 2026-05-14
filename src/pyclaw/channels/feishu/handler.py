@@ -147,14 +147,26 @@ class FeishuContext:
     worker_registry: Any = None
 
 
+def _to_jsonable(obj: Any) -> Any:
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    if isinstance(obj, (bytes, bytearray)):
+        return obj.decode("utf-8", errors="replace")
+    if isinstance(obj, dict):
+        return {str(k): _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_to_jsonable(v) for v in obj]
+    if hasattr(obj, "__dict__"):
+        return {k: _to_jsonable(v) for k, v in obj.__dict__.items() if not k.startswith("_")}
+    return str(obj)
+
+
 def serialize_event(event: Any) -> dict[str, Any]:
     try:
-        if hasattr(event, "model_dump"):
-            payload = event.model_dump()
-        elif hasattr(event, "dict"):
-            payload = event.dict()
-        else:
-            payload = json.loads(json.dumps(event, default=str))
+        payload = _to_jsonable(event)
+        if not isinstance(payload, dict):
+            logger.warning("feishu event serialized to non-dict (%s); wrapping", type(payload).__name__)
+            payload = {}
     except Exception:
         logger.exception("failed to serialize feishu event for forwarding")
         payload = {}

@@ -429,7 +429,10 @@ def create_app() -> FastAPI:
 def main() -> None:
     import uvicorn
 
-    uvicorn.run("pyclaw.app:create_app", factory=True, host="0.0.0.0", port=8000, reload=True)
+    settings = load_settings()
+    port = int(os.environ.get("PORT", settings.server.port))
+    host = os.environ.get("HOST", settings.server.host)
+    uvicorn.run("pyclaw.app:create_app", factory=True, host=host, port=port, reload=True)
 
 
 if __name__ == "__main__":

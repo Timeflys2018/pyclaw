@@ -15,4 +15,8 @@ def _to_namespace(obj: Any) -> Any:
 def reconstruct_feishu_event(payload: dict[str, Any]) -> Any:
     if not isinstance(payload, dict):
         raise ValueError(f"feishu event payload must be a dict, got {type(payload).__name__}")
-    return _to_namespace(payload)
+    try:
+        from lark_oapi.api.im.v1.model.p2_im_message_receive_v1 import P2ImMessageReceiveV1
+        return P2ImMessageReceiveV1(payload)
+    except Exception:
+        return _to_namespace(payload)
