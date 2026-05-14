@@ -147,11 +147,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     if gateway_router is not None:
         try:
             await gateway_router.affinity.force_claim(f"web:{user_id}")
+            logger.info("web affinity claimed: web:%s -> %s", user_id, gateway_router.worker_id)
         except Exception:
             logger.warning(
                 "failed to register web affinity for user=%s; routing will fall back to local",
                 user_id, exc_info=True,
             )
+    else:
+        logger.info("web WS connected but gateway_router is None (affinity disabled)")
 
     task_manager = _get_task_manager(websocket)
     heartbeat_task_id = task_manager.spawn(
