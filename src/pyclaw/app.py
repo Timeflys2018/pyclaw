@@ -59,6 +59,24 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.task_manager = task_manager
 
+    from pyclaw.gateway.worker_registry import WorkerRegistry, generate_worker_id
+
+    worker_id = generate_worker_id()
+    worker_registry = WorkerRegistry(
+        redis_client=redis_client,
+        worker_id=worker_id,
+        heartbeat_interval=settings.affinity.heartbeat_interval,
+    )
+    app.state.worker_registry = worker_registry
+    if worker_registry.available:
+        await worker_registry.register()
+        task_manager.spawn(
+            "worker-heartbeat",
+            _worker_heartbeat_loop(worker_registry),
+            category="heartbeat",
+        )
+        logger.info("Worker registered: %s", worker_id)
+
     workspace_store = create_workspace_store(settings, redis_client=redis_client)
     app.state.workspace_store = workspace_store
 
@@ -133,7 +151,6 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         await feishu_channel.start()
         logger.info("Feishu channel started")
 
-    app.state.worker_registry = None
     if settings.channels.web.enabled:
         from pyclaw.channels.session_router import SessionRouter
         from pyclaw.channels.web.admin import admin_router, set_admin_registry
@@ -141,7 +158,6 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         from pyclaw.channels.web.openai_compat import openai_router, set_openai_deps
         from pyclaw.channels.web.routes import set_web_deps, web_router
         from pyclaw.channels.web.websocket import ws_router
-        from pyclaw.gateway.worker_registry import WorkerRegistry
 
         app.state.web_settings = settings.channels.web
         app.state.settings = settings
@@ -198,13 +214,6 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         set_openai_deps(runner_deps, session_router, workspace_base=workspace_base)
 
-        worker_id = f"worker-{id(app)}"
-        worker_registry = WorkerRegistry(
-            redis_client=redis_client,
-            worker_id=worker_id,
-            heartbeat_interval=settings.channels.web.heartbeat_interval,
-        )
-        app.state.worker_registry = worker_registry
         set_admin_registry(worker_registry)
 
         from pyclaw.channels.web.chat import SessionQueue
@@ -230,13 +239,6 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             agent_settings=settings.agent,
             worker_registry=worker_registry,
             admin_user_ids=settings.admin_user_ids,
-        )
-
-        await worker_registry.register()
-        task_manager.spawn(
-            "worker-heartbeat",
-            _worker_heartbeat_loop(worker_registry),
-            category="heartbeat",
         )
 
         logger.info("Web channel enabled (worker=%s)", worker_id)
@@ -358,6 +360,13 @@ def create_app() -> FastAPI:
             result["feishu"] = "disabled"
         else:
             result["feishu"] = feishu_channel.status
+
+        worker_registry = getattr(request.app.state, "worker_registry", None)
+        if worker_registry is not None:
+            result["worker_id"] = worker_registry.worker_id
+            if worker_registry.available:
+                workers = await worker_registry.active_workers()
+                result["cluster_size"] = sum(1 for w in workers if w["status"] == "healthy")
 
         return result
 

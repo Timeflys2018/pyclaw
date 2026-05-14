@@ -1,9 +1,27 @@
 from __future__ import annotations
 
 import logging
+import os
+import secrets
+import socket
 import time
 
 logger = logging.getLogger(__name__)
+
+
+def generate_worker_id() -> str:
+    """Generate a unique worker identifier for this process.
+
+    Format: ``worker:{hostname}:{pid}:{4hex}``
+
+    - hostname: human-readable host (debugging, ops)
+    - pid: distinguishes multiple workers on the same host
+    - 4hex random suffix: distinguishes a restarted process on the same
+      host with the same PID (rare but possible after a quick restart)
+
+    See design D2.
+    """
+    return f"worker:{socket.gethostname()}:{os.getpid()}:{secrets.token_hex(2)}"
 
 
 class WorkerRegistry:

@@ -290,6 +290,21 @@ class SkillSettings(BaseSettings):
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
 
 
+class AffinitySettings(BaseSettings):
+    enabled: bool = False
+    ttl_seconds: int = 300
+    heartbeat_interval: int = 30
+    stale_threshold: int = 90
+    forward_prefix: str = "pyclaw:forward:"
+    renewal_interval: int = 60
+
+    model_config = SettingsConfigDict(
+        env_prefix="PYCLAW_AFFINITY_",
+        populate_by_name=True,
+        extra="ignore",
+    )
+
+
 class Settings(BaseSettings):
     server: ServerSettings = Field(default_factory=ServerSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
@@ -302,6 +317,7 @@ class Settings(BaseSettings):
     workspaces: WorkspaceSettings = Field(default_factory=WorkspaceSettings)
     skills: SkillSettings = Field(default_factory=SkillSettings)
     evolution: EvolutionSettings = Field(default_factory=EvolutionSettings)
+    affinity: AffinitySettings = Field(default_factory=AffinitySettings)
     admin_user_ids: list[str] = Field(default_factory=list)
     # Graceful shutdown timeout in seconds.  Matches the default K8s
     # SIGTERM→SIGKILL window (30 s) so that TaskManager drain completes

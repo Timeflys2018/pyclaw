@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import re
 import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pyclaw.gateway.worker_registry import WorkerRegistry
+from pyclaw.gateway.worker_registry import WorkerRegistry, generate_worker_id
+
+
+class TestGenerateWorkerId:
+    def test_format_matches_spec(self) -> None:
+        wid = generate_worker_id()
+        assert re.match(r"^worker:[^:]+:\d+:[0-9a-f]{4}$", wid), f"unexpected format: {wid}"
+
+    def test_two_calls_return_unique_ids(self) -> None:
+        a = generate_worker_id()
+        b = generate_worker_id()
+        assert a != b
 
 
 class TestWorkerRegistryWithoutRedis:
