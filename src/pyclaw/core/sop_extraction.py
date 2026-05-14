@@ -851,7 +851,7 @@ def format_extraction_result_zh(result: ExtractionResult) -> str:
     if result.skip_reason == "disabled":
         return "⚠️ 自我进化功能未启用。"
     if result.skip_reason == "no_candidates":
-        return "💡 当前会话还没有可学习的工具调用模式。"
+        return "💡 当前会话还没有 tool 调用。先让 bot 执行一些实际操作（bash/read/write 等），再试 /extract。"
     if result.skip_reason == "below_threshold":
         return "💡 当前会话工作量不足，再多用几次工具后再试。"
     if result.skip_reason == "lock_held":

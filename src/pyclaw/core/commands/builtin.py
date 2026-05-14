@@ -466,7 +466,7 @@ async def cmd_help(args: str, ctx: CommandContext) -> None:
         lines.append(f"📂 {category}")
         for spec in grouped[category]:
             args_part = spec.args_hint
-            args_padded = args_part.ljust(22) if args_part else "".ljust(22)
+            args_padded = (args_part + " ").ljust(23) if args_part else "".ljust(23)
             help_part = spec.help_text
             if spec.aliases:
                 alias_str = ", ".join(spec.aliases)

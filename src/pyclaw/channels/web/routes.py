@@ -207,7 +207,7 @@ async def _do_extract(user_id: str) -> ExtractResponse:
         if session_id is None:
             return ExtractResponse(
                 spawned=False,
-                message="当前会话没有可学习的工具调用模式。",
+                message="当前会话还没有 tool 调用。先让 bot 执行一些实际操作（bash/read/write 等），再试 /extract。",
             )
 
         from pyclaw.core.commands._helpers import run_extract
