@@ -115,7 +115,7 @@ class TestExtractCommandSync:
             )
         assert handled is True
         reply = ctx.feishu_client.reply_text.call_args[0][1]
-        assert "没有可学习" in reply
+        assert "还没有 tool 调用" in reply
 
     @pytest.mark.asyncio
     async def test_extract_below_threshold_replies(self) -> None:

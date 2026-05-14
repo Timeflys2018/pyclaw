@@ -1003,7 +1003,7 @@ class TestFormatExtractionResultZh:
         msg = format_extraction_result_zh(
             ExtractionResult(spawned=False, skip_reason="no_candidates")
         )
-        assert "没有可学习" in msg
+        assert "还没有 tool 调用" in msg
 
     def test_skip_below_threshold(self):
         from pyclaw.core.sop_extraction import (
