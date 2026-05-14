@@ -48,6 +48,8 @@ class WebCommandAdapter:
         session_queue: Any = None,
         agent_settings: Any = None,
         admin_user_ids: list[str] | None = None,
+        worker_registry: Any = None,
+        gateway_router: Any = None,
     ) -> bool:
         if not text or not text.strip().startswith("/"):
             return False
@@ -136,6 +138,8 @@ class WebCommandAdapter:
             session_queue=session_queue,
             admin_user_ids=list(admin_user_ids or []),
             last_usage=last_usage,
+            worker_registry=worker_registry,
+            gateway_router=gateway_router,
         )
 
         try:

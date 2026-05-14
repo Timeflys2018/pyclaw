@@ -32,7 +32,13 @@ async def cmd_reset(args: str, ctx: CommandContext) -> None:
 
 
 async def cmd_status(args: str, ctx: CommandContext) -> None:
-    text = await format_session_status(ctx.session_key, ctx.session_id, ctx.deps)
+    text = await format_session_status(
+        ctx.session_key,
+        ctx.session_id,
+        ctx.deps,
+        worker_registry=ctx.worker_registry,
+        gateway_router=ctx.gateway_router,
+    )
     await ctx.reply(text)
 
 

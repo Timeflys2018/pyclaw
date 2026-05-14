@@ -144,6 +144,7 @@ class FeishuContext:
     admin_user_ids: list[str] = field(default_factory=list)
     gateway_router: Any = None
     task_manager: Any = None
+    worker_registry: Any = None
 
 
 def serialize_event(event: Any) -> dict[str, Any]:

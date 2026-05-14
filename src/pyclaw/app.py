@@ -198,6 +198,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             agent_settings=settings.agent,
             admin_user_ids=settings.admin_user_ids,
             gateway_router=gateway_router,
+            worker_registry=worker_registry,
         )
         app.state.feishu_channel = feishu_channel
         await feishu_channel.start()

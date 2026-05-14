@@ -92,6 +92,9 @@ async def format_session_status(
     session_key: str,
     session_id: str,
     deps: "AgentRunnerDeps",
+    *,
+    worker_registry: Any = None,
+    gateway_router: Any = None,
 ) -> str:
     tree = await deps.session_store.load(session_id)
     msg_count = len(tree.entries) if tree else 0
@@ -108,6 +111,38 @@ async def format_session_status(
         f"模型:       {model}",
         f"创建时间:   {created_at[:19].replace('T', ' ')}",
     ]
+
+    if worker_registry is not None:
+        lines.append("")
+        lines.append("🏗️ **集群**")
+        lines.append(f"Worker:     `{worker_registry.worker_id}`")
+        if gateway_router is not None and worker_registry.available:
+            try:
+                owner = await gateway_router.affinity.resolve(session_key)
+                if owner is None:
+                    affinity_str = "未绑定"
+                elif gateway_router.affinity.is_mine(owner):
+                    affinity_str = "本 worker ✅"
+                else:
+                    affinity_str = f"`{owner}`"
+                lines.append(f"Affinity:   {affinity_str}")
+            except Exception:
+                logger.warning("failed to resolve affinity for /status", exc_info=True)
+        if worker_registry.available:
+            try:
+                workers = await worker_registry.active_workers()
+                healthy = sum(1 for w in workers if w["status"] == "healthy")
+                stale = sum(1 for w in workers if w["status"] == "stale")
+                dead = sum(1 for w in workers if w["status"] == "dead")
+                detail = f"{healthy} 健康"
+                if stale:
+                    detail += f" / {stale} stale"
+                if dead:
+                    detail += f" / {dead} dead"
+                lines.append(f"Cluster:    {detail}")
+            except Exception:
+                logger.warning("failed to read cluster info for /status", exc_info=True)
+
     return "\n".join(lines)
 
 

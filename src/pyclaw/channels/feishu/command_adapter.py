@@ -126,6 +126,8 @@ class FeishuCommandAdapter:
             queue_registry=ctx.queue_registry,
             admin_user_ids=ctx.admin_user_ids,
             last_usage=last_usage,
+            worker_registry=ctx.worker_registry,
+            gateway_router=ctx.gateway_router,
         )
 
         try:

@@ -42,3 +42,5 @@ class CommandContext:
     session_queue: Any = None
     admin_user_ids: list[str] = field(default_factory=list)
     last_usage: dict[str, int] | None = None
+    worker_registry: Any = None
+    gateway_router: Any = None
