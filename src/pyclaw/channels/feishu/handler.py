@@ -29,6 +29,18 @@ _REACTION_DEDUP_WINDOW_S = 10.0
 _reaction_last_handled: dict[str, float] = {}
 
 
+async def _affinity_renew_loop(affinity: Any, session_key: str, interval_s: int) -> None:
+    import asyncio
+    while True:
+        try:
+            await asyncio.sleep(interval_s)
+            await affinity.renew(session_key)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("affinity renew failed for session_key=%s", session_key)
+
+
 def _reaction_should_handle(message_id: str) -> bool:
     now = time.time()
     last = _reaction_last_handled.get(message_id)
@@ -130,6 +142,25 @@ class FeishuContext:
     nudge_hook: Any = None
     agent_settings: Any = None
     admin_user_ids: list[str] = field(default_factory=list)
+    gateway_router: Any = None
+    task_manager: Any = None
+
+
+def serialize_event(event: Any) -> dict[str, Any]:
+    try:
+        if hasattr(event, "model_dump"):
+            payload = event.model_dump()
+        elif hasattr(event, "dict"):
+            payload = event.dict()
+        else:
+            payload = json.loads(json.dumps(event, default=str))
+    except Exception:
+        logger.exception("failed to serialize feishu event for forwarding")
+        payload = {}
+    return {
+        "type": "feishu_event",
+        "payload": payload,
+    }
 
 
 def build_session_key(app_id: str, event: Any, scope: str) -> str:
@@ -344,12 +375,27 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
     chat_id: str = msg.chat_id or ""
     msg_type: str = msg.message_type or ""
 
-    if await ctx.dedup.is_duplicate(message_id):
-        logger.debug("duplicate message %s, skipping", message_id)
-        return
-
     if chat_type == "group" and not is_bot_mentioned(event, ctx.bot_open_id):
         logger.debug("group message without bot mention, skipping")
+        return
+
+    # Gateway affinity check (BEFORE dedup — see design D10).
+    # If the session is owned by another worker, forward via PubSub and
+    # return WITHOUT touching dedup, so the owning worker (which actually
+    # processes the message) is the only one that marks dedup.
+    if ctx.gateway_router is not None:
+        session_key_for_route = build_session_key(
+            ctx.settings.app_id, event, ctx.settings.session_scope
+        )
+        route_result = await ctx.gateway_router.route(
+            session_key_for_route, serialize_event(event)
+        )
+        if route_result == "forwarded":
+            logger.info("forwarded message %s to owning worker", message_id)
+            return
+
+    if await ctx.dedup.is_duplicate(message_id):
+        logger.debug("duplicate message %s, skipping", message_id)
         return
 
     text, image_keys = extract_text_and_images_from_event(event)
@@ -456,8 +502,23 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         await ctx.feishu_client.reply_text(message_id, reply_text)
 
     async def _run() -> None:
-        await _dispatch_and_reply(inbound, ctx, message_id, workspace_path, extra_system)
-        await ctx.session_router.update_last_interaction(session_id)
+        renewal_task_id: str | None = None
+        if ctx.gateway_router is not None and ctx.task_manager is not None:
+            renewal_task_id = ctx.task_manager.spawn(
+                f"affinity-renew:{session_key}",
+                _affinity_renew_loop(
+                    ctx.gateway_router.affinity,
+                    session_key,
+                    ctx.settings_full.affinity.renewal_interval,
+                ),
+                category="heartbeat",
+            )
+        try:
+            await _dispatch_and_reply(inbound, ctx, message_id, workspace_path, extra_system)
+            await ctx.session_router.update_last_interaction(session_id)
+        finally:
+            if renewal_task_id is not None and ctx.task_manager is not None:
+                await ctx.task_manager.cancel(renewal_task_id, timeout=2.0)
 
     assert ctx.queue_registry is not None, "queue_registry must be set on FeishuContext"
     await ctx.queue_registry.enqueue(session_id, _run(), owner=session_key)

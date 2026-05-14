@@ -47,6 +47,7 @@ class FeishuChannelPlugin:
         evolution_settings: Any = None,  # noqa: ANN401
         agent_settings: Any = None,  # noqa: ANN401
         admin_user_ids: list[str] | None = None,
+        gateway_router: Any = None,  # noqa: ANN401
     ) -> None:
         self._settings = settings
         self._settings_full = settings_full
@@ -61,6 +62,7 @@ class FeishuChannelPlugin:
         self._evolution_settings = evolution_settings
         self._agent_settings = agent_settings
         self._admin_user_ids: list[str] = list(admin_user_ids or [])
+        self._gateway_router = gateway_router
         self._ws_client: lark.ws.Client | None = None
         self._main_loop: asyncio.AbstractEventLoop | None = None
         self._ws_loop: asyncio.AbstractEventLoop | None = None
@@ -162,7 +164,10 @@ class FeishuChannelPlugin:
             nudge_hook=nudge_hook,
             agent_settings=self._agent_settings,
             admin_user_ids=self._admin_user_ids,
+            gateway_router=self._gateway_router,
+            task_manager=task_manager,
         )
+        self._ctx = ctx
 
         def _sync_handler(event: P2ImMessageReceiveV1) -> None:
             asyncio.run_coroutine_threadsafe(

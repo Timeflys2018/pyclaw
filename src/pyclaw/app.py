@@ -124,6 +124,57 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     _web_chat._session_queue.reset()
     _ws_registry.clear()
 
+    gateway_router = None
+    forward_consumer = None
+    if settings.affinity.enabled and redis_client is not None:
+        from pyclaw.gateway.affinity import AffinityRegistry
+        from pyclaw.gateway.forwarder import ForwardConsumer, ForwardPublisher
+        from pyclaw.gateway.router import GatewayRouter
+
+        affinity_registry = AffinityRegistry(
+            redis_client,
+            worker_id=worker_id,
+            ttl_seconds=settings.affinity.ttl_seconds,
+        )
+        forward_publisher = ForwardPublisher(
+            redis_client,
+            prefix=settings.affinity.forward_prefix,
+        )
+        gateway_router = GatewayRouter(affinity_registry, forward_publisher)
+
+        async def _dispatch_forwarded_event(payload: dict) -> None:
+            ctx_obj = getattr(getattr(app.state, "feishu_channel", None), "_ctx", None)
+            if ctx_obj is None:
+                logger.warning("forwarded event arrived but feishu ctx not ready; dropping")
+                return
+            event_payload = payload.get("payload") or {}
+            from pyclaw.gateway.event_codec import reconstruct_feishu_event
+            try:
+                event = reconstruct_feishu_event(event_payload)
+            except Exception:
+                logger.exception("failed to reconstruct forwarded event")
+                return
+            from pyclaw.channels.feishu.handler import handle_feishu_message
+            await handle_feishu_message(event, ctx_obj)
+
+        forward_consumer = ForwardConsumer(
+            redis_client,
+            worker_id=worker_id,
+            handler_fn=_dispatch_forwarded_event,
+            prefix=settings.affinity.forward_prefix,
+        )
+        task_manager.spawn(
+            "forward-consumer",
+            forward_consumer.start(),
+            category="consumer",
+        )
+        app.state.gateway_router = gateway_router
+        app.state.forward_consumer = forward_consumer
+        logger.info("Session affinity gateway enabled (worker=%s)", worker_id)
+    else:
+        app.state.gateway_router = None
+        app.state.forward_consumer = None
+
     app.state.feishu_channel = None
     if settings.channels.feishu.enabled:
         from pyclaw.channels.feishu.client import FeishuClient
@@ -146,6 +197,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             evolution_settings=settings.evolution if settings.evolution.enabled else None,
             agent_settings=settings.agent,
             admin_user_ids=settings.admin_user_ids,
+            gateway_router=gateway_router,
         )
         app.state.feishu_channel = feishu_channel
         await feishu_channel.start()
