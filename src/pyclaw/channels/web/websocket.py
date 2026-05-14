@@ -143,6 +143,16 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         "conversations": [],
     })
 
+    gateway_router = getattr(websocket.app.state, "gateway_router", None)
+    if gateway_router is not None:
+        try:
+            await gateway_router.affinity.force_claim(f"web:{user_id}")
+        except Exception:
+            logger.warning(
+                "failed to register web affinity for user=%s; routing will fall back to local",
+                user_id, exc_info=True,
+            )
+
     task_manager = _get_task_manager(websocket)
     heartbeat_task_id = task_manager.spawn(
         f"ws-heartbeat:{state.ws_session_id}",
