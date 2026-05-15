@@ -91,7 +91,7 @@ function ConversationRow({ conv, active, collapsed, onSelect, onRename, onDelete
     return (
       <div
         className={clsx(
-          'flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm',
+          'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm',
           active
             ? 'bg-[var(--c-accent)]/10 text-[var(--c-accent)]'
             : 'text-[var(--c-text)] bg-[var(--c-surface)]',
@@ -113,7 +113,7 @@ function ConversationRow({ conv, active, collapsed, onSelect, onRename, onDelete
           }}
           onBlur={commit}
           maxLength={200}
-          className="flex-1 min-w-0 bg-transparent border-0 focus:outline-none focus:ring-0 text-sm p-0"
+          className="flex-1 min-w-0 bg-transparent border-0 focus:outline-none focus:ring-0 text-sm p-0 leading-tight"
         />
       </div>
     )
@@ -122,7 +122,7 @@ function ConversationRow({ conv, active, collapsed, onSelect, onRename, onDelete
   return (
     <div
       className={clsx(
-        'group relative w-full flex items-center gap-2 rounded-lg text-left transition-colors text-sm cursor-pointer',
+        'group relative w-full rounded-lg transition-colors cursor-pointer',
         active
           ? 'bg-[var(--c-accent)]/10 text-[var(--c-accent)]'
           : 'text-[var(--c-text-secondary)] hover:bg-[var(--c-surface)] hover:text-[var(--c-text)]',
@@ -131,11 +131,11 @@ function ConversationRow({ conv, active, collapsed, onSelect, onRename, onDelete
       <button
         type="button"
         onClick={onSelect}
-        className="flex-1 min-w-0 flex items-center gap-2.5 px-2.5 py-2 cursor-pointer"
+        className="w-full flex items-center gap-2.5 px-2.5 py-2 text-left text-sm cursor-pointer"
       >
         <MessageSquare size={14} className="shrink-0" />
         {!collapsed && (
-          <span className="flex-1 truncate">{conv.title || 'New chat'}</span>
+          <span className="flex-1 min-w-0 truncate pr-12">{conv.title || 'New chat'}</span>
         )}
       </button>
 

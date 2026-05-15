@@ -79,9 +79,11 @@ class FeishuChannelPlugin:
         from pyclaw.storage.session.base import SessionStore as SessionStoreProtocol
         if not isinstance(self._deps.session_store, SessionStoreProtocol):
             raise TypeError(
-                f"session_store {type(self._deps.session_store).__name__!r} does not implement "
-                "the full SessionStore protocol (missing get_current_session_id / "
-                "create_new_session / list_session_history)"
+                f"session_store {type(self._deps.session_store).__name__!r} does not "
+                "implement the full SessionStore protocol "
+                "(load / save_header / append_entry / get_current_session_id / "
+                "set_current_session_id / create_new_session / list_session_history / "
+                "delete_session)"
             )
 
         bot_open_id = await self._feishu_client.probe_bot_identity()
