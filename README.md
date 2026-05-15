@@ -24,15 +24,16 @@
 
 ## 🎯 Positioning
 
-**Team-aware AI agent with institutional memory, embedded in your team's communication platform.**
+**Team-aware AI agent with institutional memory that compounds — embedded in your team's communication platform.**
 
-Built for general-purpose use — daily assistance, complex multi-step tasks, software engineering — with three traits no other open-source agent ships well together:
+Built for general-purpose use — daily assistance, complex multi-step tasks, software engineering — with four traits no other open-source agent ships well together:
 
 - **Persistent multi-layer memory** that survives sessions, accumulates per-team knowledge, and grades from working memory all the way to vector archives
+- **Self-evolution without fine-tuning** — automatically extracts reusable SOPs from successful sessions, ages out stale ones (30d / 90d), agent can actively forget outdated procedures, and high-frequency SOPs graduate into reusable skills. The agent gets *measurably better* at your team's recurring tasks over weeks of use, with no model retraining
 - **Multi-channel as first-class** — Feishu (Lark), Web, and (planned) TUI / VSCode extension share the same agent core; non-terminal-native teammates can interact directly
 - **Hooks system for enterprise workflow integration** — compliance, audit, approval gates, custom tooling all plug in without forking core
 
-The competitive landscape has strong general-purpose coding agents (Claude Code, Cursor, OpenCode, Aider) and strong general-purpose chat agents (ChatGPT, Claude). PyClaw's defensible angle is the intersection: **a coding-capable agent that lives where your team already talks, remembers your codebase conventions and architecture decisions across weeks, and respects your enterprise approval flow.** Daily assistance, research, code, ops — same agent, same memory, same audit trail.
+The competitive landscape has strong general-purpose coding agents (Claude Code, Cursor, OpenCode, Aider) and strong general-purpose chat agents (ChatGPT, Claude). Most of them treat each session as a fresh start. PyClaw's defensible angle is the intersection: **a coding-capable agent that lives where your team already talks, remembers your codebase conventions and architecture decisions across weeks, learns the team's recurring playbooks on its own, and respects your enterprise approval flow.** Daily assistance, research, code, ops — same agent, same memory, same audit trail, and it compounds with use.
 
 > Strategic context: see [planning roadmap](./DailyWork/planning/ROADMAP.md) (private) and the [strategic discussion record](./DailyWork/planning/exploration/2026-05-15-strategic-roadmap-coding-agent.md) (private).
 

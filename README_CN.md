@@ -24,15 +24,16 @@
 
 ## 🎯 定位
 
-**团队级 + 有记忆 + 嵌入企业沟通平台的通用 AI Agent。**
+**团队级 + 有记忆 + 会进化 + 嵌入企业沟通平台的通用 AI Agent。**
 
-不限于编程 — 日常助理、复杂多步任务、软件工程任务都覆盖。三个开源 agent 普遍没做好的能力组合在 PyClaw 是一等公民:
+**记忆不是日志, 是可复利的团队资产**。不限于编程 — 日常助理、复杂多步任务、软件工程任务都覆盖。四个开源 agent 普遍没做好的能力组合在 PyClaw 是一等公民:
 
 - **持久化多层记忆** — 跨 session 不丢, 按团队/项目沉淀知识, 从工作记忆一路升级到向量归档
+- **不靠微调的自我进化** — 自动从成功会话里提取可复用 SOP, 30 天预警 / 90 天归档过期流程, agent 可主动遗忘错误的旧 SOP, 高频 SOP 自动毕业为 skill。**用得越久越懂团队套路**, 不需要 fine-tune 模型
 - **多 channel 一等公民** — 飞书 / Web / (规划中的) TUI / VSCode 插件共用同一个 Agent 内核, 非终端原生用户 (PM、设计师、运营) 能直接对话
 - **Hook 系统** — 合规、审计、审批门、自定义工具链全部以 hook 形式插入, 不需要 fork 核心代码
 
-竞争格局: 通用编程 agent 有 Claude Code / Cursor / OpenCode / Aider, 通用对话 agent 有 ChatGPT / Claude。PyClaw 的独家位置在交集: **能编程、住在你团队沟通平台里、记得你代码风格和架构决策、能按企业审批流程跑的 agent。** 日常助理、调研、写代码、跑运维 — 同一个 agent、同一份记忆、同一条审计链。
+竞争格局: 通用编程 agent 有 Claude Code / Cursor / OpenCode / Aider, 通用对话 agent 有 ChatGPT / Claude。它们大多每个会话都从零开始。PyClaw 的独家位置在交集: **能编程、住在你团队沟通平台里、记得你代码风格和架构决策、自己学会团队反复跑的 playbook、能按企业审批流程跑的 agent。** 日常助理、调研、写代码、跑运维 — 同一个 agent、同一份记忆、同一条审计链, 用得越久越值钱。
 
 > 战略背景见: [规划路线图](./DailyWork/planning/ROADMAP.md) (本地不入版本库) 和 [战略讨论记录](./DailyWork/planning/exploration/2026-05-15-strategic-roadmap-coding-agent.md) (本地不入版本库)。
 
