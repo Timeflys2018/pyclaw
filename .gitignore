@@ -20,6 +20,7 @@ htmlcov/
 openspec/
 DailyWork/
 .sisyphus/
+.superpowers/
 
 configs/pyclaw.json
 pyclaw.json
