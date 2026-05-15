@@ -8,10 +8,10 @@ import pytest
 from pyclaw.skills.models import SkillParseError
 from pyclaw.skills.parser import parse_skill_file
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _write_skill(tmp_path: Path, content: str, *, name: str = "SKILL.md") -> Path:
     """Write a SKILL.md file under tmp_path/<name-dir>/SKILL.md."""
@@ -26,9 +26,12 @@ def _write_skill(tmp_path: Path, content: str, *, name: str = "SKILL.md") -> Pat
 # 1. Valid full SKILL.md
 # ---------------------------------------------------------------------------
 
+
 def test_parse_full_skill(tmp_path: Path) -> None:
     """Full SKILL.md with name, description, bins, install specs, emoji, body."""
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         ---
         name: github
         description: "Use gh for GitHub issues, PR status, CI/logs."
@@ -49,7 +52,8 @@ def test_parse_full_skill(tmp_path: Path) -> None:
 
         # GitHub Skill
         Use the `gh` CLI to interact with GitHub repositories.
-    """)
+    """,
+    )
 
     manifest = parse_skill_file(p)
 
@@ -71,12 +75,16 @@ def test_parse_full_skill(tmp_path: Path) -> None:
 # 2. Minimal SKILL.md (only name, no metadata)
 # ---------------------------------------------------------------------------
 
+
 def test_parse_minimal_skill(tmp_path: Path) -> None:
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         ---
         name: simple
         ---
-    """)
+    """,
+    )
 
     manifest = parse_skill_file(p)
 
@@ -93,14 +101,18 @@ def test_parse_minimal_skill(tmp_path: Path) -> None:
 # 3. Missing name → fallback to directory name
 # ---------------------------------------------------------------------------
 
+
 def test_missing_name_fallback_to_directory(tmp_path: Path) -> None:
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         ---
         description: "A skill without a name."
         ---
 
         Body text here.
-    """)
+    """,
+    )
 
     manifest = parse_skill_file(p)
 
@@ -113,12 +125,16 @@ def test_missing_name_fallback_to_directory(tmp_path: Path) -> None:
 # 4. Missing description → defaults to ""
 # ---------------------------------------------------------------------------
 
+
 def test_missing_description_defaults_empty(tmp_path: Path) -> None:
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         ---
         name: nodesc
         ---
-    """)
+    """,
+    )
 
     manifest = parse_skill_file(p)
 
@@ -129,11 +145,15 @@ def test_missing_description_defaults_empty(tmp_path: Path) -> None:
 # 5. No frontmatter (no ---) → raises SkillParseError
 # ---------------------------------------------------------------------------
 
+
 def test_no_frontmatter_raises_error(tmp_path: Path) -> None:
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         # Just markdown, no frontmatter
         Hello world
-    """)
+    """,
+    )
 
     with pytest.raises(SkillParseError):
         parse_skill_file(p)
@@ -143,12 +163,16 @@ def test_no_frontmatter_raises_error(tmp_path: Path) -> None:
 # 6. Invalid YAML syntax → raises SkillParseError
 # ---------------------------------------------------------------------------
 
+
 def test_invalid_yaml_raises_error(tmp_path: Path) -> None:
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         ---
         name: [broken
         ---
-    """)
+    """,
+    )
 
     with pytest.raises(SkillParseError):
         parse_skill_file(p)
@@ -158,9 +182,12 @@ def test_invalid_yaml_raises_error(tmp_path: Path) -> None:
 # 7. JSON-in-YAML flow mapping format (curly braces)
 # ---------------------------------------------------------------------------
 
+
 def test_json_in_yaml_flow_mapping(tmp_path: Path) -> None:
     """Real skills use JSON-in-YAML flow syntax (curly braces). Verify it works."""
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         ---
         name: github
         description: "Use gh for GitHub issues."
@@ -185,7 +212,8 @@ def test_json_in_yaml_flow_mapping(tmp_path: Path) -> None:
         ---
 
         # GitHub Skill
-    """)
+    """,
+    )
 
     manifest = parse_skill_file(p)
 
@@ -201,8 +229,11 @@ def test_json_in_yaml_flow_mapping(tmp_path: Path) -> None:
 # 8. Invalid install kind → skipped, not error
 # ---------------------------------------------------------------------------
 
+
 def test_invalid_install_kind_skipped(tmp_path: Path) -> None:
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         ---
         name: mixed-install
         metadata:
@@ -217,7 +248,8 @@ def test_invalid_install_kind_skipped(tmp_path: Path) -> None:
               - kind: node
                 package: prettier
         ---
-    """)
+    """,
+    )
 
     manifest = parse_skill_file(p)
 
@@ -233,12 +265,16 @@ def test_invalid_install_kind_skipped(tmp_path: Path) -> None:
 # 9. Empty body → body is ""
 # ---------------------------------------------------------------------------
 
+
 def test_empty_body(tmp_path: Path) -> None:
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         ---
         name: nobody
         ---
-    """)
+    """,
+    )
 
     manifest = parse_skill_file(p)
 
@@ -249,15 +285,19 @@ def test_empty_body(tmp_path: Path) -> None:
 # 10. disable-model-invocation: true is parsed
 # ---------------------------------------------------------------------------
 
+
 def test_disable_model_invocation(tmp_path: Path) -> None:
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         ---
         name: nomodel
         disable-model-invocation: true
         ---
 
         Body.
-    """)
+    """,
+    )
 
     manifest = parse_skill_file(p)
 
@@ -268,8 +308,11 @@ def test_disable_model_invocation(tmp_path: Path) -> None:
 # Bonus: requirements with anyBins → any_bins, env, os
 # ---------------------------------------------------------------------------
 
+
 def test_requirements_any_bins_env_os(tmp_path: Path) -> None:
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         ---
         name: complex-reqs
         metadata:
@@ -286,7 +329,8 @@ def test_requirements_any_bins_env_os(tmp_path: Path) -> None:
               env:
                 - GITHUB_TOKEN
         ---
-    """)
+    """,
+    )
 
     manifest = parse_skill_file(p)
 
@@ -300,15 +344,19 @@ def test_requirements_any_bins_env_os(tmp_path: Path) -> None:
 # Bonus: always flag
 # ---------------------------------------------------------------------------
 
+
 def test_always_flag(tmp_path: Path) -> None:
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         ---
         name: always-on
         metadata:
           openclaw:
             always: true
         ---
-    """)
+    """,
+    )
 
     manifest = parse_skill_file(p)
 
@@ -319,6 +367,7 @@ def test_always_flag(tmp_path: Path) -> None:
 # Bonus: file not found
 # ---------------------------------------------------------------------------
 
+
 def test_file_not_found_raises_error(tmp_path: Path) -> None:
     with pytest.raises(SkillParseError):
         parse_skill_file(tmp_path / "nonexistent" / "SKILL.md")
@@ -328,8 +377,11 @@ def test_file_not_found_raises_error(tmp_path: Path) -> None:
 # Bonus: install specs for all kinds
 # ---------------------------------------------------------------------------
 
+
 def test_install_specs_all_kinds(tmp_path: Path) -> None:
-    p = _write_skill(tmp_path, """\
+    p = _write_skill(
+        tmp_path,
+        """\
         ---
         name: all-kinds
         metadata:
@@ -348,7 +400,8 @@ def test_install_specs_all_kinds(tmp_path: Path) -> None:
                 bins:
                   - tool
         ---
-    """)
+    """,
+    )
 
     manifest = parse_skill_file(p)
 
@@ -369,6 +422,7 @@ def test_install_specs_all_kinds(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Auto-generated skill metadata (SOP graduation fields)
 # ---------------------------------------------------------------------------
+
 
 class TestAutoGeneratedFrontmatter:
     def test_parse_auto_generated_skill(self, tmp_path: Path) -> None:
@@ -402,12 +456,7 @@ class TestAutoGeneratedFrontmatter:
         skill_dir.mkdir()
         skill_file = skill_dir / "SKILL.md"
         skill_file.write_text(
-            "---\n"
-            "name: old-skill\n"
-            "description: A legacy skill\n"
-            "---\n\n"
-            "# old-skill\n"
-            "Some content.\n"
+            "---\nname: old-skill\ndescription: A legacy skill\n---\n\n# old-skill\nSome content.\n"
         )
 
         manifest = parse_skill_file(skill_file)

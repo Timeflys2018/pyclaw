@@ -3,9 +3,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock
-
-import pytest
 
 from pyclaw.core.agent.factory import create_agent_runner_deps
 from pyclaw.core.agent.hooks.memory_nudge_hook import MemoryNudgeHook
@@ -18,19 +15,14 @@ from pyclaw.core.agent.runner import (
 )
 from pyclaw.core.agent.system_prompt import PromptInputs, build_frozen_prefix
 from pyclaw.core.agent.tools.memorize import MemorizeTool
-from pyclaw.core.agent.tools.registry import ToolContext, ToolRegistry
+from pyclaw.core.agent.tools.registry import ToolContext
 from pyclaw.core.agent.tools.update_working_memory import UpdateWorkingMemoryTool
 from pyclaw.core.context_engine import DefaultContextEngine
-from pyclaw.core.hooks import HookRegistry
 from pyclaw.infra.settings import Settings
 from pyclaw.models import (
-    AgentRunConfig,
-    CompactionConfig,
     Done,
     ErrorEvent,
     MessageEntry,
-    TextChunk,
-    ToolCallEnd,
     now_iso,
 )
 from pyclaw.storage.memory.base import ArchiveEntry, MemoryEntry
@@ -120,7 +112,9 @@ class _FakeMemoryStore:
     async def archive_session(self, session_key: str, session_id: str, summary: str) -> None:
         self.archive_calls.append((session_key, session_id, summary))
 
-    async def search_archives(self, session_key: str, query: str, *, limit: int = 5, min_similarity: float = 0.0):
+    async def search_archives(
+        self, session_key: str, query: str, *, limit: int = 5, min_similarity: float = 0.0
+    ):
         return list(self.archive_results[:limit])
 
     async def close(self) -> None:
@@ -146,20 +140,23 @@ def _ctx(session_id: str) -> ToolContext:
     )
 
 
-async def _seed_session_with_tool_call(
-    store: InMemorySessionStore, session_key: str
-) -> str:
+async def _seed_session_with_tool_call(store: InMemorySessionStore, session_key: str) -> str:
     tree = await store.create_new_session(session_key, "default", "default")
     session_id = tree.header.id
     u = MessageEntry(id="u1", parent_id=None, timestamp=now_iso(), role="user", content="do it")
     await store.append_entry(session_id, u, leaf_id=u.id)
     a = MessageEntry(
-        id="a1", parent_id="u1", timestamp=now_iso(),
-        role="assistant", content="calling tool",
+        id="a1",
+        parent_id="u1",
+        timestamp=now_iso(),
+        role="assistant",
+        content="calling tool",
         tool_calls=[{"id": "tc1", "function": {"name": "bash", "arguments": "{}"}}],
     )
     await store.append_entry(session_id, a, leaf_id=a.id)
-    t = MessageEntry(id="t1", parent_id="a1", timestamp=now_iso(), role="tool", content="ok", tool_call_id="tc1")
+    t = MessageEntry(
+        id="t1", parent_id="a1", timestamp=now_iso(), role="tool", content="ok", tool_call_id="tc1"
+    )
     await store.append_entry(session_id, t, leaf_id=t.id)
     return session_id
 
@@ -236,9 +233,7 @@ async def test_memorize_without_tool_call_rejected() -> None:
     await store.append_entry(session_id, u, leaf_id=u.id)
 
     tool = MemorizeTool(memory_store, store)
-    result = await tool.execute(
-        {"content": "something", "layer": "L2"}, _ctx(session_id)
-    )
+    result = await tool.execute({"content": "something", "layer": "L2"}, _ctx(session_id))
     assert result.is_error
     assert memory_store.stored == []
 
@@ -249,9 +244,7 @@ async def test_memorize_with_invalid_layer_rejected() -> None:
     session_id = await _seed_session_with_tool_call(store, "feishu:cli:ou_bad")
 
     tool = MemorizeTool(memory_store, store)
-    result = await tool.execute(
-        {"content": "something", "layer": "L1"}, _ctx(session_id)
-    )
+    result = await tool.execute({"content": "something", "layer": "L1"}, _ctx(session_id))
     assert result.is_error
     assert "L2" in result.content[0].text or "L3" in result.content[0].text
     assert memory_store.stored == []
@@ -272,14 +265,13 @@ async def test_agent_runs_normally_without_memory_store() -> None:
 
 
 async def test_bootstrap_appears_in_frozen_prefix_not_system_addition() -> None:
-    from pyclaw.storage.workspace.file import FileWorkspaceStore
     import tempfile
+
+    from pyclaw.storage.workspace.file import FileWorkspaceStore
 
     with tempfile.TemporaryDirectory() as tmpdir:
         workspace_store = FileWorkspaceStore(base_dir=Path(tmpdir))
-        await workspace_store.put_file(
-            "feishu_cli_ou_test", "AGENTS.md", "bootstrap content here"
-        )
+        await workspace_store.put_file("feishu_cli_ou_test", "AGENTS.md", "bootstrap content here")
         engine = DefaultContextEngine(workspace_store=workspace_store)
 
         session_id = "feishu:cli:ou_test:s:abc"
@@ -372,14 +364,20 @@ async def test_archive_session_fires_on_rotate() -> None:
     prior = None
     for i in range(5):
         u = MessageEntry(
-            id=f"u{i}", parent_id=prior, timestamp=now_iso(),
-            role="user", content=f"user {i}",
+            id=f"u{i}",
+            parent_id=prior,
+            timestamp=now_iso(),
+            role="user",
+            content=f"user {i}",
         )
         await store.append_entry(session_id, u, leaf_id=u.id)
         prior = u.id
         a = MessageEntry(
-            id=f"a{i}", parent_id=prior, timestamp=now_iso(),
-            role="assistant", content=f"answer {i}",
+            id=f"a{i}",
+            parent_id=prior,
+            timestamp=now_iso(),
+            role="assistant",
+            content=f"answer {i}",
         )
         await store.append_entry(session_id, a, leaf_id=a.id)
         prior = a.id
@@ -410,7 +408,9 @@ class _FakeLLM(LLMClient):
 async def test_full_agent_run_with_memory_pipeline_integrates_cleanly(tmp_path) -> None:
     store = InMemorySessionStore()
     memory_store = _FakeMemoryStore()
-    memory_store.l1_by_key["web:alice"] = [_entry("m1", "alice prefers dark mode", layer="L2", type_="user_preference")]
+    memory_store.l1_by_key["web:alice"] = [
+        _entry("m1", "alice prefers dark mode", layer="L2", type_="user_preference")
+    ]
     memory_store.search_results = [
         _entry("s1", "deploy: use github actions", layer="L3", type_="workflow"),
     ]

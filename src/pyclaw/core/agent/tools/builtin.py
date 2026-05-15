@@ -21,11 +21,15 @@ class BashTool:
         "type": "object",
         "properties": {
             "command": {"type": "string", "description": "Shell command to execute"},
-            "timeout_seconds": {"type": "number", "description": "Timeout in seconds (default 120)"},
+            "timeout_seconds": {
+                "type": "number",
+                "description": "Timeout in seconds (default 120)",
+            },
         },
         "required": ["command"],
     }
     side_effect = True
+    tool_class = "write"
 
     async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
         call_id = args.get("_call_id", "")
@@ -109,14 +113,14 @@ async def _abort_proc(proc: asyncio.subprocess.Process, grace_s: float) -> None:
         return
     try:
         await asyncio.wait_for(proc.wait(), timeout=grace_s)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         try:
             proc.kill()
         except ProcessLookupError:
             return
         try:
             await asyncio.wait_for(proc.wait(), timeout=grace_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
 
@@ -133,6 +137,7 @@ class ReadTool:
         "required": ["path"],
     }
     side_effect = False
+    tool_class = "read"
 
     def __init__(self, resolver: WorkspaceResolver) -> None:
         self._resolver = resolver
@@ -157,7 +162,9 @@ class ReadTool:
             return error_result(call_id, f"read: {raw_path} is a directory")
 
         try:
-            content = await asyncio.to_thread(full_path.read_text, encoding="utf-8", errors="replace")
+            content = await asyncio.to_thread(
+                full_path.read_text, encoding="utf-8", errors="replace"
+            )
         except OSError as exc:
             return error_result(call_id, f"read: {exc}")
 
@@ -184,6 +191,7 @@ class WriteTool:
         "required": ["path", "content"],
     }
     side_effect = True
+    tool_class = "write"
 
     def __init__(self, resolver: WorkspaceResolver) -> None:
         self._resolver = resolver
@@ -232,6 +240,7 @@ class EditTool:
         "required": ["path", "old_string", "new_string"],
     }
     side_effect = True
+    tool_class = "write"
 
     def __init__(self, resolver: WorkspaceResolver) -> None:
         self._resolver = resolver
@@ -281,7 +290,9 @@ class EditTool:
         except OSError as exc:
             return error_result(call_id, f"edit: {exc}")
 
-        return text_result(call_id, f"edited {raw_path} ({count if replace_all else 1} replacement(s))")
+        return text_result(
+            call_id, f"edited {raw_path} ({count if replace_all else 1} replacement(s))"
+        )
 
 
 def register_builtin_tools(registry, resolver: WorkspaceResolver) -> None:

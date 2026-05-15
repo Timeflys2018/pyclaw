@@ -117,8 +117,9 @@ async def test_image_only_appends_only_imageblock_no_empty_textblock() -> None:
     content = user_msg["content"]
     assert isinstance(content, list)
     assert any(block.get("type") == "image_url" for block in content)
-    assert all(block.get("type") != "text" for block in content), \
+    assert all(block.get("type") != "text" for block in content), (
         f"empty user_message MUST NOT produce a TextBlock; got {content}"
+    )
 
 
 @pytest.mark.asyncio
@@ -193,12 +194,10 @@ class TestRunnerVisionPreflight:
 
         tree = await deps.session_store.load("vision-rej-1")
         if tree is not None:
-            user_entries = [
-                e for e in tree.entries.values()
-                if getattr(e, "role", None) == "user"
-            ]
-            assert not user_entries, \
+            user_entries = [e for e in tree.entries.values() if getattr(e, "role", None) == "user"]
+            assert not user_entries, (
                 f"PRIMARY check failed-path MUST NOT persist user_entry; got {user_entries}"
+            )
 
     @pytest.mark.asyncio
     async def test_primary_allows_image_with_vision_model_normal_flow(self) -> None:

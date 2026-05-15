@@ -1,27 +1,25 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import tempfile
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock, patch
 
-import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+from pyclaw.channels.session_router import SessionRouter
 from pyclaw.channels.web.auth import create_jwt
 from pyclaw.channels.web.openai_compat import (
     _format_openai_usage,
     openai_router,
     set_openai_deps,
 )
-from pyclaw.channels.session_router import SessionRouter
 from pyclaw.infra.settings import WebSettings
-from pyclaw.models.agent import Done, ErrorEvent, TextChunk, ToolCallStart, ToolCallEnd
+from pyclaw.models.agent import Done, TextChunk, ToolCallStart
 from pyclaw.storage.session.base import InMemorySessionStore
-
 
 JWT_SECRET = "test-secret"
 
@@ -68,7 +66,9 @@ class TestChatCompletionsNonStreaming:
         async def _fake_stream(*args: Any, **kwargs: Any) -> AsyncIterator[Any]:
             yield TextChunk(text="Hello ")
             yield TextChunk(text="world!")
-            yield Done(final_message="Hello world!", usage={"prompt_tokens": 10, "completion_tokens": 5})
+            yield Done(
+                final_message="Hello world!", usage={"prompt_tokens": 10, "completion_tokens": 5}
+            )
 
         mock_stream.side_effect = _fake_stream
 
@@ -160,9 +160,7 @@ class TestChatCompletionsStreaming:
         app, _ = _make_app()
 
         async def _fake_stream(*args: Any, **kwargs: Any) -> AsyncIterator[Any]:
-            yield ToolCallStart(
-                tool_call_id="tc1", name="bash", arguments={"cmd": "ls"}
-            )
+            yield ToolCallStart(tool_call_id="tc1", name="bash", arguments={"cmd": "ls"})
             yield TextChunk(text="result")
             yield Done(final_message="result", usage={})
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -239,16 +238,20 @@ def _make_tree(session_id: str, n_messages: int = 3) -> SessionTree:
     tree = SessionTree(header=header)
     for i in range(n_messages):
         role = "user" if i % 2 == 0 else "assistant"
-        tree.append(MessageEntry(
-            id=f"e{i:04x}",
-            parent_id=None if i == 0 else f"e{i-1:04x}",
-            role=role,
-            content=f"msg {i}: example content",
-        ))
+        tree.append(
+            MessageEntry(
+                id=f"e{i:04x}",
+                parent_id=None if i == 0 else f"e{i - 1:04x}",
+                role=role,
+                content=f"msg {i}: example content",
+            )
+        )
     return tree
 
 
-def _hist(session_id: str, created_at: str | None = None, msg_count: int = 3) -> SessionHistorySummary:
+def _hist(
+    session_id: str, created_at: str | None = None, msg_count: int = 3
+) -> SessionHistorySummary:
     return SessionHistorySummary(
         session_id=session_id,
         created_at=created_at or now_iso(),
@@ -391,13 +394,15 @@ async def test_resume_target_with_only_tool_entries_still_switches() -> None:
         _hist(sid_target),
     ]
     tree = _make_tree(sid_target, n_messages=0)
-    tree.append(MessageEntry(
-        id="t001",
-        parent_id=None,
-        role="tool",
-        content="tool output",
-        tool_call_id="x",
-    ))
+    tree.append(
+        MessageEntry(
+            id="t001",
+            parent_id=None,
+            role="tool",
+            content="tool output",
+            tool_call_id="x",
+        )
+    )
     store = MagicMock()
     store.list_session_history = AsyncMock(return_value=history)
     store.set_current_session_id = AsyncMock()
@@ -416,4 +421,6 @@ async def test_resume_empty_history_with_no_args_is_informational() -> None:
     await cmd_resume("", _ctx(session_store=store, reply=reply))
     store.set_current_session_id.assert_not_called()
     text = reply.await_args[0][0]
-    assert "无" in text or "无历史" in text or "no sessions" in text.lower() or "empty" in text.lower()
+    assert (
+        "无" in text or "无历史" in text or "no sessions" in text.lower() or "empty" in text.lower()
+    )

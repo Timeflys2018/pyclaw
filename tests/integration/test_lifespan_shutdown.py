@@ -13,7 +13,6 @@ from pyclaw.core.agent.runner import AgentRunnerDeps
 from pyclaw.infra.task_manager import TaskManager
 from pyclaw.storage.session.base import InMemorySessionStore
 
-
 # --- 11.2 ---
 
 
@@ -123,12 +122,8 @@ async def test_shutdown_phase_ordering(caplog: pytest.LogCaptureFixture) -> None
         logger.info("redis connection closed")
 
     messages = [r.message for r in caplog.records if r.name == "pyclaw.app"]
-    drain_idx = next(
-        (i for i, m in enumerate(messages) if "shutdown drain complete" in m), None
-    )
-    redis_idx = next(
-        (i for i, m in enumerate(messages) if "redis connection closed" in m), None
-    )
+    drain_idx = next((i for i, m in enumerate(messages) if "shutdown drain complete" in m), None)
+    redis_idx = next((i for i, m in enumerate(messages) if "redis connection closed" in m), None)
 
     assert drain_idx is not None, "drain report log not found"
     assert redis_idx is not None, "redis close log not found"

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
@@ -51,7 +50,7 @@ class FeishuStreamingCard:
         lark_client: object,
         reply_to_message_id: str,
         streaming_config: StreamingConfig | None = None,
-        track_bot_message: "Callable[[str], None] | None" = None,
+        track_bot_message: Callable[[str], None] | None = None,
     ) -> None:
         self._client = lark_client  # type: ignore[misc]
         self._reply_to = reply_to_message_id
@@ -63,12 +62,7 @@ class FeishuStreamingCard:
 
     async def start(self) -> None:
         card_body = json.dumps(self._build_initial_card())
-        body = (
-            CreateCardRequestBody.builder()
-            .type("card_json")
-            .data(card_body)
-            .build()
-        )
+        body = CreateCardRequestBody.builder().type("card_json").data(card_body).build()
         req = CreateCardRequest.builder().request_body(body).build()
         resp = await self._client.cardkit.v1.card.acreate(req)  # type: ignore[attr-defined]
         if not resp.success():
@@ -118,12 +112,7 @@ class FeishuStreamingCard:
         await self._close_streaming()
 
     async def _send_content_update(self, text: str) -> None:
-        body = (
-            ContentCardElementRequestBody.builder()
-            .content(text)
-            .sequence(self._seq)
-            .build()
-        )
+        body = ContentCardElementRequestBody.builder().content(text).sequence(self._seq).build()
         self._seq += 1
         req = (
             ContentCardElementRequest.builder()
@@ -138,12 +127,7 @@ class FeishuStreamingCard:
 
     async def _close_streaming(self) -> None:
         settings_data = json.dumps({"config": {"streaming_mode": False}})
-        body = (
-            SettingsCardRequestBody.builder()
-            .settings(settings_data)
-            .sequence(self._seq)
-            .build()
-        )
+        body = SettingsCardRequestBody.builder().settings(settings_data).sequence(self._seq).build()
         self._seq += 1
         req = (
             SettingsCardRequest.builder()

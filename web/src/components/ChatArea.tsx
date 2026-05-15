@@ -7,7 +7,18 @@ import {
   useState,
 } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Send, Square, Clock, ArrowDown, Paperclip, X } from 'lucide-react'
+import {
+  Send,
+  Square,
+  Clock,
+  ArrowDown,
+  Paperclip,
+  X,
+  Eye,
+  Shield,
+  Zap,
+  ChevronDown,
+} from 'lucide-react'
 import type { ImageBlock, Message } from '../types'
 import { isProtocolOp } from '../protocol'
 import MessageBubble from './MessageBubble'
@@ -19,6 +30,127 @@ import {
   isImageError,
   MAX_IMAGES_PER_MESSAGE,
 } from '../lib/image'
+import { usePermissionStore, type PermissionTier } from '../stores'
+
+const TIER_OPTIONS: ReadonlyArray<{
+  tier: PermissionTier
+  label: string
+  Icon: typeof Eye
+  triggerClass: string
+}> = [
+  {
+    tier: 'read-only',
+    label: 'read-only',
+    Icon: Eye,
+    triggerClass: 'text-gray-600 dark:text-gray-300',
+  },
+  {
+    tier: 'approval',
+    label: 'approval',
+    Icon: Shield,
+    triggerClass: 'text-blue-600 dark:text-blue-400',
+  },
+  {
+    tier: 'yolo',
+    label: 'yolo',
+    Icon: Zap,
+    triggerClass: 'text-orange-600 dark:text-orange-400',
+  },
+]
+
+function PermissionTierDropdown() {
+  const tier = usePermissionStore((s) => s.tier)
+  const setTier = usePermissionStore((s) => s.setTier)
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onDocumentClick(event: MouseEvent) {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (wrapperRef.current && !wrapperRef.current.contains(target)) {
+        setOpen(false)
+      }
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocumentClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDocumentClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const current = TIER_OPTIONS.find((o) => o.tier === tier) ?? TIER_OPTIONS[1]
+  const CurrentIcon = current.Icon
+
+  return (
+    <div
+      ref={wrapperRef}
+      className="relative"
+      data-testid="permission-dropdown"
+      data-tier={tier}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-md border border-[var(--c-border)]
+                    bg-[var(--c-surface)] hover:bg-[var(--c-bg)] text-[11px] cursor-pointer
+                    transition-colors ${current.triggerClass}`}
+        title={`Permission tier: ${current.label}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <CurrentIcon size={12} />
+        <span className="font-medium">{current.label}</span>
+        <ChevronDown size={11} className="opacity-60" />
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Permission tier"
+          className="absolute bottom-full left-0 mb-1 min-w-[160px] z-20
+                     bg-[var(--c-surface)] border border-[var(--c-border)] rounded-md
+                     shadow-lg overflow-hidden"
+        >
+          {TIER_OPTIONS.map(({ tier: t, label, Icon, triggerClass }) => {
+            const selected = t === tier
+            return (
+              <li
+                key={t}
+                role="option"
+                aria-selected={selected}
+                data-testid={`tier-option-${t}`}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTier(t)
+                    setOpen(false)
+                  }}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-[12px]
+                              hover:bg-[var(--c-bg)] cursor-pointer
+                              ${selected ? 'bg-[var(--c-bg)] font-medium' : ''}
+                              ${triggerClass}`}
+                >
+                  <Icon size={13} />
+                  <span>{label}</span>
+                  {selected && (
+                    <span className="ml-auto text-[10px] opacity-60">●</span>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
 
 interface Props {
   messages: Message[]
@@ -406,18 +538,7 @@ export default function ChatArea({
             />
 
             <div className="flex items-center justify-between px-2 pb-2">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={attachments.length >= MAX_IMAGES_PER_MESSAGE}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[var(--c-text-secondary)]
-                           hover:text-[var(--c-text)] hover:bg-[var(--c-bg)]
-                           disabled:opacity-30 disabled:pointer-events-none
-                           transition-colors cursor-pointer"
-                title="Attach image"
-              >
-                <Paperclip size={14} />
-              </button>
+              <PermissionTierDropdown />
 
               <input
                 ref={fileInputRef}
@@ -428,20 +549,35 @@ export default function ChatArea({
                 className="hidden"
               />
 
-              <button
-                type="submit"
-                disabled={
-                  (!input.trim() && attachments.length === 0) ||
-                  (isStreaming && !isProtocolOp(input))
-                }
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--c-accent)] text-white text-sm font-medium
-                           hover:brightness-110 active:scale-[0.98] shadow-sm hover:shadow-md
-                           disabled:opacity-40 disabled:pointer-events-none
-                           transition-all cursor-pointer"
-              >
-                <Send size={14} />
-                <span>Send</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={attachments.length >= MAX_IMAGES_PER_MESSAGE}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[var(--c-text-secondary)]
+                             hover:text-[var(--c-text)] hover:bg-[var(--c-bg)]
+                             disabled:opacity-30 disabled:pointer-events-none
+                             transition-colors cursor-pointer"
+                  title="Attach image"
+                >
+                  <Paperclip size={14} />
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={
+                    (!input.trim() && attachments.length === 0) ||
+                    (isStreaming && !isProtocolOp(input))
+                  }
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--c-accent)] text-white text-sm font-medium
+                             hover:brightness-110 active:scale-[0.98] shadow-sm hover:shadow-md
+                             disabled:opacity-40 disabled:pointer-events-none
+                             transition-all cursor-pointer"
+                >
+                  <Send size={14} />
+                  <span>Send</span>
+                </button>
+              </div>
             </div>
 
             {isDragging && (

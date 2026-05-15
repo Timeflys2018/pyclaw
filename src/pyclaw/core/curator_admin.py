@@ -97,13 +97,15 @@ def _list_sops(
                 f"FROM procedures WHERE {where_sql}"
             )
             for row in conn.execute(sql, params):
-                results.append(SopRow(
-                    entry_id=str(row[0]),
-                    session_key=str(row[1]),
-                    content=str(row[2]),
-                    use_count=int(row[3] or 0),
-                    last_used_at=float(row[4]) if row[4] is not None else None,
-                ))
+                results.append(
+                    SopRow(
+                        entry_id=str(row[0]),
+                        session_key=str(row[1]),
+                        content=str(row[2]),
+                        use_count=int(row[3] or 0),
+                        last_used_at=float(row[4]) if row[4] is not None else None,
+                    )
+                )
         finally:
             conn.close()
     return results
@@ -128,9 +130,7 @@ def list_stale_sops(settings: Any, session_key: str | None = None) -> list[SopRo
     )
 
 
-def list_archived_sops(
-    settings: Any, session_key: str | None = None
-) -> list[ArchivedSopRow]:
+def list_archived_sops(settings: Any, session_key: str | None = None) -> list[ArchivedSopRow]:
     results: list[ArchivedSopRow] = []
     for db_path in _get_memory_dbs(settings, session_key=session_key):
         conn = _open_db(db_path)
@@ -139,21 +139,21 @@ def list_archived_sops(
                 "SELECT id, session_key, content, archived_at, archive_reason "
                 "FROM procedures WHERE status='archived'"
             ):
-                results.append(ArchivedSopRow(
-                    entry_id=str(row[0]),
-                    session_key=str(row[1]),
-                    content=str(row[2]),
-                    archived_at=float(row[3]) if row[3] is not None else None,
-                    archive_reason=str(row[4]) if row[4] is not None else None,
-                ))
+                results.append(
+                    ArchivedSopRow(
+                        entry_id=str(row[0]),
+                        session_key=str(row[1]),
+                        content=str(row[2]),
+                        archived_at=float(row[3]) if row[3] is not None else None,
+                        archive_reason=str(row[4]) if row[4] is not None else None,
+                    )
+                )
         finally:
             conn.close()
     return results
 
 
-def preview_graduation(
-    settings: Any, session_key: str | None = None
-) -> list[SopRow]:
+def preview_graduation(settings: Any, session_key: str | None = None) -> list[SopRow]:
     min_use = getattr(settings.evolution.curator, "promotion_min_use_count", 5)
     min_days = getattr(settings.evolution.curator, "promotion_min_days", 7)
     threshold = time.time() - min_days * 86400
@@ -165,9 +165,7 @@ def preview_graduation(
     )
 
 
-def restore_sop(
-    entry_id: str, settings: Any, session_key: str | None = None
-) -> RestoreResult:
+def restore_sop(entry_id: str, settings: Any, session_key: str | None = None) -> RestoreResult:
     count = 0
     dbs_affected = 0
     for db_path in _get_memory_dbs(settings, session_key=session_key):

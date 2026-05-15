@@ -83,10 +83,13 @@ class TestFallbackSummary:
         from pyclaw.core.context_engine import _fallback_summary
 
         msgs = [
-            {"role": "user", "content": [
-                {"type": "text", "text": "what is this"},
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
-            ]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "what is this"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                ],
+            },
         ]
         result = _fallback_summary(msgs)
         assert "what is this" in result
@@ -96,9 +99,12 @@ class TestFallbackSummary:
         from pyclaw.core.context_engine import _fallback_summary
 
         msgs = [
-            {"role": "user", "content": [
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64,xyz"}},
-            ]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,xyz"}},
+                ],
+            },
             {"role": "assistant", "content": "I see the image"},
         ]
         result = _fallback_summary(msgs)

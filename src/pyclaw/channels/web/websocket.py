@@ -7,20 +7,20 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from pyclaw.channels.web.auth import verify_jwt
 from pyclaw.channels.web.protocol import (
+    SERVER_ERROR,
+    SERVER_HELLO,
+    SERVER_PING,
+    SERVER_READY,
     ChatAbortMessage,
     ChatSendMessage,
     IdentifyMessage,
     PongMessage,
     ToolApproveMessage,
     parse_client_message,
-    SERVER_ERROR,
-    SERVER_HELLO,
-    SERVER_PING,
-    SERVER_READY,
 )
 from pyclaw.infra.settings import WebSettings
 from pyclaw.infra.task_manager import TaskManager
@@ -69,6 +69,7 @@ registry = ConnectionRegistry()
 
 def _get_connection_registry(websocket: WebSocket) -> ConnectionRegistry:
     from pyclaw.channels.web.deps import WebDeps
+
     web_deps = getattr(websocket.app.state, "web_deps", None)
     if isinstance(web_deps, WebDeps):
         return web_deps.connection_registry
@@ -107,14 +108,16 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
     state = ConnectionState(ws=websocket, ws_session_id=secrets.token_hex(8))
 
-    await websocket.send_json({
-        "type": SERVER_HELLO,
-        "data": {"heartbeat_interval": settings.heartbeat_interval * 1000},
-    })
+    await websocket.send_json(
+        {
+            "type": SERVER_HELLO,
+            "data": {"heartbeat_interval": settings.heartbeat_interval * 1000},
+        }
+    )
 
     try:
         raw = await asyncio.wait_for(websocket.receive_json(), timeout=30)
-    except (asyncio.TimeoutError, WebSocketDisconnect):
+    except (TimeoutError, WebSocketDisconnect):
         await websocket.close(4001, "Identify timeout")
         return
 
@@ -137,11 +140,16 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     state.authenticated = True
     conn_registry.connect(user_id, websocket)
 
-    await send_event(state, SERVER_READY, "", {
-        "user_id": user_id,
-        "ws_session_id": state.ws_session_id,
-        "conversations": [],
-    })
+    await send_event(
+        state,
+        SERVER_READY,
+        "",
+        {
+            "user_id": user_id,
+            "ws_session_id": state.ws_session_id,
+            "conversations": [],
+        },
+    )
 
     gateway_router = getattr(websocket.app.state, "gateway_router", None)
     if gateway_router is not None:
@@ -151,7 +159,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         except Exception:
             logger.warning(
                 "failed to register web affinity for user=%s; routing will fall back to local",
-                user_id, exc_info=True,
+                user_id,
+                exc_info=True,
             )
     else:
         logger.debug("web WS connected; affinity gateway disabled (single-worker mode)")
@@ -193,7 +202,9 @@ async def _heartbeat_loop(state: ConnectionState, settings: WebSettings) -> None
 
 
 async def _dispatch_loop(
-    state: ConnectionState, settings: WebSettings, task_manager: TaskManager,
+    state: ConnectionState,
+    settings: WebSettings,
+    task_manager: TaskManager,
 ) -> None:
     while True:
         raw = await state.ws.receive_json()
@@ -204,6 +215,7 @@ async def _dispatch_loop(
 
         elif isinstance(msg, ChatSendMessage):
             from pyclaw.channels.web.chat import enqueue_chat
+
             task_manager.spawn(
                 f"ws-enqueue:{state.ws_session_id}",
                 enqueue_chat(state, msg, settings),
@@ -214,13 +226,20 @@ async def _dispatch_loop(
 
         elif isinstance(msg, ChatAbortMessage):
             from pyclaw.channels.web.chat import handle_abort
+
             await handle_abort(state, msg)
 
         elif isinstance(msg, ToolApproveMessage):
             from pyclaw.channels.web.chat import handle_tool_approve
+
             await handle_tool_approve(state, msg)
 
         else:
-            await send_event(state, SERVER_ERROR, "", {
-                "message": f"Unknown message type: {raw.get('type', '?')}",
-            })
+            await send_event(
+                state,
+                SERVER_ERROR,
+                "",
+                {
+                    "message": f"Unknown message type: {raw.get('type', '?')}",
+                },
+            )

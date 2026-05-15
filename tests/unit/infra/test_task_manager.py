@@ -4,7 +4,6 @@ import asyncio
 import logging
 import re
 import time
-from unittest.mock import patch
 
 import pytest
 
@@ -140,7 +139,9 @@ async def test_exception_triggers_on_error(tm: TaskManager) -> None:
 
 # 2.10
 @pytest.mark.asyncio
-async def test_on_error_raising_is_caught(tm: TaskManager, caplog: pytest.LogCaptureFixture) -> None:
+async def test_on_error_raising_is_caught(
+    tm: TaskManager, caplog: pytest.LogCaptureFixture
+) -> None:
     def bad_callback(exc: BaseException) -> None:
         raise RuntimeError("callback exploded")
 
@@ -314,6 +315,7 @@ async def test_get_state_returns_none_for_pruned_task(tm: TaskManager) -> None:
     assert tm.get_state(tid) == "done"
     # Manipulate created_at to simulate old task
     tm._tasks[tid].created_at = time.monotonic() - 400
+
     # Trigger prune via spawn
     async def noop() -> None:
         pass

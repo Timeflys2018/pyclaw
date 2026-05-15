@@ -43,11 +43,13 @@ def patched_send_event(monkeypatch):
     captured: list[dict] = []
 
     async def fake_send(state, event_type, conversation_id, payload):
-        captured.append({
-            "event_type": event_type,
-            "conversation_id": conversation_id,
-            "payload": payload,
-        })
+        captured.append(
+            {
+                "event_type": event_type,
+                "conversation_id": conversation_id,
+                "payload": payload,
+            }
+        )
 
     from pyclaw.channels.web import protocol_ops
 
@@ -56,9 +58,7 @@ def patched_send_event(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_handle_steer_command_active_appends(
-    patched_get_session_queue, patched_send_event
-):
+async def test_handle_steer_command_active_appends(patched_get_session_queue, patched_send_event):
     rc = RunControl()
     rc.active = True
     state = _state_with_queue(rc)
@@ -76,9 +76,7 @@ async def test_handle_steer_command_active_appends(
 
 
 @pytest.mark.asyncio
-async def test_handle_steer_command_inactive_warns(
-    patched_get_session_queue, patched_send_event
-):
+async def test_handle_steer_command_inactive_warns(patched_get_session_queue, patched_send_event):
     rc = RunControl()
     state = _state_with_queue(rc)
 
@@ -108,9 +106,7 @@ async def test_handle_steer_command_empty_args_shows_usage(
 
 
 @pytest.mark.asyncio
-async def test_handle_btw_command_active_appends(
-    patched_get_session_queue, patched_send_event
-):
+async def test_handle_btw_command_active_appends(patched_get_session_queue, patched_send_event):
     rc = RunControl()
     rc.active = True
     state = _state_with_queue(rc)

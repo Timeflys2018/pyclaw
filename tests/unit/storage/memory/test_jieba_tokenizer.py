@@ -5,7 +5,6 @@ import pytest
 
 from pyclaw.storage.memory.jieba_tokenizer import (
     build_safe_match_query,
-    jieba_tokenizer,
     register_jieba_tokenizer,
 )
 
@@ -26,9 +25,7 @@ def _search(conn: apsw.Connection, query: str) -> list[str]:
     match_q = build_safe_match_query(query)
     if match_q is None:
         return []
-    return [row[0] for row in conn.execute(
-        "SELECT content FROM t WHERE t MATCH ?", (match_q,)
-    )]
+    return [row[0] for row in conn.execute("SELECT content FROM t WHERE t MATCH ?", (match_q,))]
 
 
 def test_chinese_text_segmented_correctly(conn: apsw.Connection) -> None:
@@ -116,8 +113,8 @@ def test_bm25_rank_ordering(conn: apsw.Connection) -> None:
     _insert(conn, "只提到一次部署")
 
     match_q = build_safe_match_query("部署")
-    rows = list(conn.execute(
-        "SELECT content, rank FROM t WHERE t MATCH ? ORDER BY rank", (match_q,)
-    ))
+    rows = list(
+        conn.execute("SELECT content, rank FROM t WHERE t MATCH ? ORDER BY rank", (match_q,))
+    )
     assert len(rows) == 2
     assert rows[0][1] <= rows[1][1]

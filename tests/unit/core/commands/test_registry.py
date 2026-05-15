@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.registry import CommandRegistry
 from pyclaw.core.commands.spec import ALL_CHANNELS, CommandSpec
+from pyclaw.infra.settings import Settings
 
 
 def _make_ctx(channel: str = "feishu", **overrides) -> CommandContext:
@@ -38,9 +38,7 @@ async def test_register_and_get() -> None:
         pass
 
     registry = CommandRegistry()
-    spec = CommandSpec(
-        name="/foo", handler=handler, category="session", help_text="foo cmd"
-    )
+    spec = CommandSpec(name="/foo", handler=handler, category="session", help_text="foo cmd")
     registry.register(spec)
     assert registry.get("/foo") is spec
     assert registry.get("/missing") is None
@@ -72,9 +70,7 @@ async def test_alias_collision_with_existing_name() -> None:
         pass
 
     registry = CommandRegistry()
-    registry.register(
-        CommandSpec(name="/foo", handler=h1, category="c", help_text="t")
-    )
+    registry.register(CommandSpec(name="/foo", handler=h1, category="c", help_text="t"))
     with pytest.raises(ValueError, match="/foo"):
         registry.register(
             CommandSpec(

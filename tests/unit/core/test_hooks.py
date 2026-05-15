@@ -41,9 +41,7 @@ async def test_before_compaction_hook_invoked() -> None:
     registry = HookRegistry()
     hook = _RecordingHook()
     registry.register(hook)
-    ctx = CompactionContext(
-        session_id="s1", workspace_id="w", agent_id="a", tokens_before=1000
-    )
+    ctx = CompactionContext(session_id="s1", workspace_id="w", agent_id="a", tokens_before=1000)
     await registry.notify_before_compaction(ctx)
     assert hook.before_calls == [ctx]
 

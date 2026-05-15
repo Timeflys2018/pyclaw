@@ -49,9 +49,9 @@ class CuratorCycle:
         *,
         memory_base_dir: Path,
         settings: Any,
-        state_store: "CuratorStateStore",
-        lock_manager: "RedisLockManager",
-        task_manager: "TaskManager",
+        state_store: CuratorStateStore,
+        lock_manager: RedisLockManager,
+        task_manager: TaskManager,
         l1_index: Any,
         workspace_base_dir: Path | None = None,
         llm_client: Any = None,
@@ -96,7 +96,9 @@ class CuratorCycle:
             async with mutex:
                 logger.info(
                     "curator cycle acquired lock owner=%s mode=%s force=%s",
-                    self._owner_label, self._mode, self._force_review,
+                    self._owner_label,
+                    self._mode,
+                    self._force_review,
                 )
                 await self._run_critical_section(mutex.check_alive)
         except LockAcquireError:
@@ -118,7 +120,8 @@ class CuratorCycle:
             self._error = "lock_lost"
             logger.warning(
                 "curator cycle lock loss owner=%s completed_dbs=%d",
-                self._owner_label, len(self._review_outcomes),
+                self._owner_label,
+                len(self._review_outcomes),
             )
         except Exception:
             logger.exception(
@@ -137,10 +140,11 @@ class CuratorCycle:
             settings=self._settings,
             check_alive=check_alive,
         )
-        log_fn = logger.info if (
-            self._scan_report.total_archived > 0
-            or self._scan_report.total_graduated > 0
-        ) else logger.debug
+        log_fn = (
+            logger.info
+            if (self._scan_report.total_archived > 0 or self._scan_report.total_graduated > 0)
+            else logger.debug
+        )
         log_fn(
             "curator scan complete scanned=%d archived=%d graduated=%d errors=%d owner=%s",
             self._scan_report.total_scanned,
@@ -151,11 +155,14 @@ class CuratorCycle:
         )
         for err in self._scan_report.errors[:5]:
             logger.warning(
-                "curator scan error %s owner=%s", err, self._owner_label,
+                "curator scan error %s owner=%s",
+                err,
+                self._owner_label,
             )
 
     async def _run_review_if_permitted(
-        self, check_alive: Callable[[], None],
+        self,
+        check_alive: Callable[[], None],
     ) -> None:
         if not getattr(self._settings, "llm_review_enabled", True):
             self._error = "review_skipped_interval"
@@ -164,7 +171,8 @@ class CuratorCycle:
             return
 
         should = self._force_review or await _curator.should_run_llm_review(
-            self._settings, self._state_store,
+            self._settings,
+            self._state_store,
         )
         if not should:
             self._error = "review_skipped_interval"
@@ -191,14 +199,18 @@ class CuratorCycle:
                 if outcome.total_actions > 0:
                     logger.info(
                         "curator llm review actions=%d db=%s owner=%s",
-                        outcome.total_actions, db_file.name, self._owner_label,
+                        outcome.total_actions,
+                        db_file.name,
+                        self._owner_label,
                     )
             except LockLostError:
                 raise
             except Exception:
                 logger.warning(
                     "curator llm review failed db=%s owner=%s",
-                    db_file.name, self._owner_label, exc_info=True,
+                    db_file.name,
+                    self._owner_label,
+                    exc_info=True,
                 )
             completed += 1
 
@@ -214,9 +226,7 @@ class CuratorCycle:
             await self._state_store.mark_review_fully_completed()
 
     def _build_report(self) -> CycleReport:
-        action_count = sum(
-            o.total_actions for o in self._review_outcomes
-        )
+        action_count = sum(o.total_actions for o in self._review_outcomes)
         return CycleReport(
             acquired=True,
             scan_report=self._scan_report,

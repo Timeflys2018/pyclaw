@@ -65,9 +65,7 @@ class CompositeMemoryStore:
         await self._sqlite.delete(session_key, entry_id)
         await self._l1.index_remove(session_key, entry_id)
 
-    async def archive_entry(
-        self, session_key: str, entry_id: str, *, reason: str = ""
-    ) -> bool:
+    async def archive_entry(self, session_key: str, entry_id: str, *, reason: str = "") -> bool:
         """Soft-archive: UPDATE status='archived' + evict from L1."""
         import time as _time
 
@@ -75,12 +73,12 @@ class CompositeMemoryStore:
 
         def _archive_sync() -> bool:
             now = _time.time()
-            cursor = conn.execute(
+            conn.execute(
                 "UPDATE procedures SET status='archived', archived_at=?, archive_reason=? "
                 "WHERE id=? AND status='active'",
                 (now, reason or None, entry_id),
             )
-            # apsw cursor doesn't have rowcount; check via changes()
+            # apsw uses connection-level changes() — no cursor.rowcount like stdlib sqlite3
             return conn.changes() > 0
 
         changed = await asyncio.to_thread(_archive_sync)
@@ -88,14 +86,10 @@ class CompositeMemoryStore:
             try:
                 await self._l1.index_remove(session_key, entry_id)
             except Exception:
-                logger.warning(
-                    "L1 evict failed for %s:%s", session_key, entry_id, exc_info=True
-                )
+                logger.warning("L1 evict failed for %s:%s", session_key, entry_id, exc_info=True)
         return changed
 
-    async def archive_session(
-        self, session_key: str, session_id: str, summary: str
-    ) -> None:
+    async def archive_session(self, session_key: str, session_id: str, summary: str) -> None:
         await self._sqlite.archive_session(session_key, session_id, summary)
 
     async def search_archives(

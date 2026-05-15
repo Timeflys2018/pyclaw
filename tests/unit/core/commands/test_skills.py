@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.skills import cmd_skills
+from pyclaw.infra.settings import Settings
 from pyclaw.skills.management import (
     DiscoveredSkill,
     EligibilityReport,
@@ -58,12 +58,18 @@ async def test_skills_list_with_results() -> None:
     reply = AsyncMock()
     skills = [
         DiscoveredSkill(
-            name="github", emoji="🐙", description="GitHub CLI",
-            eligible=True, location="/tmp/github/SKILL.md",
+            name="github",
+            emoji="🐙",
+            description="GitHub CLI",
+            eligible=True,
+            location="/tmp/github/SKILL.md",
         ),
         DiscoveredSkill(
-            name="broken", emoji=None, description="broken tool",
-            eligible=False, location="/tmp/broken/SKILL.md",
+            name="broken",
+            emoji=None,
+            description="broken tool",
+            eligible=False,
+            location="/tmp/broken/SKILL.md",
         ),
     ]
     with patch("pyclaw.core.commands.skills.list_discovered", return_value=skills):

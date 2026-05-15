@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import textwrap
 
 import pytest
 
@@ -61,26 +60,54 @@ def test_full_pyclaw_json_parses_without_error(tmp_path) -> None:
     example = tmp_path / "pyclaw.example.json"
     data = {
         "server": {"host": "0.0.0.0", "port": 8000},
-        "redis": {"host": "localhost", "port": 6379, "password": None,
-                  "keyPrefix": "pyclaw:", "transcriptRetentionDays": 7},
-        "storage": {"session_backend": "memory", "memory_backend": "sqlite", "lock_backend": "file"},
+        "redis": {
+            "host": "localhost",
+            "port": 6379,
+            "password": None,
+            "keyPrefix": "pyclaw:",
+            "transcriptRetentionDays": 7,
+        },
+        "storage": {
+            "session_backend": "memory",
+            "memory_backend": "sqlite",
+            "lock_backend": "file",
+        },
         "agent": {
             "default_model": "gpt-4o",
             "providers": {"openai": {"apiKey": None, "baseURL": None}},
             "max_iterations": 50,
             "context_window": 128000,
-            "timeouts": {"run_seconds": 300.0, "idle_seconds": 60.0,
-                         "tool_seconds": 120.0, "compaction_seconds": 900.0},
-            "retry": {"planning_only_limit": 1, "reasoning_only_limit": 2,
-                      "empty_response_limit": 1, "unknown_tool_threshold": 3},
-            "compaction": {"model": None, "threshold": 0.8, "keep_recent_tokens": 20000,
-                           "timeout_seconds": 900.0, "truncate_after_compaction": False},
+            "timeouts": {
+                "run_seconds": 300.0,
+                "idle_seconds": 60.0,
+                "tool_seconds": 120.0,
+                "compaction_seconds": 900.0,
+            },
+            "retry": {
+                "planning_only_limit": 1,
+                "reasoning_only_limit": 2,
+                "empty_response_limit": 1,
+                "unknown_tool_threshold": 3,
+            },
+            "compaction": {
+                "model": None,
+                "threshold": 0.8,
+                "keep_recent_tokens": 20000,
+                "timeout_seconds": 900.0,
+                "truncate_after_compaction": False,
+            },
             "tools": {"max_output_chars": 25000},
         },
         "workspaces": {"default": "~/.pyclaw/workspaces"},
         "channels": {
-            "feishu": {"enabled": False, "appId": "", "appSecret": "",
-                       "sessionScope": "chat", "groupContext": "recent", "groupContextSize": 20},
+            "feishu": {
+                "enabled": False,
+                "appId": "",
+                "appSecret": "",
+                "sessionScope": "chat",
+                "groupContext": "recent",
+                "groupContextSize": 20,
+            },
             "web": {"enabled": False, "authToken": ""},
         },
     }
@@ -90,17 +117,19 @@ def test_full_pyclaw_json_parses_without_error(tmp_path) -> None:
 
 
 def test_provider_settings_prefixes_field() -> None:
-    s = _parse({
-        "agent": {
-            "providers": {
-                "openai": {
-                    "apiKey": "k",
-                    "baseURL": "u",
-                    "prefixes": ["openai", "azure_openai", "minimax"],
+    s = _parse(
+        {
+            "agent": {
+                "providers": {
+                    "openai": {
+                        "apiKey": "k",
+                        "baseURL": "u",
+                        "prefixes": ["openai", "azure_openai", "minimax"],
+                    }
                 }
             }
         }
-    })
+    )
     assert s.agent.providers["openai"].prefixes == ["openai", "azure_openai", "minimax"]
 
 
@@ -110,13 +139,7 @@ def test_provider_settings_prefixes_default_empty() -> None:
 
 
 def test_provider_settings_litellm_provider_field() -> None:
-    s = _parse({
-        "agent": {
-            "providers": {
-                "openai": {"apiKey": "k", "litellmProvider": "openai"}
-            }
-        }
-    })
+    s = _parse({"agent": {"providers": {"openai": {"apiKey": "k", "litellmProvider": "openai"}}}})
     assert s.agent.providers["openai"].litellm_provider == "openai"
 
 
@@ -126,13 +149,7 @@ def test_provider_settings_litellm_provider_default_none() -> None:
 
 
 def test_provider_settings_litellm_provider_snake_case_also_works() -> None:
-    s = _parse({
-        "agent": {
-            "providers": {
-                "openai": {"apiKey": "k", "litellm_provider": "openai"}
-            }
-        }
-    })
+    s = _parse({"agent": {"providers": {"openai": {"apiKey": "k", "litellm_provider": "openai"}}}})
     assert s.agent.providers["openai"].litellm_provider == "openai"
 
 
@@ -163,6 +180,7 @@ def test_agent_unknown_prefix_policy_invalid_rejected() -> None:
 
 def test_existing_example_config_still_loads() -> None:
     import pathlib
+
     example_path = pathlib.Path(__file__).resolve().parents[3] / "configs" / "pyclaw.example.json"
     if not example_path.is_file():
         pytest.skip("configs/pyclaw.example.json not present")
@@ -184,9 +202,7 @@ class TestModelEntrySchema:
     def test_model_modalities_json_list_to_set(self) -> None:
         from pyclaw.infra.settings import ModelModalities
 
-        m = ModelModalities.model_validate(
-            {"input": ["text", "image", "pdf"], "output": ["text"]}
-        )
+        m = ModelModalities.model_validate({"input": ["text", "image", "pdf"], "output": ["text"]})
         assert m.input == {"text", "image", "pdf"}
         assert m.output == {"text"}
 
@@ -258,9 +274,7 @@ class TestModelEntrySchema:
         assert "image" not in ps.models["azure_openai/gpt-5.3-codex"].modalities.input
 
     def test_provider_settings_models_empty_dict_ok(self) -> None:
-        s = _parse(
-            {"agent": {"providers": {"openai": {"apiKey": "k", "models": {}}}}}
-        )
+        s = _parse({"agent": {"providers": {"openai": {"apiKey": "k", "models": {}}}}})
         assert s.agent.providers["openai"].models == {}
 
     def test_provider_settings_models_list_rejected(self) -> None:

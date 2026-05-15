@@ -24,7 +24,6 @@ from pyclaw.core.curator import (
 from pyclaw.infra.task_manager import TaskManager
 from pyclaw.storage.lock.redis import RedisLockManager
 
-
 pytestmark = pytest.mark.skipif(
     not os.environ.get("PYCLAW_TEST_REDIS_HOST"),
     reason="PYCLAW_TEST_REDIS_HOST not set — skipping curator concurrency integration",
@@ -41,9 +40,7 @@ async def redis_client():
     host = os.environ.get("PYCLAW_TEST_REDIS_HOST", "localhost")
     port = int(os.environ.get("PYCLAW_TEST_REDIS_PORT", "6379"))
     password = os.environ.get("PYCLAW_TEST_REDIS_PASSWORD") or None
-    client = aioredis.Redis(
-        host=host, port=port, password=password, decode_responses=True
-    )
+    client = aioredis.Redis(host=host, port=port, password=password, decode_responses=True)
     try:
         await client.ping()
     except Exception:
@@ -94,7 +91,9 @@ async def test_two_concurrent_cycles_only_one_acquires(
     tmp_path: Path, redis_client, lock_manager, task_manager, cycle_settings
 ) -> None:
     with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan:
-        mock_scan.side_effect = lambda **_: asyncio.sleep(0.5, result=CuratorReport(total_scanned=0))
+        mock_scan.side_effect = lambda **_: asyncio.sleep(
+            0.5, result=CuratorReport(total_scanned=0)
+        )
 
         kwargs = dict(
             memory_base_dir=tmp_path,
@@ -134,6 +133,7 @@ async def test_heartbeat_renews_lock_during_long_hold(
         mock_scan.side_effect = _slow_scan
 
         with patch("pyclaw.core.curator._heartbeat") as mock_heartbeat:
+
             async def _fake_heartbeat(lm, key, token, event, interval_s=10.0, ttl_ms=30_000):
                 try:
                     while True:
@@ -142,6 +142,7 @@ async def test_heartbeat_renews_lock_during_long_hold(
                         if not ok:
                             event.set()
                             from pyclaw.storage.lock.redis import LockLostError
+
                             raise LockLostError(key)
                 except asyncio.CancelledError:
                     raise
@@ -182,8 +183,12 @@ async def test_lock_deleted_mid_cycle_triggers_lock_lost(
         await asyncio.sleep(0.3)
         return 1
 
-    with patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-         patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock, return_value=True):
+    with (
+        patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+        patch(
+            "pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock, return_value=True
+        ),
+    ):
         mock_review.side_effect = _slow_review
 
         async def _delete_lock_soon():
@@ -191,6 +196,7 @@ async def test_lock_deleted_mid_cycle_triggers_lock_lost(
             await redis_client.delete(f"{TEST_KEY_PREFIX}{CURATOR_CYCLE_LOCK_KEY}")
 
         with patch("pyclaw.core.curator._heartbeat") as mock_heartbeat:
+
             async def _fast_check_heartbeat(lm, key, token, event, interval_s=10.0, ttl_ms=30_000):
                 try:
                     while True:
@@ -199,6 +205,7 @@ async def test_lock_deleted_mid_cycle_triggers_lock_lost(
                         if not ok:
                             event.set()
                             from pyclaw.storage.lock.redis import LockLostError
+
                             raise LockLostError(key)
                 except asyncio.CancelledError:
                     raise
@@ -235,7 +242,9 @@ async def test_manual_trigger_vs_timed_loop_mutual_exclusion(
     tmp_path: Path, redis_client, lock_manager, task_manager, cycle_settings
 ) -> None:
     with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan:
-        mock_scan.side_effect = lambda **_: asyncio.sleep(0.5, result=CuratorReport(total_scanned=0))
+        mock_scan.side_effect = lambda **_: asyncio.sleep(
+            0.5, result=CuratorReport(total_scanned=0)
+        )
 
         await redis_client.set(CURATOR_LAST_RUN_KEY, str(time.time() - 1000))
 

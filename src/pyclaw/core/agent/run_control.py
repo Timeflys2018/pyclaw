@@ -11,6 +11,7 @@ idiom (``msgs, rc.pending_steers = rc.pending_steers, []``) used by
 ever migrates to threaded async, these operations MUST be guarded by an
 ``asyncio.Lock`` or equivalent.
 """
+
 from __future__ import annotations
 
 import asyncio

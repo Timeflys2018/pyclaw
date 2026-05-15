@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pyclaw.core.curator import CycleReport, CuratorReport
+from pyclaw.core.curator import CuratorReport, CycleReport
 
 
 @pytest.fixture
@@ -54,7 +54,6 @@ def loop_deps(tmp_path: Path):
 
 
 class TestCuratorLoopSignature:
-
     def test_loop_requires_lock_manager_and_task_manager(self) -> None:
         import inspect
 
@@ -67,7 +66,6 @@ class TestCuratorLoopSignature:
 
 
 class TestCuratorLoopIntervalGate:
-
     @pytest.mark.asyncio
     async def test_interval_not_reached_skips_cycle(self, loop_deps) -> None:
         from pyclaw.core.curator import create_curator_loop
@@ -114,7 +112,6 @@ class TestCuratorLoopIntervalGate:
 
 
 class TestCuratorLoopCycleResults:
-
     @pytest.mark.asyncio
     async def test_acquired_false_continues_without_writes(self, loop_deps) -> None:
         from pyclaw.core.curator import create_curator_loop
@@ -162,7 +159,6 @@ class TestCuratorLoopCycleResults:
 
 
 class TestCuratorLoopCancellation:
-
     @pytest.mark.asyncio
     async def test_cancellation_clean_exit(self, loop_deps) -> None:
         from pyclaw.core.curator import create_curator_loop
@@ -179,7 +175,6 @@ class TestCuratorLoopCancellation:
 
 
 class TestCuratorLoopStartupLog:
-
     @pytest.mark.asyncio
     async def test_startup_log_includes_cycle_key(self, loop_deps, caplog) -> None:
         import logging
@@ -196,8 +191,11 @@ class TestCuratorLoopStartupLog:
                 pass
 
         found = any(
-            "RedisLockManager" in record.getMessage() and "pyclaw:curator:cycle" in record.getMessage()
+            "RedisLockManager" in record.getMessage()
+            and "pyclaw:curator:cycle" in record.getMessage()
             for record in caplog.records
             if record.name == "pyclaw.core.curator"
         )
-        assert found, "expected startup log line mentioning RedisLockManager and pyclaw:curator:cycle"
+        assert found, (
+            "expected startup log line mentioning RedisLockManager and pyclaw:curator:cycle"
+        )

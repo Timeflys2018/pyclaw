@@ -11,7 +11,6 @@ import pytest
 
 from pyclaw.cli.skills import cmd_curator_graduate, cmd_curator_list, cmd_curator_restore
 
-
 _SCHEMA = """
 CREATE TABLE procedures (
     id TEXT PRIMARY KEY,
@@ -59,7 +58,19 @@ def _insert_procedure(
         "INSERT INTO procedures (id, session_key, type, content, created_at, updated_at, "
         "last_used_at, use_count, status, archived_at, archive_reason) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (proc_id, "user1", type_, content, created_at, now, last_used_at, use_count, status, archived_at, archive_reason),
+        (
+            proc_id,
+            "user1",
+            type_,
+            content,
+            created_at,
+            now,
+            last_used_at,
+            use_count,
+            status,
+            archived_at,
+            archive_reason,
+        ),
     )
     conn.close()
     return proc_id
@@ -74,8 +85,10 @@ def memory_dir(tmp_path: Path):
 
 @pytest.fixture()
 def mock_settings(memory_dir: Path):
-    with patch("pyclaw.cli.skills.load_settings") as mock_ls, \
-         patch("pyclaw.cli.skills._get_memory_dbs") as mock_dbs:
+    with (
+        patch("pyclaw.cli.skills.load_settings") as mock_ls,
+        patch("pyclaw.cli.skills._get_memory_dbs") as mock_dbs,
+    ):
 
         class FakeMemory:
             base_dir = str(memory_dir)
@@ -97,10 +110,18 @@ def mock_settings(memory_dir: Path):
 class TestCuratorListAuto:
     def test_shows_active_auto_sop_entries(self, memory_dir: Path, capsys):
         db_path = _create_test_db(memory_dir)
-        proc_id = _insert_procedure(db_path, type_="auto_sop", content="Deploy to staging", use_count=5, last_used_at=time.time())
+        proc_id = _insert_procedure(
+            db_path,
+            type_="auto_sop",
+            content="Deploy to staging",
+            use_count=5,
+            last_used_at=time.time(),
+        )
 
-        with patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]), \
-             patch("pyclaw.infra.settings.load_settings") as mock_ls:
+        with (
+            patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]),
+            patch("pyclaw.infra.settings.load_settings") as mock_ls,
+        ):
 
             class FakeCurator:
                 stale_after_days = 30
@@ -123,8 +144,10 @@ class TestCuratorListAuto:
     def test_no_results_when_empty(self, memory_dir: Path, capsys):
         db_path = _create_test_db(memory_dir)
 
-        with patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]), \
-             patch("pyclaw.infra.settings.load_settings") as mock_ls:
+        with (
+            patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]),
+            patch("pyclaw.infra.settings.load_settings") as mock_ls,
+        ):
 
             class FakeSettings:
                 pass
@@ -143,12 +166,17 @@ class TestCuratorListStale:
         db_path = _create_test_db(memory_dir)
         sixty_days_ago = time.time() - 60 * 86400
         proc_id = _insert_procedure(
-            db_path, content="Old stale procedure", created_at=sixty_days_ago, last_used_at=sixty_days_ago,
+            db_path,
+            content="Old stale procedure",
+            created_at=sixty_days_ago,
+            last_used_at=sixty_days_ago,
         )
         _insert_procedure(db_path, content="Fresh procedure", last_used_at=time.time())
 
-        with patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]), \
-             patch("pyclaw.infra.settings.load_settings") as mock_ls:
+        with (
+            patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]),
+            patch("pyclaw.infra.settings.load_settings") as mock_ls,
+        ):
 
             class FakeCurator:
                 stale_after_days = 30
@@ -182,8 +210,10 @@ class TestCuratorListArchived:
             archive_reason="stale",
         )
 
-        with patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]), \
-             patch("pyclaw.infra.settings.load_settings") as mock_ls:
+        with (
+            patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]),
+            patch("pyclaw.infra.settings.load_settings") as mock_ls,
+        ):
 
             class FakeSettings:
                 pass
@@ -218,7 +248,9 @@ class TestCuratorRestore:
         assert "Restored" in output
 
         conn = apsw.Connection(str(db_path))
-        row = conn.execute("SELECT status, archived_at, archive_reason FROM procedures WHERE id=?", (proc_id,)).fetchone()
+        row = conn.execute(
+            "SELECT status, archived_at, archive_reason FROM procedures WHERE id=?", (proc_id,)
+        ).fetchone()
         conn.close()
         assert row is not None
         assert row[0] == "active"
@@ -278,8 +310,10 @@ class TestCuratorGraduate:
         workspace_base.mkdir()
         settings = self._make_settings(workspace_base)
 
-        with patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]), \
-             patch("pyclaw.infra.settings.load_settings", return_value=settings):
+        with (
+            patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]),
+            patch("pyclaw.infra.settings.load_settings", return_value=settings),
+        ):
             args = argparse.Namespace(preview=True, id=None)
             cmd_curator_graduate(args)
 
@@ -301,8 +335,10 @@ class TestCuratorGraduate:
         workspace_base.mkdir()
         settings = self._make_settings(workspace_base)
 
-        with patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]), \
-             patch("pyclaw.infra.settings.load_settings", return_value=settings):
+        with (
+            patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]),
+            patch("pyclaw.infra.settings.load_settings", return_value=settings),
+        ):
             args = argparse.Namespace(preview=False, id=None)
             cmd_curator_graduate(args)
 
@@ -331,8 +367,10 @@ class TestCuratorGraduate:
         workspace_base.mkdir()
         settings = self._make_settings(workspace_base)
 
-        with patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]), \
-             patch("pyclaw.infra.settings.load_settings", return_value=settings):
+        with (
+            patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]),
+            patch("pyclaw.infra.settings.load_settings", return_value=settings),
+        ):
             args = argparse.Namespace(preview=False, id=proc_id[:8])
             cmd_curator_graduate(args)
 
@@ -357,8 +395,10 @@ class TestCuratorGraduate:
         workspace_base.mkdir()
         settings = self._make_settings(workspace_base)
 
-        with patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]), \
-             patch("pyclaw.infra.settings.load_settings", return_value=settings):
+        with (
+            patch("pyclaw.cli.skills._get_memory_dbs", return_value=[db_path]),
+            patch("pyclaw.infra.settings.load_settings", return_value=settings),
+        ):
             args = argparse.Namespace(preview=False, id=None)
             cmd_curator_graduate(args)
 

@@ -3,9 +3,19 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
-from pyclaw.models import ContentBlock, TextBlock, ToolResult
+from pyclaw.models import TextBlock, ToolResult
+
+ToolClass = Literal["read", "memory-write-safe", "write"]
+"""Permission classification consumed by the runner under ``read-only`` tier.
+
+- ``read``: pure read or session-isolated mutation (e.g. ``update_working_memory``)
+- ``memory-write-safe``: writes to L2/L3 memory with the subsystem's own guards
+  (e.g. ``memorize``); allowed in ``read-only`` per spec ``tool-approval-tiers``
+- ``write``: file mutation, shell, destructive memory ops; auto-denied in
+  ``read-only`` tier
+"""
 
 
 @dataclass
@@ -23,6 +33,7 @@ class Tool(Protocol):
     description: str
     parameters: dict[str, Any]
     side_effect: bool
+    tool_class: ToolClass
 
     async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult: ...
 
@@ -39,11 +50,14 @@ async def check_abort_or_run(
 
 
 def wrap_tool_with_abort(tool: Tool) -> Tool:
+    wrapped_class: ToolClass = getattr(tool, "tool_class", "write")
+
     class _AbortWrapped:
         name = tool.name
         description = tool.description
         parameters = tool.parameters
         side_effect = tool.side_effect
+        tool_class: ToolClass = wrapped_class
         timeout_seconds = getattr(tool, "timeout_seconds", None)
         max_output_chars = getattr(tool, "max_output_chars", None)
 
@@ -64,6 +78,9 @@ def _tool_timeout_seconds(tool: Tool, default_s: float) -> float:
     return value if value > 0 else 0.0
 
 
+_VALID_TOOL_CLASSES: frozenset[str] = frozenset(("read", "memory-write-safe", "write"))
+
+
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
@@ -71,6 +88,12 @@ class ToolRegistry:
     def register(self, tool: Tool) -> None:
         if tool.name in self._tools:
             raise ValueError(f"tool {tool.name!r} already registered")
+        cls = getattr(tool, "tool_class", None)
+        if cls not in _VALID_TOOL_CLASSES:
+            raise ValueError(
+                f"tool {tool.name!r} missing or invalid tool_class "
+                f"(got {cls!r}; expected one of {sorted(_VALID_TOOL_CLASSES)})"
+            )
         self._tools[tool.name] = tool
 
     def get(self, name: str) -> Tool | None:
@@ -190,6 +213,7 @@ def _function_args(call: dict[str, Any]) -> dict[str, Any]:
         return args
     if isinstance(args, str):
         import json
+
         try:
             parsed = json.loads(args)
             return parsed if isinstance(parsed, dict) else {"_raw": args}

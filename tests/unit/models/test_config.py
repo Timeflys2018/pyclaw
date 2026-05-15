@@ -84,7 +84,6 @@ def test_compact_result_rejects_invalid_reason_code() -> None:
         CompactResult(ok=False, compacted=False, reason_code="not_a_real_code")  # type: ignore[arg-type]
 
 
-
 def test_prompt_budget_config_defaults() -> None:
     cfg = PromptBudgetConfig()
     assert cfg.system_zone_tokens == 4096
@@ -103,7 +102,9 @@ def test_prompt_budget_config_from_json() -> None:
 
 
 def test_prompt_budget_compute_history_explicit_output() -> None:
-    cfg = PromptBudgetConfig(system_zone_tokens=4096, dynamic_zone_tokens=4096, output_reserve_tokens=128000)
+    cfg = PromptBudgetConfig(
+        system_zone_tokens=4096, dynamic_zone_tokens=4096, output_reserve_tokens=128000
+    )
     hb = cfg.compute_history_budget(1_000_000)
     assert hb == 1_000_000 - 4096 - 4096 - 128000
 
@@ -115,7 +116,9 @@ def test_prompt_budget_compute_history_model_max_output() -> None:
 
 
 def test_prompt_budget_compute_history_fallback_ratio() -> None:
-    cfg = PromptBudgetConfig(system_zone_tokens=4096, dynamic_zone_tokens=4096, output_reserve_ratio=0.3)
+    cfg = PromptBudgetConfig(
+        system_zone_tokens=4096, dynamic_zone_tokens=4096, output_reserve_ratio=0.3
+    )
     hb = cfg.compute_history_budget(200_000)
     remaining = 200_000 - 4096 - 4096
     output_reserve = int(remaining * 0.3)
@@ -123,12 +126,16 @@ def test_prompt_budget_compute_history_fallback_ratio() -> None:
 
 
 def test_prompt_budget_validate_ok() -> None:
-    cfg = PromptBudgetConfig(system_zone_tokens=4096, dynamic_zone_tokens=4096, output_reserve_tokens=128000)
+    cfg = PromptBudgetConfig(
+        system_zone_tokens=4096, dynamic_zone_tokens=4096, output_reserve_tokens=128000
+    )
     cfg.validate_against_context_window(1_000_000)
 
 
 def test_prompt_budget_validate_exceeds() -> None:
-    cfg = PromptBudgetConfig(system_zone_tokens=500_000, dynamic_zone_tokens=500_000, output_reserve_tokens=128000)
+    cfg = PromptBudgetConfig(
+        system_zone_tokens=500_000, dynamic_zone_tokens=500_000, output_reserve_tokens=128000
+    )
     with pytest.raises(ValueError, match="prompt_budget zones"):
         cfg.validate_against_context_window(1_000_000)
 
@@ -142,7 +149,6 @@ def test_agent_run_config_has_prompt_budget() -> None:
     config = AgentRunConfig()
     assert isinstance(config.prompt_budget, PromptBudgetConfig)
     assert config.prompt_budget.system_zone_tokens == 4096
-
 
 
 def test_compaction_config_history_threshold_alias() -> None:

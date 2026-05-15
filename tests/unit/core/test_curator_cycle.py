@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import time
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pyclaw.storage.lock.redis import LockAcquireError, LockLostError
+from pyclaw.storage.lock.redis import LockAcquireError
 
 
 def _outcome(total_actions: int = 0, db_file: Path | None = None):
     from pyclaw.core.curator import ReviewOutcome
+
     return ReviewOutcome(
         db_file=db_file or Path("/tmp/_dummy.db"),
         entries_reviewed=max(total_actions, 1),
@@ -28,7 +28,6 @@ def _outcome(total_actions: int = 0, db_file: Path | None = None):
 
 
 class TestCycleReport:
-
     def test_basic_construction(self) -> None:
         from pyclaw.core.curator import CycleReport
 
@@ -70,7 +69,6 @@ class TestCycleReport:
 
 
 class TestCuratorCycleLockKey:
-
     def test_cycle_lock_key_value(self) -> None:
         from pyclaw.core.curator import CURATOR_CYCLE_LOCK_KEY
 
@@ -86,7 +84,6 @@ class TestCuratorCycleLockKey:
 
 
 class TestRunCuratorCycleSignature:
-
     def test_all_params_keyword_only(self) -> None:
         from pyclaw.core.curator import run_curator_cycle
 
@@ -103,9 +100,17 @@ class TestRunCuratorCycleSignature:
         sig = inspect.signature(run_curator_cycle)
         names = list(sig.parameters.keys())
         expected = [
-            "memory_base_dir", "settings", "redis_client", "lock_manager",
-            "task_manager", "l1_index", "workspace_base_dir", "llm_client",
-            "mode", "force_review", "owner_label",
+            "memory_base_dir",
+            "settings",
+            "redis_client",
+            "lock_manager",
+            "task_manager",
+            "l1_index",
+            "workspace_base_dir",
+            "llm_client",
+            "mode",
+            "force_review",
+            "owner_label",
         ]
         assert names == expected
 
@@ -179,7 +184,6 @@ def cycle_deps(tmp_path: Path):
 
 
 class TestRunCuratorCycleScanAndReview:
-
     @pytest.mark.asyncio
     async def test_scan_and_review_calls_scan_and_review(self, cycle_deps, tmp_path) -> None:
         from pyclaw.core.curator import CuratorReport, run_curator_cycle
@@ -192,9 +196,13 @@ class TestRunCuratorCycleScanAndReview:
 
         mock_scan_report = CuratorReport(total_scanned=2)
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan, \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock) as mock_should:
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan,
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+            patch(
+                "pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock
+            ) as mock_should,
+        ):
             mock_scan.return_value = mock_scan_report
             mock_review.return_value = _outcome(2)
             mock_should.return_value = True
@@ -219,9 +227,13 @@ class TestRunCuratorCycleScanAndReview:
     async def test_last_run_key_updated_on_success(self, cycle_deps, tmp_path) -> None:
         from pyclaw.core.curator import CURATOR_LAST_RUN_KEY, CuratorReport, run_curator_cycle
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan, \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock) as mock_should:
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan,
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock),
+            patch(
+                "pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock
+            ) as mock_should,
+        ):
             mock_scan.return_value = CuratorReport(total_scanned=0)
             mock_should.return_value = False
 
@@ -246,9 +258,13 @@ class TestRunCuratorCycleScanAndReview:
         db1 = cycle_deps["memory_base_dir"] / "user1.db"
         db1.touch()
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan, \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock) as mock_should:
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan,
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+            patch(
+                "pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock
+            ) as mock_should,
+        ):
             mock_scan.return_value = CuratorReport(total_scanned=1)
             mock_review.return_value = _outcome(1)
             mock_should.return_value = True
@@ -273,7 +289,6 @@ class TestRunCuratorCycleScanAndReview:
 
 
 class TestRunCuratorCycleReviewOnly:
-
     @pytest.mark.asyncio
     async def test_review_only_does_not_call_scan(self, cycle_deps, tmp_path) -> None:
         from pyclaw.core.curator import CuratorReport, run_curator_cycle
@@ -281,9 +296,13 @@ class TestRunCuratorCycleReviewOnly:
         db1 = cycle_deps["memory_base_dir"] / "user1.db"
         db1.touch()
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan, \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock) as mock_should:
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan,
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+            patch(
+                "pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock
+            ) as mock_should,
+        ):
             mock_scan.return_value = CuratorReport(total_scanned=0)
             mock_review.return_value = _outcome(0)
             mock_should.return_value = True
@@ -307,9 +326,13 @@ class TestRunCuratorCycleReviewOnly:
     async def test_review_only_skipped_by_interval(self, cycle_deps, tmp_path) -> None:
         from pyclaw.core.curator import run_curator_cycle
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock) as mock_should:
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock),
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+            patch(
+                "pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock
+            ) as mock_should,
+        ):
             mock_should.return_value = False
 
             report = await run_curator_cycle(
@@ -335,9 +358,13 @@ class TestRunCuratorCycleReviewOnly:
         db1 = cycle_deps["memory_base_dir"] / "user1.db"
         db1.touch()
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock) as mock_should:
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock),
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+            patch(
+                "pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock
+            ) as mock_should,
+        ):
             mock_should.return_value = False
             mock_review.return_value = _outcome(1)
 
@@ -363,10 +390,11 @@ class TestRunCuratorCycleReviewOnly:
 
         cycle_deps["settings"].llm_review_enabled = False
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock):
-
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock),
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+            patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock),
+        ):
             report = await run_curator_cycle(
                 memory_base_dir=cycle_deps["memory_base_dir"],
                 settings=cycle_deps["settings"],
@@ -390,9 +418,13 @@ class TestRunCuratorCycleReviewOnly:
         db1 = cycle_deps["memory_base_dir"] / "user1.db"
         db1.touch()
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock) as mock_should:
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock),
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+            patch(
+                "pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock
+            ) as mock_should,
+        ):
             mock_should.return_value = True
             mock_review.return_value = _outcome(0)
 
@@ -419,9 +451,13 @@ class TestRunCuratorCycleReviewOnly:
         db1 = cycle_deps["memory_base_dir"] / "user1.db"
         db1.touch()
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock) as mock_should:
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock),
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+            patch(
+                "pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock
+            ) as mock_should,
+        ):
             mock_should.return_value = True
             mock_review.return_value = _outcome(1)
 
@@ -446,16 +482,19 @@ class TestRunCuratorCycleReviewOnly:
 
 
 class TestRunCuratorCycleReviewEdgeCases:
-
     @pytest.mark.asyncio
     async def test_empty_db_glob_no_review_key_update(self, cycle_deps, tmp_path) -> None:
         from pyclaw.core.curator import CURATOR_LLM_REVIEW_KEY, run_curator_cycle
 
         # No .db files in memory_base_dir
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock) as mock_should:
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock),
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+            patch(
+                "pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock
+            ) as mock_should,
+        ):
             mock_should.return_value = True
             mock_review.return_value = _outcome(0)
 
@@ -493,9 +532,13 @@ class TestRunCuratorCycleReviewEdgeCases:
                 raise RuntimeError("internal explosion")
             return _outcome(1, db_file=kwargs.get("db_file"))
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock) as mock_should:
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock),
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+            patch(
+                "pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock
+            ) as mock_should,
+        ):
             mock_should.return_value = True
             mock_review.side_effect = _review_side_effect
 
@@ -524,7 +567,6 @@ class TestRunCuratorCycleReviewEdgeCases:
 
 
 class TestRunCuratorCycleAcquireFail:
-
     @pytest.mark.asyncio
     async def test_acquire_fail_returns_not_acquired(self, cycle_deps) -> None:
         from pyclaw.core.curator import run_curator_cycle
@@ -533,9 +575,10 @@ class TestRunCuratorCycleAcquireFail:
             side_effect=LockAcquireError("pyclaw:curator:cycle")
         )
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan, \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review:
-
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan,
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+        ):
             report = await run_curator_cycle(
                 memory_base_dir=cycle_deps["memory_base_dir"],
                 settings=cycle_deps["settings"],
@@ -558,9 +601,10 @@ class TestRunCuratorCycleAcquireFail:
             side_effect=LockAcquireError("pyclaw:curator:cycle")
         )
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock):
-
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock),
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock),
+        ):
             await run_curator_cycle(
                 memory_base_dir=cycle_deps["memory_base_dir"],
                 settings=cycle_deps["settings"],
@@ -577,14 +621,19 @@ class TestRunCuratorCycleAcquireFail:
 
 
 class TestRunCuratorCycleHeartbeat:
-
     @pytest.mark.asyncio
     async def test_heartbeat_spawned_with_correct_params(self, cycle_deps) -> None:
         from pyclaw.core.curator import CuratorReport, run_curator_cycle
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan, \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock, return_value=False):
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan,
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock),
+            patch(
+                "pyclaw.core.curator.should_run_llm_review",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+        ):
             mock_scan.return_value = CuratorReport(total_scanned=0)
 
             await run_curator_cycle(
@@ -607,9 +656,15 @@ class TestRunCuratorCycleHeartbeat:
     async def test_spawn_has_no_owner_kwarg(self, cycle_deps) -> None:
         from pyclaw.core.curator import CuratorReport, run_curator_cycle
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan, \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock, return_value=False):
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan,
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock),
+            patch(
+                "pyclaw.core.curator.should_run_llm_review",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+        ):
             mock_scan.return_value = CuratorReport(total_scanned=0)
 
             await run_curator_cycle(
@@ -642,9 +697,15 @@ class TestRunCuratorCycleHeartbeat:
         cycle_deps["task_manager"].cancel = track_cancel
         cycle_deps["lock_manager"].release = track_release
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan, \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock, return_value=False):
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan,
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock),
+            patch(
+                "pyclaw.core.curator.should_run_llm_review",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+        ):
             mock_scan.return_value = CuratorReport(total_scanned=0)
 
             await run_curator_cycle(
@@ -666,9 +727,15 @@ class TestRunCuratorCycleHeartbeat:
         cycle_deps["task_manager"]._tasks["t000001"].asyncio_task.done.return_value = True
         cycle_deps["task_manager"].cancel = AsyncMock(return_value=False)
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan, \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock, return_value=False):
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan,
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock),
+            patch(
+                "pyclaw.core.curator.should_run_llm_review",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+        ):
             mock_scan.return_value = CuratorReport(total_scanned=0)
 
             await run_curator_cycle(
@@ -688,10 +755,13 @@ class TestRunCuratorCycleHeartbeat:
 
 
 class TestRunCuratorCycleLockLost:
-
     @pytest.mark.asyncio
     async def test_event_set_aborts_cycle(self, cycle_deps, tmp_path) -> None:
-        from pyclaw.core.curator import CURATOR_LAST_RUN_KEY, CURATOR_LLM_REVIEW_KEY, run_curator_cycle
+        from pyclaw.core.curator import (
+            CURATOR_LAST_RUN_KEY,
+            CURATOR_LLM_REVIEW_KEY,
+            run_curator_cycle,
+        )
 
         db1 = cycle_deps["memory_base_dir"] / "db1.db"
         db1.touch()
@@ -702,17 +772,24 @@ class TestRunCuratorCycleLockLost:
 
         async def _review_side_effect(db_file, **kwargs):
             from pyclaw.core.curator import ReviewOutcome
+
             nonlocal review_call_count
             review_call_count += 1
             if review_call_count == 1:
                 # After first db succeeds, simulate heartbeat setting event
                 return ReviewOutcome(
-                    db_file=db_file, entries_reviewed=3,
-                    promoted_count=2, archived_count=1, failed_count=0,
+                    db_file=db_file,
+                    entries_reviewed=3,
+                    promoted_count=2,
+                    archived_count=1,
+                    failed_count=0,
                 )
             return ReviewOutcome(
-                db_file=db_file, entries_reviewed=1,
-                promoted_count=1, archived_count=0, failed_count=0,
+                db_file=db_file,
+                entries_reviewed=1,
+                promoted_count=1,
+                archived_count=0,
+                failed_count=0,
             )
 
         # Make the heartbeat task appear done after first review
@@ -728,9 +805,15 @@ class TestRunCuratorCycleLockLost:
 
         cycle_deps["task_manager"]._tasks["t000001"].asyncio_task.done = _done_after_first
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock, return_value=True):
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock),
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+            patch(
+                "pyclaw.core.curator.should_run_llm_review",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+        ):
             mock_review.side_effect = _review_side_effect
 
             report = await run_curator_cycle(
@@ -776,11 +859,19 @@ class TestRunCuratorCycleLockLost:
             return 2
 
         # Heartbeat task done from the start (mysterious crash)
-        cycle_deps["task_manager"]._tasks["t000001"].asyncio_task.done = MagicMock(return_value=True)
+        cycle_deps["task_manager"]._tasks["t000001"].asyncio_task.done = MagicMock(
+            return_value=True
+        )
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review, \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock, return_value=True):
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock),
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock) as mock_review,
+            patch(
+                "pyclaw.core.curator.should_run_llm_review",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+        ):
             mock_review.side_effect = _review_side_effect
 
             report = await run_curator_cycle(
@@ -808,12 +899,19 @@ class TestRunCuratorCycleLockLost:
         db1.touch()
 
         # Heartbeat immediately done
-        cycle_deps["task_manager"]._tasks["t000001"].asyncio_task.done = MagicMock(return_value=True)
+        cycle_deps["task_manager"]._tasks["t000001"].asyncio_task.done = MagicMock(
+            return_value=True
+        )
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock, return_value=True):
-
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock),
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock),
+            patch(
+                "pyclaw.core.curator.should_run_llm_review",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+        ):
             await run_curator_cycle(
                 memory_base_dir=cycle_deps["memory_base_dir"],
                 settings=cycle_deps["settings"],
@@ -837,16 +935,21 @@ class TestRunCuratorCycleLockLost:
 
 
 class TestRunCuratorCycleOwnerLabel:
-
     @pytest.mark.asyncio
     async def test_owner_label_in_log_extras(self, cycle_deps, caplog) -> None:
         import logging
 
         from pyclaw.core.curator import CuratorReport, run_curator_cycle
 
-        with patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan, \
-             patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock), \
-             patch("pyclaw.core.curator.should_run_llm_review", new_callable=AsyncMock, return_value=False):
+        with (
+            patch("pyclaw.core.curator.run_curator_scan", new_callable=AsyncMock) as mock_scan,
+            patch("pyclaw.core.curator.run_llm_review", new_callable=AsyncMock),
+            patch(
+                "pyclaw.core.curator.should_run_llm_review",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+        ):
             mock_scan.return_value = CuratorReport(total_scanned=0)
 
             with caplog.at_level(logging.DEBUG, logger="pyclaw.core.curator_cycle"):

@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import pytest
-
 from pyclaw.core.commands._helpers import parse_idle_duration
-
-
 from pyclaw.infra.settings import AgentSettings, ModelEntry, ModelModalities, ProviderSettings
 
 
@@ -29,9 +25,7 @@ def _settings_with_dict_models() -> AgentSettings:
                 base_url="u",
                 models={
                     "anthropic/claude-opus-4-7": ModelEntry(
-                        modalities=ModelModalities(
-                            input={"text", "image", "pdf"}, output={"text"}
-                        )
+                        modalities=ModelModalities(input={"text", "image", "pdf"}, output={"text"})
                     ),
                 },
                 prefixes=["anthropic"],

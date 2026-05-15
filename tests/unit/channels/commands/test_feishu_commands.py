@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -272,9 +272,8 @@ async def test_adapter_handler_exception_replies_error_and_returns_true() -> Non
         raise RuntimeError("boom")
 
     from pyclaw.core.commands.spec import CommandSpec
-    registry.register(
-        CommandSpec(name="/boom", handler=boom, category="t", help_text="t")
-    )
+
+    registry.register(CommandSpec(name="/boom", handler=boom, category="t", help_text="t"))
     adapter = FeishuCommandAdapter(registry)
     result = await adapter.handle(
         text="/boom",
@@ -299,9 +298,8 @@ async def test_adapter_cancelled_error_propagates() -> None:
         raise asyncio.CancelledError()
 
     from pyclaw.core.commands.spec import CommandSpec
-    registry.register(
-        CommandSpec(name="/cancel", handler=cancelled, category="t", help_text="t")
-    )
+
+    registry.register(CommandSpec(name="/cancel", handler=cancelled, category="t", help_text="t"))
     adapter = FeishuCommandAdapter(registry)
     with pytest.raises(asyncio.CancelledError):
         await adapter.handle(
@@ -325,9 +323,7 @@ async def test_adapter_agent_aborted_error_propagates() -> None:
     async def aborted(args: str, c) -> None:
         raise AgentAbortedError("aborted")
 
-    registry.register(
-        CommandSpec(name="/abort", handler=aborted, category="t", help_text="t")
-    )
+    registry.register(CommandSpec(name="/abort", handler=aborted, category="t", help_text="t"))
     adapter = FeishuCommandAdapter(registry)
     with pytest.raises(AgentAbortedError):
         await adapter.handle(

@@ -31,9 +31,7 @@ class _StubMemoryStore:
     async def delete(self, session_key: str, entry_id: str) -> None:
         pass
 
-    async def archive_session(
-        self, session_key: str, session_id: str, summary: str
-    ) -> None:
+    async def archive_session(self, session_key: str, session_id: str, summary: str) -> None:
         pass
 
     async def search_archives(
@@ -41,9 +39,7 @@ class _StubMemoryStore:
     ) -> list[ArchiveEntry]:
         return []
 
-    async def archive_entry(
-        self, session_key: str, entry_id: str, *, reason: str = ""
-    ) -> bool:
+    async def archive_entry(self, session_key: str, entry_id: str, *, reason: str = "") -> bool:
         return False
 
     async def close(self) -> None:

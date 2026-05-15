@@ -41,7 +41,7 @@ class CuratorStateStore:
     _LAST_RUN_KEY: Final = "pyclaw:curator:last_run_at"
     _LLM_REVIEW_KEY: Final = "pyclaw:curator:llm_review_last_run_at"
 
-    def __init__(self, redis_client: "aioredis.Redis") -> None:
+    def __init__(self, redis_client: aioredis.Redis) -> None:
         self._redis = redis_client
 
     async def mark_scan_completed(self) -> None:

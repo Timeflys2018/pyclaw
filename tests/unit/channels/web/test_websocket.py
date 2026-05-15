@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from pyclaw.channels.web.auth import create_jwt
-from pyclaw.channels.web.protocol import SERVER_HELLO, SERVER_READY, SERVER_ERROR
+from pyclaw.channels.web.protocol import SERVER_ERROR, SERVER_HELLO, SERVER_READY
 from pyclaw.channels.web.websocket import (
     ConnectionRegistry,
     ConnectionState,
@@ -115,6 +115,7 @@ class TestWebSocketEndpoint:
     @pytest.fixture(autouse=True)
     def _reset_registry(self) -> None:
         from pyclaw.channels.web.websocket import registry
+
         registry._connections.clear()
 
     def test_hello_then_identify_then_ready(self) -> None:

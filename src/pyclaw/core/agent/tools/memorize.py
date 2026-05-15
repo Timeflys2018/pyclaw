@@ -37,6 +37,7 @@ class MemorizeTool:
         "required": ["content", "layer"],
     }
     side_effect = True
+    tool_class = "memory-write-safe"
 
     def __init__(self, memory_store: MemoryStore, session_store: SessionStore) -> None:
         self._memory_store = memory_store
@@ -52,9 +53,7 @@ class MemorizeTool:
             return error_result(call_id, "memorize: 'content' must be a non-empty string")
 
         if layer not in ("L2", "L3"):
-            return error_result(
-                call_id, f"memorize: 'layer' must be 'L2' or 'L3', got {layer!r}"
-            )
+            return error_result(call_id, f"memorize: 'layer' must be 'L2' or 'L3', got {layer!r}")
 
         try:
             tree = await self._session_store.load(context.session_id)

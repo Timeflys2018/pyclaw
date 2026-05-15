@@ -20,7 +20,8 @@ def registry(tm: TaskManager) -> FeishuQueueRegistry:
 
 @pytest.mark.asyncio
 async def test_enqueue_spawns_consumer_and_executes(
-    registry: FeishuQueueRegistry, tm: TaskManager,
+    registry: FeishuQueueRegistry,
+    tm: TaskManager,
 ) -> None:
     results: list[str] = []
 
@@ -53,7 +54,8 @@ async def test_enqueue_serial_execution(
 
 @pytest.mark.asyncio
 async def test_cleanup_session_cancels_consumer(
-    registry: FeishuQueueRegistry, tm: TaskManager,
+    registry: FeishuQueueRegistry,
+    tm: TaskManager,
 ) -> None:
     gate = asyncio.Event()
 
@@ -79,7 +81,8 @@ async def test_cleanup_unknown_session_is_noop(
 
 @pytest.mark.asyncio
 async def test_consume_task_done_valueerror_guard(
-    registry: FeishuQueueRegistry, tm: TaskManager,
+    registry: FeishuQueueRegistry,
+    tm: TaskManager,
 ) -> None:
     """_consume catches ValueError from task_done() when cancelled mid-get()."""
     started = asyncio.Event()
@@ -99,7 +102,8 @@ async def test_consume_task_done_valueerror_guard(
 
 @pytest.mark.asyncio
 async def test_enqueue_reuses_existing_consumer(
-    registry: FeishuQueueRegistry, tm: TaskManager,
+    registry: FeishuQueueRegistry,
+    tm: TaskManager,
 ) -> None:
     results: list[int] = []
 
@@ -207,8 +211,12 @@ def test_last_usage_set_and_get_roundtrip(registry: FeishuQueueRegistry) -> None
 
 
 def test_last_usage_set_twice_overwrites(registry: FeishuQueueRegistry) -> None:
-    registry.set_last_usage("sess-1", {"input": 100, "output": 10, "cache_creation": 0, "cache_read": 0})
-    registry.set_last_usage("sess-1", {"input": 200, "output": 20, "cache_creation": 5, "cache_read": 80})
+    registry.set_last_usage(
+        "sess-1", {"input": 100, "output": 10, "cache_creation": 0, "cache_read": 0}
+    )
+    registry.set_last_usage(
+        "sess-1", {"input": 200, "output": 20, "cache_creation": 5, "cache_read": 80}
+    )
     result = registry.get_last_usage("sess-1")
     assert result is not None
     assert result["input"] == 200
@@ -216,13 +224,22 @@ def test_last_usage_set_twice_overwrites(registry: FeishuQueueRegistry) -> None:
 
 
 def test_last_usage_scoped_per_session(registry: FeishuQueueRegistry) -> None:
-    registry.set_last_usage("sess-A", {"input": 1, "output": 2, "cache_creation": 3, "cache_read": 4})
+    registry.set_last_usage(
+        "sess-A", {"input": 1, "output": 2, "cache_creation": 3, "cache_read": 4}
+    )
     assert registry.get_last_usage("sess-B") is None
-    assert registry.get_last_usage("sess-A") == {"input": 1, "output": 2, "cache_creation": 3, "cache_read": 4}
+    assert registry.get_last_usage("sess-A") == {
+        "input": 1,
+        "output": 2,
+        "cache_creation": 3,
+        "cache_read": 4,
+    }
 
 
 @pytest.mark.asyncio
 async def test_cleanup_session_clears_last_usage(registry: FeishuQueueRegistry) -> None:
-    registry.set_last_usage("sess-1", {"input": 1, "output": 2, "cache_creation": 0, "cache_read": 0})
+    registry.set_last_usage(
+        "sess-1", {"input": 1, "output": 2, "cache_creation": 0, "cache_read": 0}
+    )
     await registry.cleanup_session("sess-1")
     assert registry.get_last_usage("sess-1") is None

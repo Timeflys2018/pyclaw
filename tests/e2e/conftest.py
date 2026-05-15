@@ -21,9 +21,7 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     if not os.environ.get("PYCLAW_LLM_API_KEY"):
         skip = pytest.mark.skip(reason="PYCLAW_LLM_API_KEY not set")
         for item in items:
@@ -34,9 +32,7 @@ def pytest_collection_modifyitems(
 @pytest.fixture(scope="session")
 def llm_client() -> LLMClient:
     return LLMClient(
-        default_model=os.environ.get(
-            "PYCLAW_LLM_MODEL", "anthropic/ppio/pa/claude-sonnet-4-6"
-        ),
+        default_model=os.environ.get("PYCLAW_LLM_MODEL", "anthropic/ppio/pa/claude-sonnet-4-6"),
         api_key=os.environ.get("PYCLAW_LLM_API_KEY"),
         api_base=os.environ.get("PYCLAW_LLM_API_BASE"),
     )

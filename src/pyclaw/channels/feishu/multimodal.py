@@ -35,7 +35,10 @@ async def feishu_image_to_block(
     mime = _detect_mime_from_magic(raw)
     logger.debug(
         "feishu_image_to_block: image_key=%s size=%d mime=%s magic=%s",
-        image_key, len(raw), mime, raw[:8].hex(),
+        image_key,
+        len(raw),
+        mime,
+        raw[:8].hex(),
     )
     b64 = base64.b64encode(raw).decode()
     return ImageBlock(type="image", data=b64, mime_type=mime)

@@ -123,8 +123,9 @@ async def test_l4_exception_does_not_block_l2l3_results(caplog) -> None:
     assert "<archives>" not in result.system_prompt_addition
 
     warning_messages = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-    assert any("search_archives" in m for m in warning_messages), \
+    assert any("search_archives" in m for m in warning_messages), (
         f"Expected warning about search_archives. Captured: {warning_messages}"
+    )
 
 
 @pytest.mark.asyncio
@@ -151,8 +152,9 @@ async def test_l2l3_exception_does_not_block_l4_results(caplog) -> None:
     assert "<memory_context>" in result.system_prompt_addition
 
     warning_messages = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-    assert any("L2/L3" in m or "search " in m for m in warning_messages), \
+    assert any("L2/L3" in m or "search " in m for m in warning_messages), (
         f"Expected warning about L2/L3 search. Captured: {warning_messages}"
+    )
 
 
 @pytest.mark.asyncio
@@ -161,7 +163,9 @@ async def test_archives_only_renders_memory_context_wrapper() -> None:
     ms = AsyncMock()
     ms.search.return_value = []
     ms.search_archives.return_value = [
-        _archive_entry("web:admin:s:f8b9701e8f80cb8b", "user: hello\nassistant: hi", similarity=0.74),
+        _archive_entry(
+            "web:admin:s:f8b9701e8f80cb8b", "user: hello\nassistant: hi", similarity=0.74
+        ),
         _archive_entry("web:admin:s:c7ffc612d041f700", "user: bye", similarity=0.32),
     ]
     engine = DefaultContextEngine(memory_store=ms)
@@ -224,7 +228,9 @@ async def test_assemble_skips_search_archives_when_archive_disabled() -> None:
     )
 
     ms.search_archives.assert_not_called()
-    assert result.system_prompt_addition is None or "<archives>" not in result.system_prompt_addition
+    assert (
+        result.system_prompt_addition is None or "<archives>" not in result.system_prompt_addition
+    )
 
 
 @pytest.mark.asyncio
@@ -335,7 +341,9 @@ async def test_archive_disabled_does_not_use_cache() -> None:
     result = await engine.assemble(session_id="s1", messages=[], prompt="hello")
 
     ms.search_archives.assert_not_called()
-    assert result.system_prompt_addition is None or "<archives>" not in result.system_prompt_addition
+    assert (
+        result.system_prompt_addition is None or "<archives>" not in result.system_prompt_addition
+    )
     assert engine._archive_cache == cache_snapshot
 
 
@@ -346,6 +354,7 @@ async def test_fifo_eviction_at_cap(monkeypatch) -> None:
     Patches ARCHIVE_CACHE_MAX_ENTRIES to 3 to make the test fast and obvious.
     """
     from pyclaw.core import context_engine as ce_module
+
     monkeypatch.setattr(ce_module, "ARCHIVE_CACHE_MAX_ENTRIES", 3)
 
     ms = AsyncMock()

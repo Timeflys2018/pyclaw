@@ -47,7 +47,7 @@ def build_safe_match_query(query: str) -> str | None:
         tokens.append(f'"{escaped}"')
     if not tokens:
         return None
-    return ' OR '.join(tokens)
+    return " OR ".join(tokens)
 
 
 def register_jieba_tokenizer(conn: apsw.Connection) -> None:

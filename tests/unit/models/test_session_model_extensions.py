@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from pyclaw.models.session import SessionHeader, SessionHistorySummary
 
 

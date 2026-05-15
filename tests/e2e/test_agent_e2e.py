@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import secrets
 from pathlib import Path
 from typing import Any
@@ -51,9 +50,7 @@ async def test_s1_simple_qa(agent_deps: AgentRunnerDeps, workspace: Path) -> Non
 @pytest.mark.e2e
 @pytest.mark.asyncio
 async def test_s2_streaming_order(agent_deps: AgentRunnerDeps, workspace: Path) -> None:
-    req = _make_request(
-        "Count slowly from 1 to 5, one number per line. Do not use any tools."
-    )
+    req = _make_request("Count slowly from 1 to 5, one number per line. Do not use any tools.")
     events = await _collect(req, agent_deps, workspace)
 
     errors = [e for e in events if isinstance(e, ErrorEvent)]
@@ -77,9 +74,7 @@ async def test_s2_streaming_order(agent_deps: AgentRunnerDeps, workspace: Path) 
 @pytest.mark.e2e
 @pytest.mark.asyncio
 async def test_s3_bash_tool_call(agent_deps: AgentRunnerDeps, workspace: Path) -> None:
-    req = _make_request(
-        "Run the bash command: echo PYCLAW_BASH_OK and show me the output."
-    )
+    req = _make_request("Run the bash command: echo PYCLAW_BASH_OK and show me the output.")
     events = await _collect(req, agent_deps, workspace)
 
     errors = [e for e in events if isinstance(e, ErrorEvent)]
@@ -92,17 +87,11 @@ async def test_s3_bash_tool_call(agent_deps: AgentRunnerDeps, workspace: Path) -
     assert any(e.name == "bash" for e in starts), "expected bash tool to be called"
     assert ends, "expected at least one ToolCallEnd"
 
-    bash_results = [
-        e for e in ends
-        if not e.result.is_error
-    ]
+    bash_results = [e for e in ends if not e.result.is_error]
     assert bash_results, "expected at least one successful bash result"
 
     all_tool_output = " ".join(
-        block.text
-        for e in ends
-        for block in e.result.content
-        if hasattr(block, "text")
+        block.text for e in ends for block in e.result.content if hasattr(block, "text")
     )
     assert "PYCLAW_BASH_OK" in all_tool_output, (
         f"expected PYCLAW_BASH_OK in tool output, got: {all_tool_output[:200]}"
@@ -132,18 +121,14 @@ async def test_s4_file_read_write(agent_deps: AgentRunnerDeps, workspace: Path) 
     greeting = workspace / "greeting.txt"
     assert greeting.exists(), f"greeting.txt was not created in {workspace}"
     content = greeting.read_text(encoding="utf-8")
-    assert "Hello from PyClaw" in content, (
-        f"unexpected file content: {content!r}"
-    )
+    assert "Hello from PyClaw" in content, f"unexpected file content: {content!r}"
 
     assert any(isinstance(e, Done) for e in events)
 
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
-async def test_s5_multi_tool_multi_turn(
-    agent_deps: AgentRunnerDeps, workspace: Path
-) -> None:
+async def test_s5_multi_tool_multi_turn(agent_deps: AgentRunnerDeps, workspace: Path) -> None:
     req = _make_request(
         "Write a Python script named add.py that prints the sum of 3 and 7. "
         "Then run it with bash and confirm the output is 10."
@@ -175,9 +160,7 @@ async def test_s5_multi_tool_multi_turn(
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
-async def test_s6_session_persistence(
-    agent_deps: AgentRunnerDeps, workspace: Path
-) -> None:
+async def test_s6_session_persistence(agent_deps: AgentRunnerDeps, workspace: Path) -> None:
     session_id = secrets.token_hex(8)
     keyword = "PYCLAW_SECRET_" + secrets.token_hex(4).upper()
 
@@ -201,6 +184,5 @@ async def test_s6_session_persistence(
     assert done2 is not None, "second turn must yield Done"
 
     assert keyword in done2.final_message, (
-        f"expected keyword {keyword!r} in second turn response, "
-        f"got: {done2.final_message!r}"
+        f"expected keyword {keyword!r} in second turn response, got: {done2.final_message!r}"
     )

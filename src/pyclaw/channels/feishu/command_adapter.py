@@ -35,7 +35,7 @@ class FeishuCommandAdapter:
         session_id: str,
         message_id: str,
         event: Any,
-        ctx: "FeishuContext",
+        ctx: FeishuContext,
     ) -> bool:
         if not text or not text.strip().startswith("/"):
             return False
@@ -45,13 +45,9 @@ class FeishuCommandAdapter:
         if spec is None:
             return False
 
-        sender = (
-            event.event.sender if event.event and event.event.sender else None
-        )
+        sender = event.event.sender if event.event and event.event.sender else None
         open_id = (
-            (sender.sender_id.open_id or "unknown")
-            if sender and sender.sender_id
-            else "unknown"
+            (sender.sender_id.open_id or "unknown") if sender and sender.sender_id else "unknown"
         )
         workspace_id = session_key.replace(":", "_")
 
@@ -68,8 +64,7 @@ class FeishuCommandAdapter:
             from pyclaw.channels.feishu.handler import _dispatch_and_reply
 
             new_sid = (
-                await ctx.session_router.store.get_current_session_id(session_key)
-                or session_id
+                await ctx.session_router.store.get_current_session_id(session_key) or session_id
             )
             workspace_path = ctx.workspace_base / workspace_id
             inbound = InboundMessage(
@@ -80,14 +75,10 @@ class FeishuCommandAdapter:
             )
 
             async def _run_followup() -> None:
-                await _dispatch_and_reply(
-                    inbound, ctx, message_id, workspace_path, ""
-                )
+                await _dispatch_and_reply(inbound, ctx, message_id, workspace_path, "")
                 await ctx.session_router.update_last_interaction(new_sid)
 
-            assert ctx.queue_registry is not None, (
-                "queue_registry must be set on FeishuContext"
-            )
+            assert ctx.queue_registry is not None, "queue_registry must be set on FeishuContext"
             await ctx.queue_registry.enqueue(new_sid, _run_followup())
 
         last_usage: dict[str, int] | None = None

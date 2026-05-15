@@ -66,9 +66,7 @@ class SopCandidateTracker:
         self._last_user_msg.pop(session_id, None)
         logger.debug("cleaned up tracker state for session %s", session_id)
 
-    async def before_prompt_build(
-        self, context: PromptBuildContext
-    ) -> PromptBuildResult | None:
+    async def before_prompt_build(self, context: PromptBuildContext) -> PromptBuildResult | None:
         """Capture the user prompt for the matching after_response call."""
         if not self._settings.enabled:
             return None
@@ -138,9 +136,7 @@ class SopCandidateTracker:
 
         items: list[tuple[str, float]] = []
         for field_name, value in all_entries.items():
-            field_str = (
-                field_name.decode() if isinstance(field_name, bytes) else field_name
-            )
+            field_str = field_name.decode() if isinstance(field_name, bytes) else field_name
             value_str = value.decode() if isinstance(value, bytes) else value
             try:
                 parsed = json.loads(value_str)
@@ -165,9 +161,7 @@ class SopCandidateTracker:
     async def before_compaction(self, context: CompactionContext) -> None:
         return None
 
-    async def after_compaction(
-        self, context: CompactionContext, result: CompactResult
-    ) -> None:
+    async def after_compaction(self, context: CompactionContext, result: CompactResult) -> None:
         try:
             if not self._settings.enabled:
                 return None

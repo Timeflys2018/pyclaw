@@ -50,7 +50,9 @@ class FeishuQueueRegistry:
     def set_last_usage(self, session_id: str, usage: dict[str, int] | None) -> None:
         if not usage:
             return
-        self._last_usage[session_id] = {str(k): int(v) for k, v in usage.items() if isinstance(v, (int, float))}
+        self._last_usage[session_id] = {
+            str(k): int(v) for k, v in usage.items() if isinstance(v, (int, float))
+        }
 
     def get_last_usage(self, session_id: str) -> dict[str, int] | None:
         return self._last_usage.get(session_id)

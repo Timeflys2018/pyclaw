@@ -183,9 +183,7 @@ async def run_curator_scan(
 
     check_alive()
     db_files = sorted(
-        f
-        for f in memory_base_dir.glob("*.db")
-        if not f.name.endswith(("-wal", "-shm"))
+        f for f in memory_base_dir.glob("*.db") if not f.name.endswith(("-wal", "-shm"))
     )
 
     report = CuratorReport(total_scanned=len(db_files))
@@ -194,7 +192,13 @@ async def run_curator_scan(
     async def _bounded_scan(db_file: Path) -> tuple[int, int]:
         async with semaphore:
             check_alive()
-            return await _scan_single_db(db_file, archive_days, l1_index, workspace_base_dir=workspace_base_dir, settings=settings)
+            return await _scan_single_db(
+                db_file,
+                archive_days,
+                l1_index,
+                workspace_base_dir=workspace_base_dir,
+                settings=settings,
+            )
 
     results = await asyncio.gather(
         *[_bounded_scan(f) for f in db_files],
@@ -276,12 +280,14 @@ async def _scan_single_db(
             try:
                 conn.execute("PRAGMA journal_mode=WAL")
                 register_jieba_tokenizer(conn)
-                rows = list(conn.execute(
-                    "SELECT id, session_key, content FROM procedures "
-                    "WHERE type='auto_sop' AND status='active' "
-                    "AND use_count >= ? AND created_at <= ?",
-                    (min_use, min_days_ts),
-                ))
+                rows = list(
+                    conn.execute(
+                        "SELECT id, session_key, content FROM procedures "
+                        "WHERE type='auto_sop' AND status='active' "
+                        "AND use_count >= ? AND created_at <= ?",
+                        (min_use, min_days_ts),
+                    )
+                )
                 return [(str(r[0]), str(r[1]), str(r[2])) for r in rows]
             finally:
                 conn.close()
@@ -356,9 +362,7 @@ class ReviewOutcome:
         return self.promoted_count + self.archived_count
 
 
-async def should_run_llm_review(
-    settings: Any, state_store: CuratorStateStore
-) -> bool:
+async def should_run_llm_review(settings: Any, state_store: CuratorStateStore) -> bool:
     if not settings.llm_review_enabled:
         return False
 
@@ -401,31 +405,34 @@ async def run_llm_review(
     conn = await asyncio.to_thread(_open_review_db, db_file)
 
     try:
+
         def _get_entries() -> list[tuple[str, str, str, int]]:
-            rows = list(conn.execute(
-                "SELECT id, session_key, content, use_count FROM procedures "
-                "WHERE type='auto_sop' AND status='active' "
-                "ORDER BY use_count DESC LIMIT ?",
-                (settings.llm_review_max_batch,),
-            ))
+            rows = list(
+                conn.execute(
+                    "SELECT id, session_key, content, use_count FROM procedures "
+                    "WHERE type='auto_sop' AND status='active' "
+                    "ORDER BY use_count DESC LIMIT ?",
+                    (settings.llm_review_max_batch,),
+                )
+            )
             return [(str(r[0]), str(r[1]), str(r[2]), int(r[3] or 0)) for r in rows]
 
         entries = await asyncio.to_thread(_get_entries)
         if not entries:
             return ReviewOutcome(
-                db_file=db_file, entries_reviewed=0,
-                promoted_count=0, archived_count=0, failed_count=0,
+                db_file=db_file,
+                entries_reviewed=0,
+                promoted_count=0,
+                archived_count=0,
+                failed_count=0,
             )
 
         entries_text = "\n".join(
-            f"[id={eid}, use_count={uc}]\n{content[:200]}\n---"
-            for eid, _sk, content, uc in entries
+            f"[id={eid}, use_count={uc}]\n{content[:200]}\n---" for eid, _sk, content, uc in entries
         )
         actions_text = "/".join(settings.llm_review_actions)
 
-        prompt = REVIEW_PROMPT_TEMPLATE.format(
-            actions=actions_text, entries=entries_text
-        )
+        prompt = REVIEW_PROMPT_TEMPLATE.format(actions=actions_text, entries=entries_text)
 
         model = settings.llm_review_model
         check_alive()
@@ -441,8 +448,11 @@ async def run_llm_review(
         except Exception as exc:
             logger.warning("LLM review call failed: %s", exc)
             return ReviewOutcome(
-                db_file=db_file, entries_reviewed=len(entries),
-                promoted_count=0, archived_count=0, failed_count=1,
+                db_file=db_file,
+                entries_reviewed=len(entries),
+                promoted_count=0,
+                archived_count=0,
+                failed_count=1,
             )
 
         decisions = _parse_review_decisions(llm_output, settings.llm_review_actions)
@@ -458,7 +468,10 @@ async def run_llm_review(
 
             if decision.decision == "promote" and "promote" in settings.llm_review_actions:
                 if not getattr(settings, "graduation_enabled", True):
-                    logger.info("LLM review suggests promote for %s but graduation disabled", decision.id[:8])
+                    logger.info(
+                        "LLM review suggests promote for %s but graduation disabled",
+                        decision.id[:8],
+                    )
                     continue
 
                 from pyclaw.core.skill_graduation import graduate_single_sop
@@ -475,9 +488,7 @@ async def run_llm_review(
                     eid_promote = decision.id
 
                     def _mark_graduated(eid: str = eid_promote) -> None:
-                        conn.execute(
-                            "UPDATE procedures SET status='graduated' WHERE id=?", (eid,)
-                        )
+                        conn.execute("UPDATE procedures SET status='graduated' WHERE id=?", (eid,))
 
                     check_alive()
                     await asyncio.to_thread(_mark_graduated)
@@ -496,7 +507,9 @@ async def run_llm_review(
                 reason_text = f"llm_review: {decision.reason[:100]}"
                 now = time.time()
 
-                def _mark_archived(eid: str = eid_archive, reason: str = reason_text, ts: float = now) -> None:
+                def _mark_archived(
+                    eid: str = eid_archive, reason: str = reason_text, ts: float = now
+                ) -> None:
                     conn.execute(
                         "UPDATE procedures SET status='archived', archived_at=?, archive_reason=? WHERE id=?",
                         (ts, reason, eid),
@@ -523,9 +536,7 @@ async def run_llm_review(
         conn.close()
 
 
-def _parse_review_decisions(
-    llm_output: str, allowed_actions: list[str]
-) -> list[ReviewDecision]:
+def _parse_review_decisions(llm_output: str, allowed_actions: list[str]) -> list[ReviewDecision]:
     text = llm_output.strip()
     fence_match = re.search(r"```(?:json)?\s*\n?([\s\S]*?)\n?\s*```", text)
     if fence_match:

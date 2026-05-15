@@ -52,10 +52,10 @@ class DistributedMutex:
 
     def __init__(
         self,
-        lock_manager: "RedisLockManager",
+        lock_manager: RedisLockManager,
         key: str,
         *,
-        task_manager: "TaskManager",
+        task_manager: TaskManager,
         ttl_ms: int = 30_000,
         heartbeat_interval_s: float = 10.0,
         owner_label: str = "",
@@ -63,9 +63,7 @@ class DistributedMutex:
         if ttl_ms <= 0:
             raise ValueError(f"ttl_ms must be positive, got {ttl_ms}")
         if heartbeat_interval_s <= 0:
-            raise ValueError(
-                f"heartbeat_interval_s must be positive, got {heartbeat_interval_s}"
-            )
+            raise ValueError(f"heartbeat_interval_s must be positive, got {heartbeat_interval_s}")
         interval_ms = heartbeat_interval_s * 1000
         if interval_ms >= ttl_ms / 2:
             raise ValueError(
@@ -110,7 +108,7 @@ class DistributedMutex:
         if self.lost:
             raise LockLostError(self._key)
 
-    async def __aenter__(self) -> "DistributedMutex":
+    async def __aenter__(self) -> DistributedMutex:
         self._token = await self._lock_manager.acquire(self._key, self._ttl_ms)
         self._lock_lost_event = asyncio.Event()
         hb_name = f"mutex-heartbeat:{self._key}"
@@ -129,7 +127,9 @@ class DistributedMutex:
             except Exception:
                 logger.debug(
                     "mutex heartbeat cancel errored (benign) key=%s owner=%s",
-                    self._key, self._owner_label, exc_info=True,
+                    self._key,
+                    self._owner_label,
+                    exc_info=True,
                 )
             self._consume_heartbeat_exception()
         if self._token is not None:
@@ -138,7 +138,9 @@ class DistributedMutex:
             except Exception:
                 logger.debug(
                     "mutex release errored (benign) key=%s owner=%s",
-                    self._key, self._owner_label, exc_info=True,
+                    self._key,
+                    self._owner_label,
+                    exc_info=True,
                 )
 
     def _consume_heartbeat_exception(self) -> None:
@@ -173,25 +175,30 @@ class DistributedMutex:
                 await asyncio.sleep(self._heartbeat_interval_s)
                 try:
                     ok = await self._lock_manager.renew(
-                        self._key, self._token, self._ttl_ms,
+                        self._key,
+                        self._token,
+                        self._ttl_ms,
                     )
                 except (
+                    TimeoutError,
                     redis.exceptions.ConnectionError,
                     redis.exceptions.TimeoutError,
-                    asyncio.TimeoutError,
                     OSError,
                 ) as exc:
                     self._lock_lost_event.set()
                     logger.error(
                         "mutex heartbeat renew network error key=%s owner=%s",
-                        self._key, self._owner_label, exc_info=True,
+                        self._key,
+                        self._owner_label,
+                        exc_info=True,
                     )
                     raise LockLostError(self._key) from exc
                 if not ok:
                     self._lock_lost_event.set()
                     logger.error(
                         "mutex heartbeat renew CAS failed key=%s owner=%s",
-                        self._key, self._owner_label,
+                        self._key,
+                        self._owner_label,
                     )
                     raise LockLostError(self._key)
         except asyncio.CancelledError:

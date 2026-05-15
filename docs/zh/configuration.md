@@ -112,6 +112,8 @@ PyClaw 启动时按以下顺序查找配置文件:
       "heartbeatInterval": 30,
       "pongTimeout": 10,
       "maxConnectionsPerUser": 3,
+      "defaultPermissionTier": "approval",
+      "toolApprovalTimeoutSeconds": 60,
       "toolsRequiringApproval": ["bash", "write", "edit"],
       "corsOrigins": ["https://chat.example.com"],
       "users": [{ "id": "alice", "password": "$ARGON2_HASH..." }]
@@ -128,7 +130,11 @@ PyClaw 启动时按以下顺序查找配置文件:
   1. 启动前用 `envsubst` 模板渲染
   2. 用环境变量直接覆盖 (见 [环境变量覆盖](#环境变量覆盖))
 - `web.maxConnectionsPerUser: 3` — 同账号同时 3 个 WebSocket; 防滥用
-- `web.toolsRequiringApproval` — 列表里的工具调用前会弹窗等用户确认; 写入类工具默认在列
+- `web.defaultPermissionTier` — `"read-only" | "approval" | "yolo"`(默认
+  `"approval"`)。Read-only 直接拒写类工具,approval 门控下方列表,yolo 跳过门控。
+  详见[权限指南](./permissions.md)
+- `web.toolApprovalTimeoutSeconds` — 用户多少秒不响应自动拒(默认 `60`)
+- `web.toolsRequiringApproval` — 列表里的工具调用前会弹窗等用户确认; 写入类工具默认在列(`["bash", "write", "edit"]`)
 - `web.corsOrigins` — 严格 CORS, 必须列出真实前端域名
 
 ---
@@ -374,7 +380,9 @@ PyClaw 的招牌特性 — 4 层记忆 (L1 Redis 索引 + L2/L3 SQLite FTS5 + L4
 | `heartbeatInterval` / `heartbeat_interval` | 30 | WS 心跳间隔 (秒) |
 | `pongTimeout` / `pong_timeout` | 10 | pong 超时 (秒); 超时认为连接死 |
 | `maxConnectionsPerUser` / `max_connections_per_user` | 3 | 同账号最大 WS 连接数 |
-| `toolsRequiringApproval` / `tools_requiring_approval` | `["bash", "write"]` | 调用前需用户确认的工具 |
+| `defaultPermissionTier` / `default_permission_tier` | `"approval"` | 权限 tier:`read-only` / `approval` / `yolo` |
+| `toolApprovalTimeoutSeconds` / `tool_approval_timeout_seconds` | `60` | 用户不响应几秒后自动拒 |
+| `toolsRequiringApproval` / `tools_requiring_approval` | `["bash", "write", "edit"]` | `approval` tier 下触发审批 modal 的工具 |
 | `allowedTools` / `allowed_tools` | `["read"]` | 白名单; 只 web channel 能用的工具 |
 | `corsOrigins` / `cors_origins` | `["http://localhost:5173"]` | CORS 允许的源 |
 | `users` | `[]` | `[{id, password}]`; 明文密码 (生产请用 hash) |

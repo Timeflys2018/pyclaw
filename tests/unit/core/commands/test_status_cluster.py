@@ -44,9 +44,7 @@ def _make_gateway_router(owner: str | None, my_worker_id: str = "worker:host:123
 class TestClusterSection:
     @pytest.mark.asyncio
     async def test_no_cluster_when_worker_registry_none(self) -> None:
-        output = await format_session_status(
-            "user1", "web:user1:s:abc123", _build_deps()
-        )
+        output = await format_session_status("user1", "web:user1:s:abc123", _build_deps())
         assert "🏗️" not in output
         assert "Cluster" not in output
 
@@ -61,51 +59,92 @@ class TestClusterSection:
 
     @pytest.mark.asyncio
     async def test_affinity_mine_shown_with_check(self) -> None:
-        wr = _make_worker_registry(available=True, workers=[
-            {"id": "worker:host:1234:abcd", "status": "healthy", "last_heartbeat": 0, "age_seconds": 5},
-        ])
+        wr = _make_worker_registry(
+            available=True,
+            workers=[
+                {
+                    "id": "worker:host:1234:abcd",
+                    "status": "healthy",
+                    "last_heartbeat": 0,
+                    "age_seconds": 5,
+                },
+            ],
+        )
         gr = _make_gateway_router(owner="worker:host:1234:abcd")
         output = await format_session_status(
-            "user1", "web:user1:s:abc123", _build_deps(),
-            worker_registry=wr, gateway_router=gr,
+            "user1",
+            "web:user1:s:abc123",
+            _build_deps(),
+            worker_registry=wr,
+            gateway_router=gr,
         )
         assert "本 worker" in output
         assert "✅" in output
 
     @pytest.mark.asyncio
     async def test_affinity_other_worker_displayed(self) -> None:
-        wr = _make_worker_registry(available=True, workers=[
-            {"id": "worker:host:1234:abcd", "status": "healthy", "last_heartbeat": 0, "age_seconds": 5},
-            {"id": "worker:host:5678:efgh", "status": "healthy", "last_heartbeat": 0, "age_seconds": 5},
-        ])
+        wr = _make_worker_registry(
+            available=True,
+            workers=[
+                {
+                    "id": "worker:host:1234:abcd",
+                    "status": "healthy",
+                    "last_heartbeat": 0,
+                    "age_seconds": 5,
+                },
+                {
+                    "id": "worker:host:5678:efgh",
+                    "status": "healthy",
+                    "last_heartbeat": 0,
+                    "age_seconds": 5,
+                },
+            ],
+        )
         gr = _make_gateway_router(owner="worker:host:5678:efgh")
         output = await format_session_status(
-            "user1", "web:user1:s:abc123", _build_deps(),
-            worker_registry=wr, gateway_router=gr,
+            "user1",
+            "web:user1:s:abc123",
+            _build_deps(),
+            worker_registry=wr,
+            gateway_router=gr,
         )
         assert "worker:host:5678:efgh" in output
         assert "本 worker" not in output
 
     @pytest.mark.asyncio
     async def test_affinity_unbound_when_no_owner(self) -> None:
-        wr = _make_worker_registry(available=True, workers=[
-            {"id": "worker:host:1234:abcd", "status": "healthy", "last_heartbeat": 0, "age_seconds": 5},
-        ])
+        wr = _make_worker_registry(
+            available=True,
+            workers=[
+                {
+                    "id": "worker:host:1234:abcd",
+                    "status": "healthy",
+                    "last_heartbeat": 0,
+                    "age_seconds": 5,
+                },
+            ],
+        )
         gr = _make_gateway_router(owner=None)
         output = await format_session_status(
-            "user1", "web:user1:s:abc123", _build_deps(),
-            worker_registry=wr, gateway_router=gr,
+            "user1",
+            "web:user1:s:abc123",
+            _build_deps(),
+            worker_registry=wr,
+            gateway_router=gr,
         )
         assert "未绑定" in output
 
     @pytest.mark.asyncio
     async def test_cluster_count_with_stale_and_dead(self) -> None:
-        wr = _make_worker_registry(available=True, workers=[
-            {"id": "w1", "status": "healthy", "last_heartbeat": 0, "age_seconds": 5},
-            {"id": "w2", "status": "healthy", "last_heartbeat": 0, "age_seconds": 5},
-            {"id": "w3", "status": "stale", "last_heartbeat": 0, "age_seconds": 100},
-            {"id": "w4", "status": "dead", "last_heartbeat": 0, "age_seconds": 200},
-        ])
+        wr = _make_worker_registry(
+            available=True,
+            workers=[
+                {"id": "w1", "status": "healthy", "last_heartbeat": 0, "age_seconds": 5},
+                {"id": "w2", "status": "healthy", "last_heartbeat": 0, "age_seconds": 5},
+                {"id": "w3", "status": "stale", "last_heartbeat": 0, "age_seconds": 100},
+                {"id": "w4", "status": "dead", "last_heartbeat": 0, "age_seconds": 200},
+            ],
+        )
         output = await format_session_status(
             "user1", "web:user1:s:abc123", _build_deps(), worker_registry=wr
         )
@@ -115,14 +154,20 @@ class TestClusterSection:
 
     @pytest.mark.asyncio
     async def test_resolve_failure_does_not_break_status(self) -> None:
-        wr = _make_worker_registry(available=True, workers=[
-            {"id": "w1", "status": "healthy", "last_heartbeat": 0, "age_seconds": 5},
-        ])
+        wr = _make_worker_registry(
+            available=True,
+            workers=[
+                {"id": "w1", "status": "healthy", "last_heartbeat": 0, "age_seconds": 5},
+            ],
+        )
         gr = _make_gateway_router(owner="w1")
         gr.affinity.resolve = AsyncMock(side_effect=ConnectionError("redis down"))
         output = await format_session_status(
-            "user1", "web:user1:s:abc123", _build_deps(),
-            worker_registry=wr, gateway_router=gr,
+            "user1",
+            "web:user1:s:abc123",
+            _build_deps(),
+            worker_registry=wr,
+            gateway_router=gr,
         )
         assert "🏗️" in output
         assert "1 健康" in output

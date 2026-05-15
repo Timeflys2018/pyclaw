@@ -234,7 +234,8 @@ graph TB
 | **上下文引擎** | ✅ | Frozen/Per-Turn 拆分、记忆检索、L1 snapshot、Prompt 预算 |
 | **会话存储** | ✅ | Redis（生产）+ InMemory（开发）、SessionKey/SessionId 轮换、DAG 树 |
 | **飞书渠道** | ✅ | WebSocket 集群（最多 50 worker）、CardKit 流式、斜杠命令 |
-| **Web 渠道** | ✅ | React 19 SPA · Linear/Cursor 视觉 · 执行轨迹 · 多模态 · ⌘K 命令面板 · 键盘快捷键 · 会话 CRUD · OpenAI 兼容 SSE · JWT 认证 · 工具审批 |
+| **Web 渠道** | ✅ | React 19 SPA · Linear/Cursor 视觉 · 执行轨迹 · 多模态 · ⌘K 命令面板 · 键盘快捷键 · 会话 CRUD · OpenAI 兼容 SSE · JWT 认证 · **工具审批 modal + 三档权限 (read-only / approval / yolo)** |
+| **工具审批** | ✅ | 端到端接通: WebToolApprovalHook + 飞书 CardKit 交互卡片 (originator-only 授权) · per-turn 切档 · 结构化 JSON audit log。见[权限指南](./docs/zh/permissions.md) |
 | **Skill Hub** | ✅ | ClawHub 兼容、渐进式披露、5 层目录发现、`pyclaw-skill` CLI |
 | **Prompt 工程** | ✅ | `PromptBudgetConfig`、Frozen 缓存、优先级截断 |
 | **TaskManager** | ✅ | 集中式异步任务生命周期、K8s 级优雅关闭 |
@@ -362,6 +363,7 @@ PyClaw 用单个 `pyclaw.json` 描述所有运行时配置，按 `./pyclaw.json`
 
 - **[配置参考（中文）](./docs/zh/configuration.md)** · **[Configuration reference (EN)](./docs/en/configuration.md)** — 所有 Settings 字段、env-var 覆盖映射、按场景的最小可用 JSON
 - **[部署指南（中文）](./docs/zh/deployment.md)** · **[Deployment guide (EN)](./docs/en/deployment.md)** — 本地 dev、单实例 Docker、3-worker active-active（含可跑的 [`deploy/docker-compose.multi.yml`](./deploy/docker-compose.multi.yml)）、无 Docker 的 `make worker[1-3]`
+- **[权限与工具审批（中文）](./docs/zh/permissions.md)** · **[Permissions & tool approval (EN)](./docs/en/permissions.md)** — 三档权限（`read-only` / `approval` / `yolo`）、各 channel UX（Web modal vs 飞书 CardKit）、audit log schema
 - **[`configs/pyclaw.example.json`](./configs/pyclaw.example.json)** — 完整可执行模板（167 行）
 
 ---

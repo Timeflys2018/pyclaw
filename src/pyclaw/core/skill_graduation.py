@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -54,7 +54,7 @@ def generate_skill_md_template(
     session_key: str,
 ) -> str:
     """Generate SKILL.md content using pure template (no LLM)."""
-    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     safe_desc = description.replace('"', '\\"')
 
@@ -113,7 +113,7 @@ async def generate_skill_md_enrich(
         )
         if response and response.text and len(response.text) > 100:
             return response.text
-    except (asyncio.TimeoutError, Exception) as exc:
+    except (TimeoutError, Exception) as exc:
         logger.warning(
             "Skill enrich LLM failed for '%s': %s, falling back to template",
             name,
@@ -156,9 +156,7 @@ def graduate_single_sop(
     try:
         existing_skills = discover_skills(workspace_path)
         if any(s.name == name for s in existing_skills):
-            logger.info(
-                "Skill '%s' already exists from another source, skipping graduation", name
-            )
+            logger.info("Skill '%s' already exists from another source, skipping graduation", name)
             return False, None
     except Exception:
         pass  # Discovery failure should not block graduation

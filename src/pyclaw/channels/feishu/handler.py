@@ -8,9 +8,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from pyclaw.channels.feishu.dispatch import dispatch_message
 from pyclaw.channels.base import InboundMessage
 from pyclaw.channels.feishu.dedup import FeishuDedup
+from pyclaw.channels.feishu.dispatch import dispatch_message
 from pyclaw.channels.feishu.multimodal import feishu_image_to_block
 from pyclaw.channels.feishu.queue import FeishuQueueRegistry
 from pyclaw.channels.session_router import SessionRouter
@@ -31,6 +31,7 @@ _reaction_last_handled: dict[str, float] = {}
 
 async def _affinity_renew_loop(affinity: Any, session_key: str, interval_s: int) -> None:
     import asyncio
+
     while True:
         try:
             await asyncio.sleep(interval_s)
@@ -75,7 +76,9 @@ async def handle_feishu_reaction_created(event: Any, ctx: FeishuContext) -> None
             user_open_id = getattr(data.user_id, "open_id", "") or ""
         logger.info(
             "reaction received: msg=%s emoji=%s user=%s",
-            message_id, emoji_type, user_open_id,
+            message_id,
+            emoji_type,
+            user_open_id,
         )
         if not (message_id and emoji_type and user_open_id):
             logger.info("reaction: skip (missing required fields)")
@@ -89,12 +92,11 @@ async def handle_feishu_reaction_created(event: Any, ctx: FeishuContext) -> None
         session_key = f"feishu:{ctx.settings.app_id}:{user_open_id}"
         workspace_id = session_key.replace(":", "_")
         workspace_path = ctx.workspace_base / workspace_id
-        session_id = (
-            await ctx.session_router.store.get_current_session_id(session_key)
-        )
+        session_id = await ctx.session_router.store.get_current_session_id(session_key)
         if session_id is None:
             logger.info(
-                "reaction: skip (no active session for session_key=%s)", session_key,
+                "reaction: skip (no active session for session_key=%s)",
+                session_key,
             )
             return
         if ctx.queue_registry is None:
@@ -116,7 +118,8 @@ async def handle_feishu_reaction_created(event: Any, ctx: FeishuContext) -> None
         await ctx.queue_registry.enqueue(session_id, _run(), owner=session_key)
         logger.info(
             "reaction: dispatched synthetic prompt for emoji=%s msg=%s",
-            emoji_type, message_id,
+            emoji_type,
+            message_id,
         )
     except Exception:
         logger.exception("handle_feishu_reaction_created failed")
@@ -145,6 +148,9 @@ class FeishuContext:
     gateway_router: Any = None
     task_manager: Any = None
     worker_registry: Any = None
+    tool_approval_hook: Any = None
+    approval_registry: Any = None
+    audit_logger: Any = None
 
 
 def _to_jsonable(obj: Any) -> Any:
@@ -165,7 +171,9 @@ def serialize_event(event: Any) -> dict[str, Any]:
     try:
         payload = _to_jsonable(event)
         if not isinstance(payload, dict):
-            logger.warning("feishu event serialized to non-dict (%s); wrapping", type(payload).__name__)
+            logger.warning(
+                "feishu event serialized to non-dict (%s); wrapping", type(payload).__name__
+            )
             payload = {}
     except Exception:
         logger.exception("failed to serialize feishu event for forwarding")
@@ -198,10 +206,7 @@ build_session_id = build_session_key
 
 def is_bot_mentioned(event: Any, bot_open_id: str) -> bool:
     mentions = (event.event.message.mentions or []) if event.event and event.event.message else []
-    return any(
-        m.id and m.id.open_id == bot_open_id
-        for m in mentions
-    )
+    return any(m.id and m.id.open_id == bot_open_id for m in mentions)
 
 
 def extract_text_and_images_from_event(event: Any) -> tuple[str | None, list[str]]:
@@ -212,7 +217,8 @@ def extract_text_and_images_from_event(event: Any) -> tuple[str | None, list[str
     content_str = msg.content or ""
     logger.debug(
         "extract_text_and_images: msg_type=%s raw_content=%r",
-        msg_type, content_str[:2000],
+        msg_type,
+        content_str[:2000],
     )
 
     if msg_type == "text":
@@ -262,19 +268,13 @@ def extract_text_and_images_from_event(event: Any) -> tuple[str | None, list[str
                         if not isinstance(span, dict):
                             continue
                         tag = span.get("tag")
-                        if tag == "text":
-                            text_parts.append(str(span.get("text", "")))
-                        elif tag == "a":
+                        if tag == "text" or tag == "a":
                             text_parts.append(str(span.get("text", "")))
                         elif tag == "at":
                             user_name = span.get("user_name")
                             if user_name:
                                 text_parts.append(f"@{user_name}")
-                        elif tag == "img":
-                            key = span.get("image_key")
-                            if key:
-                                image_keys.append(str(key))
-                        elif tag == "media":
+                        elif tag == "img" or tag == "media":
                             key = span.get("image_key")
                             if key:
                                 image_keys.append(str(key))
@@ -301,7 +301,7 @@ async def build_group_context(client: FeishuClient, chat_id: str, size: int) -> 
     return "\n".join(lines)
 
 
-async def handle_stop_feishu(ctx: "FeishuContext", session_id: str, message_id: str) -> None:
+async def handle_stop_feishu(ctx: FeishuContext, session_id: str, message_id: str) -> None:
     assert ctx.queue_registry is not None, "queue_registry must be set on FeishuContext"
     rc = ctx.queue_registry.get_run_control(session_id)
     if rc.is_active():
@@ -313,7 +313,7 @@ async def handle_stop_feishu(ctx: "FeishuContext", session_id: str, message_id: 
 
 
 async def _handle_injection_feishu(
-    ctx: "FeishuContext",
+    ctx: FeishuContext,
     session_id: str,
     message_id: str,
     args: str,
@@ -349,7 +349,7 @@ async def _handle_injection_feishu(
 
 
 async def handle_steer_feishu(
-    ctx: "FeishuContext", session_id: str, message_id: str, args: str
+    ctx: FeishuContext, session_id: str, message_id: str, args: str
 ) -> None:
     await _handle_injection_feishu(
         ctx,
@@ -364,7 +364,7 @@ async def handle_steer_feishu(
 
 
 async def handle_btw_feishu(
-    ctx: "FeishuContext", session_id: str, message_id: str, args: str
+    ctx: FeishuContext, session_id: str, message_id: str, args: str
 ) -> None:
     await _handle_injection_feishu(
         ctx,
@@ -400,9 +400,7 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         session_key_for_route = build_session_key(
             ctx.settings.app_id, event, ctx.settings.session_scope
         )
-        route_result = await ctx.gateway_router.route(
-            session_key_for_route, serialize_event(event)
-        )
+        route_result = await ctx.gateway_router.route(session_key_for_route, serialize_event(event))
         if route_result == "forwarded":
             logger.info("forwarded message %s to owning worker", message_id)
             return
@@ -416,7 +414,8 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
     if len(image_keys) > 5:
         logger.warning(
             "feishu message %s has %d images, truncating to 5",
-            message_id, len(image_keys),
+            message_id,
+            len(image_keys),
         )
         image_keys = image_keys[:5]
 
@@ -428,7 +427,8 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         except Exception:
             logger.exception(
                 "failed to download image %s for message %s",
-                image_key, message_id,
+                image_key,
+                message_id,
             )
 
     if text is None and not attachments:
@@ -441,9 +441,7 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
 
     session_id, _ = await ctx.session_router.resolve_or_create(session_key, workspace_id)
 
-    idle_minutes = (
-        ctx.settings.idle_minutes
-    )
+    idle_minutes = ctx.settings.idle_minutes
     _tree = await ctx.session_router.store.load(session_id)
     if _tree and _tree.header.idle_minutes_override is not None:
         idle_minutes = _tree.header.idle_minutes_override
@@ -470,7 +468,7 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
         m = PROTOCOL_OP_PREFIX_REGEX.match(lowered_text)
         if m is not None:
             prefix = m.group(1)
-            args = stripped_text[m.end():].strip()
+            args = stripped_text[m.end() :].strip()
             if prefix == "/steer":
                 await handle_steer_feishu(ctx, session_id, message_id, args)
                 return
@@ -480,6 +478,7 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
 
     if text is not None and text.startswith("/"):
         from pyclaw.channels.feishu.command_adapter import FeishuCommandAdapter
+
         adapter = FeishuCommandAdapter()
         handled = await adapter.handle(
             text=text,
@@ -495,7 +494,9 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
     extra_system_parts: list[str] = []
 
     if chat_type == "group" and ctx.settings.group_context == "recent":
-        group_ctx = await build_group_context(ctx.feishu_client, chat_id, ctx.settings.group_context_size)
+        group_ctx = await build_group_context(
+            ctx.feishu_client, chat_id, ctx.settings.group_context_size
+        )
         if group_ctx:
             extra_system_parts.append(
                 f"## 群组最近 {ctx.settings.group_context_size} 条消息\n{group_ctx}"
@@ -545,9 +546,14 @@ async def _dispatch_and_reply(
     extra_system: str,
 ) -> None:
     from pyclaw.channels.feishu.streaming import FeishuStreamingCard, StreamingConfig
+    from pyclaw.core.commands.tier_store import get_session_tier
 
     async def _fallback(reply_text: str) -> None:
         await ctx.feishu_client.reply_text(message_id, reply_text)
+
+    session_key_for_tier = inbound.session_id.split(":s:", 1)[0]
+    session_tier = await get_session_tier(ctx.redis_client, session_key_for_tier)
+    effective_tier = session_tier or ctx.settings.default_permission_tier
 
     sc = ctx.settings.streaming
     streaming_config = StreamingConfig(
@@ -573,8 +579,14 @@ async def _dispatch_and_reply(
     if use_card:
         await stream_agent_reply(
             dispatch_message(
-                inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system,
+                inbound,
+                ctx.deps,
+                workspace_path=workspace_path,
+                extra_system=extra_system,
                 queue_registry=ctx.queue_registry,
+                tool_approval_hook=ctx.tool_approval_hook,
+                permission_tier_override=effective_tier,
+                audit_logger=ctx.audit_logger,
             ),
             card=card,
             fallback_fn=_fallback,
@@ -582,8 +594,14 @@ async def _dispatch_and_reply(
     else:
         final_text = ""
         async for ev in dispatch_message(
-            inbound, ctx.deps, workspace_path=workspace_path, extra_system=extra_system,
+            inbound,
+            ctx.deps,
+            workspace_path=workspace_path,
+            extra_system=extra_system,
             queue_registry=ctx.queue_registry,
+            tool_approval_hook=ctx.tool_approval_hook,
+            permission_tier_override=effective_tier,
+            audit_logger=ctx.audit_logger,
         ):
             if isinstance(ev, Done):
                 final_text = ev.final_message
@@ -595,6 +613,8 @@ async def stream_agent_reply(
     card: FeishuStreamingCard,
     fallback_fn: Any,
 ) -> None:
+    from pyclaw.models.agent import ToolApprovalRequest
+
     accumulated = ""
     try:
         async for event in events:
@@ -604,6 +624,8 @@ async def stream_agent_reply(
             elif isinstance(event, ToolCallStart):
                 accumulated += f"\n🔧 {event.name}...\n"
                 await card.update(accumulated)
+            elif isinstance(event, ToolApprovalRequest):
+                continue
             elif isinstance(event, Done):
                 await card.finish(event.final_message)
                 return

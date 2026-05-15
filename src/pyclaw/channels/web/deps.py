@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from pyclaw.channels.web.chat import SessionQueue
     from pyclaw.channels.web.websocket import ConnectionRegistry
     from pyclaw.core.agent.runner import AgentRunnerDeps
+    from pyclaw.core.hooks import ToolApprovalHook
     from pyclaw.gateway.worker_registry import WorkerRegistry
     from pyclaw.infra.settings import Settings
     from pyclaw.storage.session.base import SessionStore
@@ -18,13 +19,13 @@ if TYPE_CHECKING:
 
 @dataclass
 class WebDeps:
-    session_store: "SessionStore"
-    session_router: "SessionRouter"
+    session_store: SessionStore
+    session_router: SessionRouter
     workspace_base: Path
-    runner_deps: "AgentRunnerDeps"
-    session_queue: "SessionQueue"
-    connection_registry: "ConnectionRegistry"
-    settings_full: "Settings"
+    runner_deps: AgentRunnerDeps
+    session_queue: SessionQueue
+    connection_registry: ConnectionRegistry
+    settings_full: Settings
 
     redis_client: Any = None
     memory_store: Any = None
@@ -33,13 +34,16 @@ class WebDeps:
     nudge_hook: Any = None
     llm_client: Any = None
     agent_settings: Any = None
-    worker_registry: "WorkerRegistry | None" = None
+    worker_registry: WorkerRegistry | None = None
     admin_user_ids: list[str] = field(default_factory=list)
+    tool_approval_hook: ToolApprovalHook | None = None
+    audit_logger: Any = None
 
 
 def get_web_deps(request: Request) -> WebDeps:
     deps = getattr(request.app.state, "web_deps", None)
     if deps is None:
         from fastapi import HTTPException
+
         raise HTTPException(500, "Web deps not configured")
     return deps

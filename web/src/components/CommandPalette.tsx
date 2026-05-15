@@ -9,6 +9,7 @@ export type PaletteAction =
   | { kind: 'toggle-theme' }
   | { kind: 'toggle-sidebar' }
   | { kind: 'show-shortcuts' }
+  | { kind: 'set-tier'; tier: 'read-only' | 'approval' | 'yolo' }
 
 export type PaletteSelection =
   | { kind: 'session'; sessionId: string }
@@ -77,6 +78,18 @@ export default function CommandPalette({
         label: 'Show keyboard shortcuts',
         shortcut: 'mod+/',
       },
+      {
+        action: { kind: 'set-tier', tier: 'read-only' },
+        label: 'Switch to Read-Only mode',
+      },
+      {
+        action: { kind: 'set-tier', tier: 'approval' },
+        label: 'Switch to Approval mode',
+      },
+      {
+        action: { kind: 'set-tier', tier: 'yolo' },
+        label: 'Switch to YOLO mode',
+      },
     ],
     [theme],
   )
@@ -99,7 +112,9 @@ export default function CommandPalette({
       (a) => a.label,
     ).map(({ item: a }) => ({
       group: 'actions',
-      key: `action:${a.action.kind}`,
+      key: a.action.kind === 'set-tier'
+        ? `action:set-tier:${a.action.tier}`
+        : `action:${a.action.kind}`,
       label: a.label,
       hint: a.shortcut,
       selection: { kind: 'action', action: a.action },

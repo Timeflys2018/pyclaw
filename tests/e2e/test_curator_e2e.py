@@ -48,9 +48,7 @@ async def redis_client():
     host = os.environ.get("PYCLAW_TEST_REDIS_HOST", "localhost")
     port = int(os.environ.get("PYCLAW_TEST_REDIS_PORT", "6379"))
     password = os.environ.get("PYCLAW_TEST_REDIS_PASSWORD") or None
-    client = aioredis.Redis(
-        host=host, port=port, password=password, decode_responses=True
-    )
+    client = aioredis.Redis(host=host, port=port, password=password, decode_responses=True)
     try:
         await client.ping()
     except Exception:
@@ -196,9 +194,7 @@ async def test_curator_loop_archives_expired_entries(
     conn = apsw.Connection(str(db_path))
     register_jieba_tokenizer(conn)
     row = list(
-        conn.execute(
-            "SELECT status, archive_reason FROM procedures WHERE id=?", (entry.id,)
-        )
+        conn.execute("SELECT status, archive_reason FROM procedures WHERE id=?", (entry.id,))
     )
     conn.close()
 
@@ -208,9 +204,7 @@ async def test_curator_loop_archives_expired_entries(
 
     # 7. Verify: L1 Redis hash no longer contains the entry
     l1_entries_after = await l1_index.index_get(SESSION_KEY)
-    assert not any(
-        e.id == entry.id for e in l1_entries_after
-    ), "Entry should be evicted from L1"
+    assert not any(e.id == entry.id for e in l1_entries_after), "Entry should be evicted from L1"
 
     await sqlite.close()
 
@@ -221,9 +215,7 @@ async def test_curator_loop_archives_expired_entries(
 
 
 @pytest.mark.asyncio
-async def test_forget_via_composite_store(
-    tmp_path: Path, redis_client, l1_index, memory_store
-):
+async def test_forget_via_composite_store(tmp_path: Path, redis_client, l1_index, memory_store):
     """Full E2E: store → archive_entry → search returns empty → L1 evicted."""
     entry = _make_procedure_entry(content="unique search target for forget test")
 
@@ -258,9 +250,7 @@ async def test_forget_via_composite_store(
     conn = apsw.Connection(str(db_path))
     register_jieba_tokenizer(conn)
     row = list(
-        conn.execute(
-            "SELECT status, archive_reason FROM procedures WHERE id=?", (entry.id,)
-        )
+        conn.execute("SELECT status, archive_reason FROM procedures WHERE id=?", (entry.id,))
     )
     conn.close()
 
@@ -317,9 +307,7 @@ async def test_curator_preserves_fresh_entries(
     db_path = tmp_path / db_name
     conn = apsw.Connection(str(db_path))
     register_jieba_tokenizer(conn)
-    row = list(
-        conn.execute("SELECT status FROM procedures WHERE id=?", (entry.id,))
-    )
+    row = list(conn.execute("SELECT status FROM procedures WHERE id=?", (entry.id,)))
     conn.close()
 
     assert row, "Procedure row not found"
@@ -374,9 +362,7 @@ async def test_curator_lock_prevents_concurrent_execution(
     db_path = tmp_path / db_name
     conn = apsw.Connection(str(db_path))
     register_jieba_tokenizer(conn)
-    row = list(
-        conn.execute("SELECT status FROM procedures WHERE id=?", (entry.id,))
-    )
+    row = list(conn.execute("SELECT status FROM procedures WHERE id=?", (entry.id,)))
     assert row[0][0] == "active", "Entry should still be active while lock is held"
 
     await lock_manager.release(CURATOR_CYCLE_LOCK_KEY, holder_token)

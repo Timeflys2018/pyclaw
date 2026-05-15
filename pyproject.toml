@@ -75,7 +75,35 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "ANN", "ASYNC", "B", "SIM"]
-ignore = ["ANN101", "ANN102"]
+ignore = [
+    "ANN101",
+    "ANN102",
+    # Existing codebase carries pre-existing type-annotation gaps. Requiring
+    # them on every commit would mass-rewrite touched files. New code SHOULD
+    # add annotations but the linter doesn't fail on the legacy gap.
+    "ANN001",  # missing-type-function-argument
+    "ANN201",  # missing-return-type-undocumented-public-function
+    "ANN202",  # missing-return-type-private-function
+    "ANN204",  # missing-return-type-special-method
+    "ANN205",  # missing-return-type-static-method
+    "ANN206",  # missing-return-type-class-method
+    "ANN002",  # missing-type-args (*args)
+    "ANN003",  # missing-type-kwargs (**kwargs)
+    "ANN401",  # any-type — required for SDK interop (lark-oapi event types
+               #            and similar surfaces have no public stubs)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests legitimately need wide-open patterns (Exception assertions, magic
+# variable names from fixtures, multi-with-statements). Keep these errors
+# off the test path so signal-vs-noise stays high in production code.
+"tests/**/*.py" = [
+    "E501",     # line-too-long (test data + parametrize ids run wide)
+    "B017",     # pytest.raises(Exception) — sometimes a deliberate breadth
+    "E741",     # ambiguous-variable-name (l, I, O are common in test math)
+    "SIM117",   # multiple-with-statements
+    "F841",     # unused-variable (test setup may keep references for clarity)
+]
 
 [tool.mypy]
 python_version = "3.12"

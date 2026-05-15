@@ -3,8 +3,6 @@ from __future__ import annotations
 import time
 from unittest.mock import AsyncMock
 
-import pytest
-
 from pyclaw.core.context_engine import DefaultContextEngine
 from pyclaw.infra.settings import MemorySettings
 from pyclaw.storage.memory.base import MemoryEntry

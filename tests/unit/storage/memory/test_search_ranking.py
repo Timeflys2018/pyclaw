@@ -48,6 +48,7 @@ async def configurable_backend(tmp_path: Path):
 
 # --- 3.11: FTS5 results ordered by BM25 rank ---
 
+
 async def test_fts5_results_ordered_by_bm25_rank(backend: SqliteMemoryBackend) -> None:
     session = "ws:alice"
     await backend.store(session, _entry(id="e1", content="redis redis redis cache is fast"))
@@ -67,6 +68,7 @@ async def test_fts5_results_ordered_by_bm25_rank(backend: SqliteMemoryBackend) -
 
 # --- 3.12: per_layer_limits各层独立限制条目数, 不做全局截断 ---
 
+
 async def test_per_layer_limits_independent_and_no_global_truncation(
     backend: SqliteMemoryBackend,
 ) -> None:
@@ -74,9 +76,7 @@ async def test_per_layer_limits_independent_and_no_global_truncation(
     for i in range(5):
         await backend.store(session, _entry(id=f"f{i}", layer="L2", content=f"redis fact {i}"))
     for i in range(4):
-        await backend.store(
-            session, _entry(id=f"p{i}", layer="L3", content=f"redis workflow {i}")
-        )
+        await backend.store(session, _entry(id=f"p{i}", layer="L3", content=f"redis workflow {i}"))
 
     results = await backend.search(
         session,
@@ -100,9 +100,7 @@ async def test_per_layer_limits_ignores_limit_param(
     for i in range(4):
         await backend.store(session, _entry(id=f"f{i}", layer="L2", content=f"python fact {i}"))
     for i in range(3):
-        await backend.store(
-            session, _entry(id=f"p{i}", layer="L3", content=f"python workflow {i}")
-        )
+        await backend.store(session, _entry(id=f"p{i}", layer="L3", content=f"python workflow {i}"))
 
     results = await backend.search(
         session,
@@ -116,6 +114,7 @@ async def test_per_layer_limits_ignores_limit_param(
 
 
 # --- 3.13: 向后兼容 (未传 per_layer_limits 时 results[:limit] 截断) ---
+
 
 async def test_backward_compat_without_per_layer_limits(
     backend: SqliteMemoryBackend,
@@ -136,9 +135,7 @@ async def test_backward_compat_both_layers_truncated(
     for i in range(4):
         await backend.store(session, _entry(id=f"f{i}", layer="L2", content=f"kafka fact {i}"))
     for i in range(3):
-        await backend.store(
-            session, _entry(id=f"p{i}", layer="L3", content=f"kafka workflow {i}")
-        )
+        await backend.store(session, _entry(id=f"p{i}", layer="L3", content=f"kafka workflow {i}"))
 
     results = await backend.search(session, "kafka", layers=["L2", "L3"], limit=5)
 
@@ -146,6 +143,7 @@ async def test_backward_compat_both_layers_truncated(
 
 
 # --- 3.14: search_archives 按 min_similarity 过滤 ---
+
 
 class _StubEmbedding:
     """Stub embedding client that returns deterministic vectors based on content hash."""
@@ -194,6 +192,7 @@ async def test_search_archives_filters_by_min_similarity(tmp_path: Path) -> None
 
 # --- 3.15: LIKE 查询结果按 updated_at 倒序 ---
 
+
 async def test_like_query_ordered_by_updated_at_desc(tmp_path: Path) -> None:
     b = SqliteMemoryBackend(tmp_path, fts_min_query_chars=5)
     try:
@@ -223,6 +222,7 @@ async def test_like_query_ordered_by_updated_at_desc(tmp_path: Path) -> None:
 
 # --- 3.16: fts_min_query_chars 可配 ---
 
+
 async def test_fts_min_query_chars_configurable(tmp_path: Path) -> None:
     d1 = tmp_path / "d1"
     d1.mkdir()
@@ -239,12 +239,8 @@ async def test_fts_min_query_chars_configurable(tmp_path: Path) -> None:
     b_strict = SqliteMemoryBackend(d2, fts_min_query_chars=5)
     try:
         base_ts = time.time()
-        await b_strict.store(
-            "ws:y", _entry(id="e1", content="abcd old", updated_at=base_ts)
-        )
-        await b_strict.store(
-            "ws:y", _entry(id="e2", content="abcd new", updated_at=base_ts + 100)
-        )
+        await b_strict.store("ws:y", _entry(id="e1", content="abcd old", updated_at=base_ts))
+        await b_strict.store("ws:y", _entry(id="e2", content="abcd new", updated_at=base_ts + 100))
         results = await b_strict.search("ws:y", "abcd", layers=["L2"])
         assert len(results) == 2
         assert results[0].id == "e2"
@@ -257,6 +253,7 @@ async def test_fts_min_query_chars_configurable(tmp_path: Path) -> None:
 
 
 # --- Bonus: score field is populated for FTS5, None for LIKE ---
+
 
 async def test_score_field_populated_from_fts5_rank(backend: SqliteMemoryBackend) -> None:
     session = "ws:score-test"
@@ -284,6 +281,7 @@ async def test_score_field_none_for_like_fallback(tmp_path: Path) -> None:
 
 
 # --- Bonus: ArchiveEntry.similarity field populated ---
+
 
 async def test_archive_entry_similarity_populated(tmp_path: Path) -> None:
     try:

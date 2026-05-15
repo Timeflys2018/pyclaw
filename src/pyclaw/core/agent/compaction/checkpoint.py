@@ -9,9 +9,7 @@ class CompactionCheckpoint:
 
     def restore_into(self, tree: SessionTree) -> None:
         tree.entries.clear()
-        tree.entries.update(
-            {k: v.model_copy(deep=True) for k, v in self._snapshot.entries.items()}
-        )
+        tree.entries.update({k: v.model_copy(deep=True) for k, v in self._snapshot.entries.items()})
         tree.order = list(self._snapshot.order)
         tree.leaf_id = self._snapshot.leaf_id
 

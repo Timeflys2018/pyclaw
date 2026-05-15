@@ -1,14 +1,14 @@
 """Integration test: Curator detects and graduates eligible SOPs."""
+
 import time
+from unittest.mock import AsyncMock
 
 import apsw
 import pytest
-from pathlib import Path
-from unittest.mock import AsyncMock
 
 from pyclaw.core.curator import _scan_single_db
-from pyclaw.storage.memory.jieba_tokenizer import register_jieba_tokenizer
 from pyclaw.infra.settings import CuratorSettings
+from pyclaw.storage.memory.jieba_tokenizer import register_jieba_tokenizer
 
 
 def _create_test_db(path, entries):
@@ -27,10 +27,17 @@ def _create_test_db(path, entries):
             "INSERT INTO procedures (id, session_key, type, content, "
             "created_at, updated_at, last_used_at, use_count, status) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (e["id"], e["session_key"], e.get("type", "auto_sop"),
-             e["content"], e["created_at"], e["updated_at"],
-             e.get("last_used_at"), e.get("use_count", 0),
-             e.get("status", "active")),
+            (
+                e["id"],
+                e["session_key"],
+                e.get("type", "auto_sop"),
+                e["content"],
+                e["created_at"],
+                e["updated_at"],
+                e.get("last_used_at"),
+                e.get("use_count", 0),
+                e.get("status", "active"),
+            ),
         )
     conn.close()
 
@@ -42,16 +49,21 @@ async def test_curator_graduates_eligible_sop(tmp_path):
     workspace_base = tmp_path / "workspaces"
 
     now = time.time()
-    _create_test_db(db_file, [{
-        "id": "grad-candidate-1",
-        "session_key": "test:user:one",
-        "type": "auto_sop",
-        "content": "deploy-helm\nDeploy via Helm chart\n1. Check version\n2. Run upgrade",
-        "created_at": now - 10 * 86400,
-        "updated_at": now - 10 * 86400,
-        "last_used_at": now - 2 * 86400,
-        "use_count": 7,
-    }])
+    _create_test_db(
+        db_file,
+        [
+            {
+                "id": "grad-candidate-1",
+                "session_key": "test:user:one",
+                "type": "auto_sop",
+                "content": "deploy-helm\nDeploy via Helm chart\n1. Check version\n2. Run upgrade",
+                "created_at": now - 10 * 86400,
+                "updated_at": now - 10 * 86400,
+                "last_used_at": now - 2 * 86400,
+                "use_count": 7,
+            }
+        ],
+    )
 
     settings = CuratorSettings(
         archive_after_days=90,
@@ -92,15 +104,20 @@ async def test_curator_skips_ineligible_sop(tmp_path):
     workspace_base = tmp_path / "workspaces"
 
     now = time.time()
-    _create_test_db(db_file, [{
-        "id": "low-use-1",
-        "session_key": "test:user:two",
-        "type": "auto_sop",
-        "content": "some-sop\nDescription\n1. Step",
-        "created_at": now - 10 * 86400,
-        "updated_at": now - 10 * 86400,
-        "use_count": 2,
-    }])
+    _create_test_db(
+        db_file,
+        [
+            {
+                "id": "low-use-1",
+                "session_key": "test:user:two",
+                "type": "auto_sop",
+                "content": "some-sop\nDescription\n1. Step",
+                "created_at": now - 10 * 86400,
+                "updated_at": now - 10 * 86400,
+                "use_count": 2,
+            }
+        ],
+    )
 
     settings = CuratorSettings(
         archive_after_days=90,
@@ -132,16 +149,21 @@ async def test_curator_skips_graduation_when_disabled(tmp_path):
     workspace_base = tmp_path / "workspaces"
 
     now = time.time()
-    _create_test_db(db_file, [{
-        "id": "eligible-but-disabled",
-        "session_key": "test:user:three",
-        "type": "auto_sop",
-        "content": "deploy-k8s\nDeploy to K8s\n1. Apply manifests",
-        "created_at": now - 10 * 86400,
-        "updated_at": now - 10 * 86400,
-        "last_used_at": now - 1 * 86400,
-        "use_count": 10,
-    }])
+    _create_test_db(
+        db_file,
+        [
+            {
+                "id": "eligible-but-disabled",
+                "session_key": "test:user:three",
+                "type": "auto_sop",
+                "content": "deploy-k8s\nDeploy to K8s\n1. Apply manifests",
+                "created_at": now - 10 * 86400,
+                "updated_at": now - 10 * 86400,
+                "last_used_at": now - 1 * 86400,
+                "use_count": 10,
+            }
+        ],
+    )
 
     settings = CuratorSettings(
         archive_after_days=90,

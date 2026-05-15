@@ -59,7 +59,9 @@ def classify_error(exc: Exception) -> str:
     if isinstance(exc, LLMError):
         return exc.code
     message = str(exc).lower()
-    if "context" in message and ("overflow" in message or "length" in message or "maximum" in message):
+    if "context" in message and (
+        "overflow" in message or "length" in message or "maximum" in message
+    ):
         return LLMErrorCode.CONTEXT_OVERFLOW
     if "rate limit" in message or "too many requests" in message or "429" in message:
         return LLMErrorCode.RATE_LIMIT
@@ -72,11 +74,11 @@ def classify_error(exc: Exception) -> str:
 
 def resolve_provider_for_model(
     model: str,
-    providers: "Mapping[str, ProviderSettings]",
+    providers: Mapping[str, ProviderSettings],
     *,
     default_provider: str | None = None,
     unknown_prefix_policy: Literal["fail", "default"] = "fail",
-) -> "tuple[str, ProviderSettings]":
+) -> tuple[str, ProviderSettings]:
     for name, ps in providers.items():
         if model in (ps.models or {}):
             return name, ps
@@ -113,7 +115,7 @@ def resolve_provider_for_model(
 
 def model_supports_input(
     model: str,
-    providers: "Mapping[str, ProviderSettings]",
+    providers: Mapping[str, ProviderSettings],
     modality: str,
     *,
     default_provider: str | None = None,
@@ -148,14 +150,13 @@ def messages_have_user_image_content(messages: list[dict[str, Any]]) -> bool:
 
 
 def format_vision_capable_models(
-    providers: "Mapping[str, ProviderSettings]",
+    providers: Mapping[str, ProviderSettings],
 ) -> str:
     parts: list[str] = []
     for provider_name, ps in providers.items():
         models_dict = ps.models or {}
         vision_ids = [
-            mid for mid, entry in models_dict.items()
-            if "image" in entry.modalities.input
+            mid for mid, entry in models_dict.items() if "image" in entry.modalities.input
         ]
         if vision_ids:
             parts.append(f"📦 {provider_name}: {', '.join(vision_ids)}")
@@ -172,13 +173,13 @@ class LLMClient:
         api_key: str | None = None,
         api_base: str | None = None,
         *,
-        providers: "Mapping[str, ProviderSettings] | None" = None,
+        providers: Mapping[str, ProviderSettings] | None = None,
         default_provider: str | None = None,
         unknown_prefix_policy: Literal["fail", "default"] = "fail",
     ) -> None:
         self.default_model = default_model
         if providers:
-            self._providers: dict[str, "ProviderSettings"] = dict(providers)
+            self._providers: dict[str, ProviderSettings] = dict(providers)
             self._fallback_key: str | None = None
             self._fallback_base: str | None = None
         else:
@@ -188,9 +189,7 @@ class LLMClient:
         self._default_provider = default_provider
         self._unknown_prefix_policy: Literal["fail", "default"] = unknown_prefix_policy
 
-    def _resolve_credentials(
-        self, model: str
-    ) -> tuple[str | None, str | None, str | None]:
+    def _resolve_credentials(self, model: str) -> tuple[str | None, str | None, str | None]:
         if not self._providers:
             return self._fallback_key, self._fallback_base, None
         name, ps = resolve_provider_for_model(

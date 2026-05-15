@@ -4,12 +4,9 @@ import sys
 from pathlib import Path
 from textwrap import dedent
 
-import pytest
-
 from pyclaw.skills.discovery import discover_skills
 from pyclaw.skills.eligibility import filter_eligible
 from pyclaw.skills.prompt import build_skills_prompt
-
 
 SKILL_TEMPLATE = dedent("""\
     ---
@@ -31,7 +28,9 @@ def _write_skill(
     skill_dir = root / name
     skill_dir.mkdir(parents=True, exist_ok=True)
     content = SKILL_TEMPLATE.format(
-        name=name, description=description, extra_yaml=extra_yaml,
+        name=name,
+        description=description,
+        extra_yaml=extra_yaml,
     )
     (skill_dir / "SKILL.md").write_text(content)
     return skill_dir

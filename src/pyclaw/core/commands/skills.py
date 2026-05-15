@@ -37,9 +37,7 @@ async def cmd_skills(args: str, ctx: CommandContext) -> None:
     elif sub == "check":
         await _cmd_skills_check(rest, ctx)
     else:
-        await ctx.reply(
-            f"❌ 未知子命令: {sub}；支持 list / search / install / check"
-        )
+        await ctx.reply(f"❌ 未知子命令: {sub}；支持 list / search / install / check")
 
 
 def _workspace_path(ctx: CommandContext) -> Path:

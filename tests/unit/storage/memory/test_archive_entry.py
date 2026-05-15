@@ -1,4 +1,5 @@
 """Tests for archive_entry and archived_at/archive_reason migration."""
+
 import time
 
 import pytest
@@ -72,10 +73,12 @@ class TestArchiveEntry:
         assert conn.changes() > 0
 
         # Verify status changed
-        row = list(conn.execute(
-            "SELECT status, archived_at, archive_reason FROM procedures WHERE id=?",
-            ("proc_archive_test",),
-        ))
+        row = list(
+            conn.execute(
+                "SELECT status, archived_at, archive_reason FROM procedures WHERE id=?",
+                ("proc_archive_test",),
+            )
+        )
         assert row[0][0] == "archived"
         assert row[0][1] >= now_before
         assert row[0][2] == "test reason"
@@ -85,14 +88,15 @@ class TestArchiveEntry:
         """archive_reason is stored in DB."""
         conn = await seeded_backend._get_conn("test_user")
         conn.execute(
-            "UPDATE procedures SET status='archived', archived_at=?, archive_reason=? "
-            "WHERE id=?",
+            "UPDATE procedures SET status='archived', archived_at=?, archive_reason=? WHERE id=?",
             (time.time(), "curator:90d_unused", "proc_archive_test"),
         )
-        row = list(conn.execute(
-            "SELECT archive_reason FROM procedures WHERE id=?",
-            ("proc_archive_test",),
-        ))
+        row = list(
+            conn.execute(
+                "SELECT archive_reason FROM procedures WHERE id=?",
+                ("proc_archive_test",),
+            )
+        )
         assert row[0][0] == "curator:90d_unused"
 
     @pytest.mark.asyncio

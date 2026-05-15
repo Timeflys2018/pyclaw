@@ -43,6 +43,26 @@ class CompactionContext:
 
 
 ApprovalDecision = Literal["approve", "deny", "wait"]
+"""A hook's decision for one tool call.
+
+- ``approve`` — execute the tool
+- ``deny`` — skip the tool, append a denial error to the conversation
+- ``wait`` — reserved for future async approval flows (not currently emitted by
+  any built-in hook; runner treats unknown decisions as ``deny`` for safety)
+"""
+
+
+PermissionTier = Literal["read-only", "approval", "yolo"]
+"""User-controlled autonomy tier governing tool execution.
+
+Defined by spec ``tool-approval-tiers``:
+
+- ``read-only`` — write-class tools are auto-denied without prompt; read-class
+  tools and ``memorize`` execute freely
+- ``approval`` — tools listed in the channel's ``tools_requiring_approval``
+  config trigger the approval flow; others auto-approve
+- ``yolo`` — all tools auto-approve, gate effectively disabled
+"""
 
 
 @runtime_checkable
@@ -52,18 +72,35 @@ class SkillProvider(Protocol):
 
 @runtime_checkable
 class ToolApprovalHook(Protocol):
+    """Per-channel approval gate for tool execution.
+
+    The runner invokes ``before_tool_execution`` (when a hook is registered on
+    ``AgentRunnerDeps``) before executing any tool calls in an iteration. Each
+    tool call gets one decision; the runner skips denied calls and appends a
+    denial error message in their place.
+
+    The ``tier`` argument carries the active :data:`PermissionTier` for the
+    current turn. Implementations decide gating based on tier + their channel
+    config (e.g. ``WebSettings.tools_requiring_approval``).
+    """
+
     async def before_tool_execution(
-        self, tool_calls: list[dict], session_id: str,
+        self,
+        tool_calls: list[dict],
+        session_id: str,
+        tier: PermissionTier,
     ) -> list[ApprovalDecision]: ...
 
 
 @runtime_checkable
 class AgentHook(Protocol):
-    async def before_prompt_build(self, context: PromptBuildContext) -> PromptBuildResult | None: ...
+    async def before_prompt_build(
+        self, context: PromptBuildContext
+    ) -> PromptBuildResult | None: ...
     async def after_response(self, observation: ResponseObservation) -> None: ...
     async def before_compaction(self, context: CompactionContext) -> None: ...
     async def after_compaction(self, context: CompactionContext, result: CompactResult) -> None: ...
-    async def on_run_start(self, session_id: str, control: "RunControl") -> None: ...
+    async def on_run_start(self, session_id: str, control: RunControl) -> None: ...
     async def on_run_end(self, session_id: str, terminated_by: str) -> None: ...
 
 
@@ -132,7 +169,7 @@ class HookRegistry:
             except Exception:
                 logger.exception("after_compaction hook failed: %r", hook)
 
-    async def notify_run_start(self, session_id: str, control: "RunControl") -> None:
+    async def notify_run_start(self, session_id: str, control: RunControl) -> None:
         import logging
 
         logger = logging.getLogger(__name__)

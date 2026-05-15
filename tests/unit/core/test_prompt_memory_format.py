@@ -1,5 +1,4 @@
 """Tests for memory_context format and L1 snapshot filtering."""
-import pytest
 
 
 class TestFormatMemoryContext:

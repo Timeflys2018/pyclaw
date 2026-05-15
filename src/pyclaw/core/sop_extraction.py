@@ -43,8 +43,8 @@ _DANGEROUS_PATTERNS = [
     r"~/\.ssh",
     r"id_rsa",
     r"\.aws/credentials",
-    r"sk-[A-Za-z0-9]{20,}",          # API key pattern
-    r"curl\s+.*\|\s*sh",              # curl | sh
+    r"sk-[A-Za-z0-9]{20,}",  # API key pattern
+    r"curl\s+.*\|\s*sh",  # curl | sh
     r"https?://(?!(?:github\.com|docs\.python\.org"
     r"|docs\.djangoproject\.com|stackoverflow\.com)(?:[/:?#]|$))[^\s]+",
 ]
@@ -76,6 +76,7 @@ class ExtractionResult:
     skipped_invalid: int = 0
     error: str | None = None
     rejection_reasons: list[str] = field(default_factory=list)
+
 
 EXTRACTION_PROMPT_TEMPLATE = """\
 You are extracting reusable Standard Operating Procedures (SOPs) \
@@ -140,7 +141,8 @@ async def _check_user_ratelimit(redis_client: Any, session_key: str) -> bool:  #
     key = f"{EXTRACT_RATELIMIT_PREFIX}{session_key}"
     try:
         acquired = await redis_client.set(
-            key, "1",
+            key,
+            "1",
             ex=EXTRACT_RATELIMIT_SECONDS,
             nx=True,
         )
@@ -190,9 +192,7 @@ def _build_segments(tree: SessionTree, candidate_turn_ids: set[str]) -> str:
             if not entry.tool_calls:
                 continue
             tool_call_ids = {
-                str((tc or {}).get("id", ""))
-                for tc in entry.tool_calls
-                if isinstance(tc, dict)
+                str((tc or {}).get("id", "")) for tc in entry.tool_calls if isinstance(tc, dict)
             }
             tool_call_ids.discard("")
             # If ANY of this assistant's tool_call ids match a candidate, build a segment
@@ -384,9 +384,7 @@ async def _is_duplicate(
     """
     query_text = new_content[:200]
     try:
-        existing = await memory_store.search(
-            session_key, query_text, layers=["L3"], limit=1
-        )
+        existing = await memory_store.search(session_key, query_text, layers=["L3"], limit=1)
     except Exception:
         logger.warning("dedup search failed, treating as non-duplicate", exc_info=True)
         return False
@@ -430,9 +428,7 @@ async def extract_sop_background(
         try:
             raw = await redis_client.hgetall(candidates_key)
         except Exception:
-            logger.warning(
-                "failed to read candidates for %s", session_id, exc_info=True
-            )
+            logger.warning("failed to read candidates for %s", session_id, exc_info=True)
             result.error = "redis_read_failed"
             return result
 
@@ -528,9 +524,7 @@ async def extract_sop_background(
                 await memory_store.store(session_key, entry)
                 result.written += 1
             except Exception:
-                logger.warning(
-                    "failed to store SOP for %s", session_id, exc_info=True
-                )
+                logger.warning("failed to store SOP for %s", session_id, exc_info=True)
 
         logger.info(
             "extract_sop: session=%s sops=%d written=%d skipped_duplicate=%d skipped_invalid=%d",
@@ -545,9 +539,7 @@ async def extract_sop_background(
         return result
 
     except Exception as exc:
-        logger.warning(
-            "extract_sop_background failed for %s", session_id, exc_info=True
-        )
+        logger.warning("extract_sop_background failed for %s", session_id, exc_info=True)
         result.error = type(exc).__name__
         return result
 
@@ -557,9 +549,7 @@ async def _cleanup(redis_client: Any, candidates_key: str) -> None:  # noqa: ANN
     try:
         await redis_client.delete(candidates_key)
     except Exception:
-        logger.warning(
-            "failed to delete candidates %s", candidates_key, exc_info=True
-        )
+        logger.warning("failed to delete candidates %s", candidates_key, exc_info=True)
 
 
 async def maybe_spawn_extraction(
@@ -619,7 +609,8 @@ async def maybe_spawn_extraction(
 
     try:
         acquired = await redis_client.set(
-            lock_key, "1",
+            lock_key,
+            "1",
             ex=EXTRACTING_LOCK_TTL_SECONDS,
             nx=True,
         )
@@ -652,9 +643,7 @@ async def maybe_spawn_extraction(
             await redis_client.delete(lock_key)
         except Exception:
             logger.debug("lock release after spawn failure failed", exc_info=True)
-        logger.warning(
-            "failed to spawn sop extraction for %s", session_id, exc_info=True
-        )
+        logger.warning("failed to spawn sop extraction for %s", session_id, exc_info=True)
         return False
 
 
@@ -699,9 +688,7 @@ async def extract_sops_sync(
         all_entries = await redis_client.hgetall(candidates_key)
     except Exception:
         logger.warning("redis hgetall failed for %s", session_id, exc_info=True)
-        return ExtractionResult(
-            spawned=False, skip_reason="redis_error", error="hgetall_failed"
-        )
+        return ExtractionResult(spawned=False, skip_reason="redis_error", error="hgetall_failed")
 
     if not all_entries:
         return ExtractionResult(spawned=False, skip_reason="no_candidates")
@@ -726,7 +713,8 @@ async def extract_sops_sync(
 
     try:
         acquired = await redis_client.set(
-            lock_key, "1",
+            lock_key,
+            "1",
             ex=EXTRACTING_LOCK_TTL_SECONDS,
             nx=True,
         )
@@ -752,9 +740,7 @@ async def extract_sops_sync(
             try:
                 nudge_hook.reset_counter(session_id)
             except Exception:
-                logger.debug(
-                    "nudge counter reset failed for %s", session_id, exc_info=True
-                )
+                logger.debug("nudge counter reset failed for %s", session_id, exc_info=True)
         return result
     finally:
         try:
@@ -787,9 +773,7 @@ async def _extract_then_reset(
             try:
                 nudge_hook.reset_counter(session_id)
             except Exception:
-                logger.debug(
-                    "nudge counter reset failed for %s", session_id, exc_info=True
-                )
+                logger.debug("nudge counter reset failed for %s", session_id, exc_info=True)
     finally:
         # asyncio.shield protects delete from cancellation;
         # BaseException catches CancelledError (BaseException in Python 3.9+).
@@ -824,9 +808,7 @@ async def _call_llm_with_retry(
                 temperature=temp,
             )
         except Exception:
-            logger.warning(
-                "LLM call failed on attempt %d", attempt + 1, exc_info=True
-            )
+            logger.warning("LLM call failed on attempt %d", attempt + 1, exc_info=True)
             if attempt == 1:
                 return []
             continue

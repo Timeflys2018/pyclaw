@@ -5,7 +5,7 @@ import time
 from typing import Protocol, runtime_checkable
 
 from pyclaw.models import SessionEntry, SessionTree
-from pyclaw.models.session import MessageEntry, SessionHeader, SessionHistorySummary, now_iso
+from pyclaw.models.session import MessageEntry, SessionHeader, SessionHistorySummary
 
 
 @runtime_checkable
@@ -100,9 +100,7 @@ class InMemorySessionStore:
             if current == session_id:
                 self._skey_current.pop(skey)
         for skey, history in list(self._skey_history.items()):
-            self._skey_history[skey] = [
-                (ts, sid) for ts, sid in history if sid != session_id
-            ]
+            self._skey_history[skey] = [(ts, sid) for ts, sid in history if sid != session_id]
         return existed
 
     async def list_session_history(
@@ -114,20 +112,24 @@ class InMemorySessionStore:
         for _ts, sid in sorted_entries:
             tree = self._trees.get(sid)
             if tree is None:
-                result.append(SessionHistorySummary(
-                    session_id=sid,
-                    created_at="",
-                    message_count=0,
-                    last_message_at=None,
-                    parent_session_id=None,
-                ))
+                result.append(
+                    SessionHistorySummary(
+                        session_id=sid,
+                        created_at="",
+                        message_count=0,
+                        last_message_at=None,
+                        parent_session_id=None,
+                    )
+                )
                 continue
             msg_count = sum(1 for e in tree.entries.values() if isinstance(e, MessageEntry))
-            result.append(SessionHistorySummary(
-                session_id=sid,
-                created_at=tree.header.created_at,
-                message_count=msg_count,
-                last_message_at=tree.header.last_interaction_at,
-                parent_session_id=tree.header.parent_session,
-            ))
+            result.append(
+                SessionHistorySummary(
+                    session_id=sid,
+                    created_at=tree.header.created_at,
+                    message_count=msg_count,
+                    last_message_at=tree.header.last_interaction_at,
+                    parent_session_id=tree.header.parent_session,
+                )
+            )
         return result

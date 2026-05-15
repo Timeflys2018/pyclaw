@@ -27,9 +27,7 @@ async def test_ttl_present_after_record() -> None:
     dedup = FeishuDedup(redis_client=mock_redis, key_prefix="pyclaw:")
     result = await dedup.is_duplicate("msg-003")
     assert result is True
-    mock_redis.set.assert_awaited_once_with(
-        "pyclaw:feishu:dedup:msg-003", "1", nx=True, ex=43200
-    )
+    mock_redis.set.assert_awaited_once_with("pyclaw:feishu:dedup:msg-003", "1", nx=True, ex=43200)
 
 
 @pytest.mark.asyncio

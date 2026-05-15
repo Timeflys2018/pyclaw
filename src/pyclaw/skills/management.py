@@ -79,9 +79,7 @@ def list_discovered(workspace_path: Path, settings: Any) -> list[DiscoveredSkill
     return results
 
 
-async def search_hub(
-    query: str, *, client: ClawHubClient | None = None
-) -> list[HubSearchResult]:
+async def search_hub(query: str, *, client: ClawHubClient | None = None) -> list[HubSearchResult]:
     if client is None:
         client = await create_client()
     try:
@@ -94,11 +92,13 @@ async def search_hub(
         slug = getattr(hit, "slug", "") or ""
         version = getattr(hit, "version", None) or getattr(hit, "latest_version", "") or ""
         description = getattr(hit, "description", "") or ""
-        results.append(HubSearchResult(
-            slug=str(slug),
-            latest_version=str(version),
-            description=str(description)[:200],
-        ))
+        results.append(
+            HubSearchResult(
+                slug=str(slug),
+                latest_version=str(version),
+                description=str(description)[:200],
+            )
+        )
     return results
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pyclaw.models import SessionTree
 from pyclaw.models.session import now_iso
@@ -74,6 +74,6 @@ class SessionRouter:
             last_dt = datetime.fromisoformat(last_at)
         except ValueError:
             return False
-        now_dt = datetime.now(timezone.utc)
+        now_dt = datetime.now(UTC)
         elapsed_seconds = (now_dt - last_dt).total_seconds()
         return elapsed_seconds >= idle_minutes * 60

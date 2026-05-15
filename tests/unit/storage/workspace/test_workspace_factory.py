@@ -12,10 +12,12 @@ from pyclaw.storage.workspace.redis import RedisWorkspaceStore
 
 
 def _settings(backend: str = "file", default: str = "~/.pyclaw/workspace") -> Settings:
-    return Settings.model_validate({
-        "workspaces": {"backend": backend, "default": default},
-        "redis": {"keyPrefix": "pyclaw:"},
-    })
+    return Settings.model_validate(
+        {
+            "workspaces": {"backend": backend, "default": default},
+            "redis": {"keyPrefix": "pyclaw:"},
+        }
+    )
 
 
 def test_factory_returns_file_store_by_default() -> None:

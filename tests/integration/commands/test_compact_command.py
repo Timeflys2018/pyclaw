@@ -6,14 +6,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pyclaw.infra.settings import Settings
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.commands.builtin import cmd_compact
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.hooks import HookRegistry
+from pyclaw.infra.settings import Settings
 from pyclaw.models import (
-    CompactResult,
     CompactionEntry,
+    CompactResult,
     MessageEntry,
     SessionHeader,
     SessionTree,
@@ -100,7 +100,11 @@ async def _make_ctx(
 
     if compact_result is None:
         compact_result = CompactResult(
-            ok=True, compacted=True, summary="summary", tokens_before=200, tokens_after=50,
+            ok=True,
+            compacted=True,
+            summary="summary",
+            tokens_before=200,
+            tokens_after=50,
         )
     fake_engine = _FakeContextEngine(compact_result)
 
@@ -229,7 +233,10 @@ async def test_compact_with_focus_argument_injects_system_message() -> None:
 async def test_compact_failure_replies_warning_and_does_not_persist_entry() -> None:
     ctx, reply, store, _, _ = await _make_ctx(
         compact_result=CompactResult(
-            ok=False, compacted=False, reason="model timeout", reason_code="timeout",
+            ok=False,
+            compacted=False,
+            reason="model timeout",
+            reason_code="timeout",
         )
     )
 
@@ -247,7 +254,10 @@ async def test_compact_failure_replies_warning_and_does_not_persist_entry() -> N
 async def test_compact_no_op_when_already_below_threshold() -> None:
     ctx, reply, store, _, _ = await _make_ctx(
         compact_result=CompactResult(
-            ok=True, compacted=False, reason="within-budget", reason_code="below_threshold",
+            ok=True,
+            compacted=False,
+            reason="within-budget",
+            reason_code="below_threshold",
         )
     )
 

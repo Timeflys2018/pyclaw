@@ -8,7 +8,7 @@ from pyclaw.core.agent.tools.builtin import register_builtin_tools
 from pyclaw.core.agent.tools.registry import ToolRegistry
 from pyclaw.core.agent.tools.workspace import WorkspaceResolver
 from pyclaw.core.context_engine import DefaultContextEngine
-from pyclaw.core.hooks import HookRegistry
+from pyclaw.core.hooks import HookRegistry, ToolApprovalHook
 from pyclaw.infra.settings import Settings
 from pyclaw.infra.task_manager import TaskManager
 from pyclaw.models import AgentRunConfig, WorkspaceConfig
@@ -25,6 +25,7 @@ async def create_agent_runner_deps(
     memory_store: MemoryStore | None = None,
     redis_client=None,
     lock_manager=None,
+    tool_approval_hook: ToolApprovalHook | None = None,
 ) -> AgentRunnerDeps:
     llm = LLMClient(
         default_model=settings.agent.default_model,
@@ -47,9 +48,9 @@ async def create_agent_runner_deps(
                 f"to any configured provider. Fix configs/pyclaw.json before starting. {exc}"
             ) from exc
 
-    workspace_default = getattr(
-        getattr(settings, "workspaces", None), "default", None
-    ) or str(Path.home() / "pyclaw-workspace")
+    workspace_default = getattr(getattr(settings, "workspaces", None), "default", None) or str(
+        Path.home() / "pyclaw-workspace"
+    )
     workspace_config = WorkspaceConfig(workspaces={"default": workspace_default})
     resolver = WorkspaceResolver(workspace_config)
 
@@ -70,7 +71,9 @@ async def create_agent_runner_deps(
 
     config.prompt_budget.validate_against_context_window(config.context_window)
 
-    bootstrap_files = list(getattr(getattr(settings, "workspaces", None), "bootstrap_files", None) or ["AGENTS.md"])
+    bootstrap_files = list(
+        getattr(getattr(settings, "workspaces", None), "bootstrap_files", None) or ["AGENTS.md"]
+    )
     engine = DefaultContextEngine(
         workspace_store=workspace_store,
         bootstrap_files=bootstrap_files,
@@ -113,15 +116,17 @@ async def create_agent_runner_deps(
         if redis_client is not None and settings.evolution.enabled:
             from pyclaw.core.agent.hooks.sop_tracker_hook import SopCandidateTracker
 
-            hooks.register(SopCandidateTracker(
-                redis_client,
-                settings.evolution,
-                task_manager=task_manager,
-                memory_store=memory_store,
-                session_store=session_store,
-                llm_client=llm,
-                nudge_hook=nudge_hook,
-            ))
+            hooks.register(
+                SopCandidateTracker(
+                    redis_client,
+                    settings.evolution,
+                    task_manager=task_manager,
+                    memory_store=memory_store,
+                    session_store=session_store,
+                    llm_client=llm,
+                    nudge_hook=nudge_hook,
+                )
+            )
 
     from pyclaw.core.agent.hooks.steer_hook import SteerHook
 
@@ -138,4 +143,5 @@ async def create_agent_runner_deps(
         skill_provider=skill_provider,
         task_manager=task_manager,
         lock_manager=lock_manager,
+        tool_approval_hook=tool_approval_hook,
     )

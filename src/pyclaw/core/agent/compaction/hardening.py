@@ -23,6 +23,7 @@ _HEARTBEAT_MARKERS = ("heartbeat", "ping", "pong", "[heartbeat]", "[system]")
 
 def _extract_text(content: Any) -> str:
     from pyclaw.models.utils import extract_text_from_content
+
     return extract_text_from_content(content)
 
 
@@ -144,9 +145,7 @@ async def summarize_in_stages(
     return await summarizer(merge_payload)
 
 
-def sanity_check_token_estimate(
-    tokens_before: int, tokens_after: int | None
-) -> int | None:
+def sanity_check_token_estimate(tokens_before: int, tokens_after: int | None) -> int | None:
     if tokens_after is None:
         return None
     if tokens_after > tokens_before:

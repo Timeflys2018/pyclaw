@@ -60,13 +60,9 @@ class WorkerRegistry:
 
     async def active_workers(self, stale_threshold: float = 90.0) -> list[dict]:
         if not self.available:
-            return [
-                {"id": self._worker_id, "last_heartbeat": time.time(), "status": "healthy"}
-            ]
+            return [{"id": self._worker_id, "last_heartbeat": time.time(), "status": "healthy"}]
 
-        members = await self._redis.zrangebyscore(
-            self._key, "-inf", "+inf", withscores=True
-        )
+        members = await self._redis.zrangebyscore(self._key, "-inf", "+inf", withscores=True)
         now = time.time()
         result = []
         for member, score in members or []:
@@ -78,10 +74,12 @@ class WorkerRegistry:
                 status = "stale"
             else:
                 status = "dead"
-            result.append({
-                "id": worker_id,
-                "last_heartbeat": score,
-                "status": status,
-                "age_seconds": round(age, 1),
-            })
+            result.append(
+                {
+                    "id": worker_id,
+                    "last_heartbeat": score,
+                    "status": status,
+                    "age_seconds": round(age, 1),
+                }
+            )
         return result

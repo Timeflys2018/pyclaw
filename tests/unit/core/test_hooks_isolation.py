@@ -8,6 +8,7 @@ the agent's iteration loop.
 This matches the existing try/except pattern in `notify_before_compaction`,
 `notify_after_compaction`, `notify_run_start`, and `notify_run_end`.
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,7 +17,6 @@ from typing import TYPE_CHECKING
 import pytest
 
 from pyclaw.core.hooks import (
-    AgentHook,
     HookRegistry,
     PromptBuildContext,
     PromptBuildResult,
@@ -54,7 +54,7 @@ class _RaisingPromptHook:
     async def after_compaction(self, context, result) -> None:  # noqa: ANN001
         return None
 
-    async def on_run_start(self, session_id: str, control: "RunControl") -> None:
+    async def on_run_start(self, session_id: str, control: RunControl) -> None:
         return None
 
     async def on_run_end(self, session_id: str, terminated_by: str) -> None:
@@ -79,7 +79,7 @@ class _GoodPromptHook:
     async def after_compaction(self, context, result) -> None:  # noqa: ANN001
         return None
 
-    async def on_run_start(self, session_id: str, control: "RunControl") -> None:
+    async def on_run_start(self, session_id: str, control: RunControl) -> None:
         return None
 
     async def on_run_end(self, session_id: str, terminated_by: str) -> None:
@@ -101,7 +101,7 @@ class _RaisingResponseHook:
     async def after_compaction(self, context, result) -> None:  # noqa: ANN001
         return None
 
-    async def on_run_start(self, session_id: str, control: "RunControl") -> None:
+    async def on_run_start(self, session_id: str, control: RunControl) -> None:
         return None
 
     async def on_run_end(self, session_id: str, terminated_by: str) -> None:
@@ -126,7 +126,7 @@ class _CountingResponseHook:
     async def after_compaction(self, context, result) -> None:  # noqa: ANN001
         return None
 
-    async def on_run_start(self, session_id: str, control: "RunControl") -> None:
+    async def on_run_start(self, session_id: str, control: RunControl) -> None:
         return None
 
     async def on_run_end(self, session_id: str, terminated_by: str) -> None:
@@ -147,10 +147,9 @@ async def test_collect_prompt_additions_isolates_raising_hook(caplog):
         "Good hook's contribution must be preserved even when a prior hook raised."
     )
     assert result.prepend is None
-    assert any(
-        "before_prompt_build hook failed" in record.message
-        for record in caplog.records
-    ), "Failing hook's exception should be logged via logger.exception"
+    assert any("before_prompt_build hook failed" in record.message for record in caplog.records), (
+        "Failing hook's exception should be logged via logger.exception"
+    )
 
 
 @pytest.mark.asyncio
@@ -203,13 +202,10 @@ async def test_notify_response_isolates_raising_hook(caplog):
     with caplog.at_level(logging.ERROR):
         await registry.notify_response(_make_observation())
 
-    assert counter.count == 1, (
-        "Counting hook must run even when prior hook raised."
+    assert counter.count == 1, "Counting hook must run even when prior hook raised."
+    assert any("after_response hook failed" in record.message for record in caplog.records), (
+        "Failing hook's exception should be logged"
     )
-    assert any(
-        "after_response hook failed" in record.message
-        for record in caplog.records
-    ), "Failing hook's exception should be logged"
 
 
 @pytest.mark.asyncio

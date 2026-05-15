@@ -20,6 +20,7 @@ class SkillViewTool:
         "required": ["name"],
     }
     side_effect = False
+    tool_class = "read"
 
     def __init__(self, skill_provider: Any) -> None:
         self._provider = skill_provider

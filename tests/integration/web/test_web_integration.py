@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -21,7 +22,6 @@ from pyclaw.infra.settings import WebSettings, WebUserConfig
 from pyclaw.infra.task_manager import TaskManager
 from pyclaw.models.agent import Done, TextChunk
 from pyclaw.storage.session.base import InMemorySessionStore
-
 
 JWT_SECRET = "integration-test-secret"
 ADMIN_TOKEN = "admin-token"

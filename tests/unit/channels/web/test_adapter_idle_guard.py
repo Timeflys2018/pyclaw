@@ -7,18 +7,21 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from pyclaw.channels.web.command_adapter import WebCommandAdapter
-from pyclaw.infra.settings import Settings
 from pyclaw.channels.web.protocol import SERVER_CHAT_DONE
 from pyclaw.channels.web.websocket import ConnectionState
 from pyclaw.core.commands.registry import CommandRegistry
 from pyclaw.core.commands.spec import ALL_CHANNELS, CommandSpec
+from pyclaw.infra.settings import Settings
 
 
 def _make_state(user_id: str = "me") -> tuple[ConnectionState, AsyncMock]:
     mock_ws = AsyncMock()
     mock_ws.app.state.workspace_base = Path(tempfile.mkdtemp())
     state = ConnectionState(
-        ws=mock_ws, ws_session_id="s1", user_id=user_id, authenticated=True,
+        ws=mock_ws,
+        ws_session_id="s1",
+        user_id=user_id,
+        authenticated=True,
     )
     return state, mock_ws
 

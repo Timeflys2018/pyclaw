@@ -38,7 +38,8 @@ def test_distinct_sessions_get_distinct_run_controls(registry: FeishuQueueRegist
 
 @pytest.mark.asyncio
 async def test_is_idle_true_when_consumer_blocked_on_q_get(
-    registry: FeishuQueueRegistry, tm: TaskManager,
+    registry: FeishuQueueRegistry,
+    tm: TaskManager,
 ) -> None:
     started = asyncio.Event()
 
@@ -55,7 +56,8 @@ async def test_is_idle_true_when_consumer_blocked_on_q_get(
 
 @pytest.mark.asyncio
 async def test_is_idle_false_during_coro_execution(
-    registry: FeishuQueueRegistry, tm: TaskManager,
+    registry: FeishuQueueRegistry,
+    tm: TaskManager,
 ) -> None:
     in_coro = asyncio.Event()
     release = asyncio.Event()
@@ -77,7 +79,8 @@ async def test_is_idle_false_during_coro_execution(
 
 @pytest.mark.asyncio
 async def test_is_idle_recovers_after_coro_exception(
-    registry: FeishuQueueRegistry, tm: TaskManager,
+    registry: FeishuQueueRegistry,
+    tm: TaskManager,
 ) -> None:
     in_coro = asyncio.Event()
 
@@ -94,7 +97,8 @@ async def test_is_idle_recovers_after_coro_exception(
 
 @pytest.mark.asyncio
 async def test_cleanup_session_clears_run_control_and_busy(
-    registry: FeishuQueueRegistry, tm: TaskManager,
+    registry: FeishuQueueRegistry,
+    tm: TaskManager,
 ) -> None:
     rc = registry.get_run_control("sess-X")
     registry._busy["sess-X"] = True

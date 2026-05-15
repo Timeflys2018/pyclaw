@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -97,7 +96,9 @@ class CuratorSettings(BaseSettings):
     llm_review_enabled: bool = Field(False, alias="llmReviewEnabled")
     llm_review_model: str | None = Field(None, alias="llmReviewModel")
     llm_review_interval_seconds: int = Field(1209600, alias="llmReviewIntervalSeconds")
-    llm_review_actions: list[str] = Field(default_factory=lambda: ["promote"], alias="llmReviewActions")
+    llm_review_actions: list[str] = Field(
+        default_factory=lambda: ["promote"], alias="llmReviewActions"
+    )
     llm_review_max_batch: int = Field(20, alias="llmReviewMaxBatch")
 
     model_config = SettingsConfigDict(
@@ -166,7 +167,7 @@ class ProviderSettings(BaseSettings):
     def _reject_legacy_list_form(cls, value):
         if isinstance(value, list):
             raise ValueError(
-                'ProviderSettings.models must be a dict {model_id: ModelEntry}, got list. '
+                "ProviderSettings.models must be a dict {model_id: ModelEntry}, got list. "
                 'Migration: change "models": [...] to '
                 '"models": {model_id: {"modalities": {"input": [...], "output": [...]}}}. '
                 "See configs/pyclaw.example.json."
@@ -204,6 +205,7 @@ class ServerSettings(BaseSettings):
 
 class FeishuStreamingConfig(BaseModel):
     """Streaming card configuration — passed directly to Feishu CardKit API."""
+
     print_frequency_ms: int = Field(50, alias="printFrequencyMs")
     print_step: int = Field(2, alias="printStep")
     print_strategy: str = Field("fast", alias="printStrategy")
@@ -222,6 +224,19 @@ class FeishuSettings(BaseSettings):
     group_context_size: int = Field(20, alias="groupContextSize")
     idle_minutes: int = Field(0, alias="idleMinutes")
     streaming: FeishuStreamingConfig = Field(default_factory=FeishuStreamingConfig)
+    default_permission_tier: Literal["read-only", "approval", "yolo"] = Field(
+        "approval", alias="defaultPermissionTier"
+    )
+    """Default tier for Feishu turns. Mirrors :attr:`WebSettings.default_permission_tier`."""
+
+    tool_approval_timeout_seconds: int = Field(60, alias="toolApprovalTimeoutSeconds")
+    """Seconds the Feishu CardKit countdown runs before auto-denying."""
+
+    tools_requiring_approval: list[str] = Field(
+        default_factory=lambda: ["bash", "write", "edit"],
+        alias="toolsRequiringApproval",
+    )
+    """Tools that trigger Feishu CardKit approval card under ``approval`` tier."""
 
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
 
@@ -239,12 +254,25 @@ class WebSettings(BaseSettings):
     heartbeat_interval: int = Field(30, alias="heartbeatInterval")
     pong_timeout: int = Field(10, alias="pongTimeout")
     max_connections_per_user: int = Field(3, alias="maxConnectionsPerUser")
+    default_permission_tier: Literal["read-only", "approval", "yolo"] = Field(
+        "approval", alias="defaultPermissionTier"
+    )
+    """Default tier when ``chat.send`` arrives without an explicit ``tier`` field."""
+
+    tool_approval_timeout_seconds: int = Field(60, alias="toolApprovalTimeoutSeconds")
+    """Seconds the runner waits for an approval decision before auto-denying."""
+
     tools_requiring_approval: list[str] = Field(
-        default_factory=lambda: ["bash", "write"], alias="toolsRequiringApproval"
+        default_factory=lambda: ["bash", "write", "edit"],
+        alias="toolsRequiringApproval",
     )
-    allowed_tools: list[str] = Field(
-        default_factory=lambda: ["read"], alias="allowedTools"
-    )
+    """Tools that trigger approval flow under ``approval`` tier.
+
+    Read by ``WebToolApprovalHook`` to decide which tool calls require user
+    prompt. Was dead code prior to Sprint 1 (no runtime readers); now LIVE.
+    """
+
+    allowed_tools: list[str] = Field(default_factory=lambda: ["read"], alias="allowedTools")
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173"], alias="corsOrigins"
     )
@@ -322,9 +350,7 @@ class Settings(BaseSettings):
     # Graceful shutdown timeout in seconds.  Matches the default K8s
     # SIGTERM→SIGKILL window (30 s) so that TaskManager drain completes
     # before the orchestrator force-kills the process.
-    shutdown_grace_seconds: int = Field(
-        30, alias="shutdownGraceSeconds"
-    )
+    shutdown_grace_seconds: int = Field(30, alias="shutdownGraceSeconds")
 
     model_config = SettingsConfigDict(env_prefix="PYCLAW_")
 

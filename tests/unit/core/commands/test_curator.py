@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.curator import cmd_curator
 from pyclaw.core.curator_admin import (
@@ -16,6 +15,7 @@ from pyclaw.core.curator_admin import (
     RestoreResult,
     SopRow,
 )
+from pyclaw.infra.settings import Settings
 
 
 def _ctx(
@@ -102,8 +102,10 @@ async def test_curator_list_auto_with_results(tmp_path) -> None:
 
     rows = [
         SopRow(
-            entry_id="abcdef1234", session_key="test:user_x",
-            content="some auto SOP content here", use_count=3,
+            entry_id="abcdef1234",
+            session_key="test:user_x",
+            content="some auto SOP content here",
+            use_count=3,
             last_used_at=time.time(),
         ),
     ]
@@ -134,8 +136,10 @@ async def test_curator_list_archived_with_rows(tmp_path) -> None:
 
     rows = [
         ArchivedSopRow(
-            entry_id="xxxxxx01", session_key="test:user_x",
-            content="archived content", archived_at=time.time(),
+            entry_id="xxxxxx01",
+            session_key="test:user_x",
+            content="archived content",
+            archived_at=time.time(),
             archive_reason="curator:90d",
         ),
     ]

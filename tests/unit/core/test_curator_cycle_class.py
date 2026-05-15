@@ -8,14 +8,13 @@ Audit-trail anchors: C1, C1b map to tasks.md.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pyclaw.core.curator import CuratorReport, CycleReport, ReviewOutcome
+from pyclaw.core.curator import CuratorReport
 from pyclaw.core.curator_cycle import CuratorCycle
 from pyclaw.core.curator_state import CuratorStateStore
 from pyclaw.infra.task_manager import TaskManager
@@ -160,9 +159,7 @@ class TestCuratorCycleScanOnly:
             return_value=CuratorReport(total_scanned=0),
         ):
             await cycle.execute()
-        set_calls = [
-            c.args for c in cycle_deps["redis"].set.await_args_list
-        ]
+        set_calls = [c.args for c in cycle_deps["redis"].set.await_args_list]
         keys = [c[0] for c in set_calls]
         assert "pyclaw:curator:last_run_at" in keys
 
@@ -203,28 +200,31 @@ class TestCuratorCycleUnexpectedException:
 
     @pytest.mark.asyncio
     async def test_scan_unexpected_exception_sets_flag(
-        self, cycle_deps, caplog: pytest.LogCaptureFixture,
+        self,
+        cycle_deps,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         cycle = _build_cycle(cycle_deps)
-        with caplog.at_level(logging.ERROR, logger="pyclaw.core.curator_cycle"):
-            with patch(
+        with (
+            caplog.at_level(logging.ERROR, logger="pyclaw.core.curator_cycle"),
+            patch(
                 "pyclaw.core.curator.run_curator_scan",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("scan broke"),
-            ):
-                report = await cycle.execute()
+            ),
+        ):
+            report = await cycle.execute()
 
         assert report.acquired is True
         assert report.error is None
         assert report.unexpected_exception is True
         assert report.scan_report is None
-        assert any(
-            "unexpected" in rec.message.lower() for rec in caplog.records
-        )
+        assert any("unexpected" in rec.message.lower() for rec in caplog.records)
 
     @pytest.mark.asyncio
     async def test_lock_acquire_error_does_not_set_unexpected_flag(
-        self, cycle_deps,
+        self,
+        cycle_deps,
     ) -> None:
         cycle_deps["lock_manager"].acquire.side_effect = LockAcquireError("k")
         cycle = _build_cycle(cycle_deps)
@@ -233,7 +233,8 @@ class TestCuratorCycleUnexpectedException:
 
     @pytest.mark.asyncio
     async def test_lock_lost_does_not_set_unexpected_flag(
-        self, cycle_deps,
+        self,
+        cycle_deps,
     ) -> None:
         cycle = _build_cycle(cycle_deps)
         with patch(

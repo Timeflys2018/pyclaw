@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import FrozenInstanceError, dataclass
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import apsw
 import pytest
-
-from dataclasses import FrozenInstanceError
 
 from pyclaw.core.curator import (
     ReviewDecision,
@@ -160,19 +158,27 @@ class TestShouldRunLlmReview:
 
 class TestParseReviewDecisions:
     def test_valid_json(self) -> None:
-        output = json.dumps([
-            {"id": "abc123", "decision": "promote", "reason": "good quality"},
-            {"id": "def456", "decision": "archive", "reason": "low quality"},
-        ])
+        output = json.dumps(
+            [
+                {"id": "abc123", "decision": "promote", "reason": "good quality"},
+                {"id": "def456", "decision": "archive", "reason": "low quality"},
+            ]
+        )
         result = _parse_review_decisions(output, ["promote", "archive"])
         assert len(result) == 2
         assert result[0] == ReviewDecision(id="abc123", decision="promote", reason="good quality")
         assert result[1] == ReviewDecision(id="def456", decision="archive", reason="low quality")
 
     def test_fenced_json(self) -> None:
-        output = "```json\n" + json.dumps([
-            {"id": "abc", "decision": "keep", "reason": "fine"},
-        ]) + "\n```"
+        output = (
+            "```json\n"
+            + json.dumps(
+                [
+                    {"id": "abc", "decision": "keep", "reason": "fine"},
+                ]
+            )
+            + "\n```"
+        )
         result = _parse_review_decisions(output, ["promote", "archive"])
         assert len(result) == 1
         assert result[0].decision == "keep"
@@ -182,11 +188,13 @@ class TestParseReviewDecisions:
         assert result == []
 
     def test_filters_unknown_actions(self) -> None:
-        output = json.dumps([
-            {"id": "a", "decision": "promote", "reason": "ok"},
-            {"id": "b", "decision": "patch", "reason": "should be filtered"},
-            {"id": "c", "decision": "keep", "reason": "always allowed"},
-        ])
+        output = json.dumps(
+            [
+                {"id": "a", "decision": "promote", "reason": "ok"},
+                {"id": "b", "decision": "patch", "reason": "should be filtered"},
+                {"id": "c", "decision": "keep", "reason": "always allowed"},
+            ]
+        )
         result = _parse_review_decisions(output, ["promote"])
         assert len(result) == 2
         assert result[0].decision == "promote"
@@ -227,16 +235,19 @@ class TestRunLlmReview:
     async def test_archive_decision_updates_db(self, tmp_path: Path) -> None:
         db_file = tmp_path / "test.db"
         now = time.time()
-        _create_test_db(db_file, [
-            {
-                "id": "entry_001",
-                "session_key": "ws:default",
-                "content": "test-sop\ndesc\nstep 1\nstep 2",
-                "created_at": now - 86400,
-                "updated_at": now - 86400,
-                "use_count": 2,
-            },
-        ])
+        _create_test_db(
+            db_file,
+            [
+                {
+                    "id": "entry_001",
+                    "session_key": "ws:default",
+                    "content": "test-sop\ndesc\nstep 1\nstep 2",
+                    "created_at": now - 86400,
+                    "updated_at": now - 86400,
+                    "use_count": 2,
+                },
+            ],
+        )
 
         settings = FakeSettings(llm_review_enabled=True)
 
@@ -256,7 +267,9 @@ class TestRunLlmReview:
         assert result.total_actions == 1
 
         conn = apsw.Connection(str(db_file))
-        row = list(conn.execute("SELECT status, archive_reason FROM procedures WHERE id='entry_001'"))
+        row = list(
+            conn.execute("SELECT status, archive_reason FROM procedures WHERE id='entry_001'")
+        )
         conn.close()
         assert row[0][0] == "archived"
         assert "llm_review:" in row[0][1]
@@ -267,16 +280,19 @@ class TestRunLlmReview:
     async def test_promote_decision_triggers_graduation(self, tmp_path: Path) -> None:
         db_file = tmp_path / "test.db"
         now = time.time()
-        _create_test_db(db_file, [
-            {
-                "id": "entry_002",
-                "session_key": "ws:default",
-                "content": "my-skill\nA good skill\nStep 1: do something\nStep 2: finish",
-                "created_at": now - 86400,
-                "updated_at": now - 86400,
-                "use_count": 10,
-            },
-        ])
+        _create_test_db(
+            db_file,
+            [
+                {
+                    "id": "entry_002",
+                    "session_key": "ws:default",
+                    "content": "my-skill\nA good skill\nStep 1: do something\nStep 2: finish",
+                    "created_at": now - 86400,
+                    "updated_at": now - 86400,
+                    "use_count": 10,
+                },
+            ],
+        )
 
         settings = FakeSettings(llm_review_enabled=True)
 
@@ -290,7 +306,9 @@ class TestRunLlmReview:
         )
         l1 = AsyncMock()
 
-        with patch("pyclaw.core.skill_graduation.graduate_single_sop", return_value=(True, "/tmp/skill")) as mock_grad:
+        with patch(
+            "pyclaw.core.skill_graduation.graduate_single_sop", return_value=(True, "/tmp/skill")
+        ) as mock_grad:
             result = await run_llm_review(db_file, settings, llm, l1, tmp_path)
 
         assert result.promoted_count == 1
@@ -313,16 +331,19 @@ class TestRunLlmReview:
     async def test_llm_call_failure_returns_zero(self, tmp_path: Path) -> None:
         db_file = tmp_path / "test.db"
         now = time.time()
-        _create_test_db(db_file, [
-            {
-                "id": "entry_003",
-                "session_key": "ws:default",
-                "content": "test\ndesc\nsteps",
-                "created_at": now,
-                "updated_at": now,
-                "use_count": 1,
-            },
-        ])
+        _create_test_db(
+            db_file,
+            [
+                {
+                    "id": "entry_003",
+                    "session_key": "ws:default",
+                    "content": "test\ndesc\nsteps",
+                    "created_at": now,
+                    "updated_at": now,
+                    "use_count": 1,
+                },
+            ],
+        )
 
         settings = FakeSettings(llm_review_enabled=True)
         llm = AsyncMock()
@@ -337,16 +358,19 @@ class TestRunLlmReview:
     async def test_keep_decision_no_action(self, tmp_path: Path) -> None:
         db_file = tmp_path / "test.db"
         now = time.time()
-        _create_test_db(db_file, [
-            {
-                "id": "entry_004",
-                "session_key": "ws:default",
-                "content": "good-sop\nfine desc\nstep 1",
-                "created_at": now,
-                "updated_at": now,
-                "use_count": 3,
-            },
-        ])
+        _create_test_db(
+            db_file,
+            [
+                {
+                    "id": "entry_004",
+                    "session_key": "ws:default",
+                    "content": "good-sop\nfine desc\nstep 1",
+                    "created_at": now,
+                    "updated_at": now,
+                    "use_count": 3,
+                },
+            ],
+        )
 
         settings = FakeSettings(llm_review_enabled=True)
 

@@ -63,9 +63,7 @@ async def chat_completions(
         raise HTTPException(400, "No user message")
     last_msg = user_messages[-1].content
 
-    session_id, _tree = await _session_router.resolve_or_create(
-        session_key, "default"
-    )
+    session_id, _tree = await _session_router.resolve_or_create(session_key, "default")
 
     request = RunRequest(
         session_id=session_id,
@@ -103,15 +101,11 @@ async def _stream_sse(request: RunRequest, model: str, user_id: str):
         "object": "chat.completion.chunk",
         "created": int(time.time()),
         "model": model,
-        "choices": [
-            {"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}
-        ],
+        "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
     }
     yield f"data: {json.dumps(first_chunk)}\n\n"
 
-    async for event in run_agent_stream(
-        request, _deps, tool_workspace_path=tool_workspace
-    ):
+    async for event in run_agent_stream(request, _deps, tool_workspace_path=tool_workspace):
         if isinstance(event, TextChunk):
             chunk = {
                 "id": completion_id,
@@ -133,9 +127,7 @@ async def _stream_sse(request: RunRequest, model: str, user_id: str):
                 "object": "chat.completion.chunk",
                 "created": int(time.time()),
                 "model": model,
-                "choices": [
-                    {"index": 0, "delta": {}, "finish_reason": "stop"}
-                ],
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
             }
             if event.usage:
                 final["usage"] = _format_openai_usage(event.usage)
@@ -153,9 +145,7 @@ async def _complete_response(request: RunRequest, model: str, user_id: str) -> d
 
     tool_workspace = _resolve_user_workspace(user_id)
 
-    async for event in run_agent_stream(
-        request, _deps, tool_workspace_path=tool_workspace
-    ):
+    async for event in run_agent_stream(request, _deps, tool_workspace_path=tool_workspace):
         if isinstance(event, TextChunk):
             collected_text.append(event.text)
         elif isinstance(event, Done):
@@ -197,7 +187,5 @@ def _format_openai_usage(done_usage: dict[str, int]) -> dict[str, Any]:
 async def list_models() -> dict[str, Any]:
     return {
         "object": "list",
-        "data": [
-            {"id": "pyclaw-default", "object": "model", "owned_by": "pyclaw"}
-        ],
+        "data": [{"id": "pyclaw-default", "object": "model", "owned_by": "pyclaw"}],
     }

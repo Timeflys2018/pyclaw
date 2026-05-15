@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
-
-import pytest
 
 from pyclaw.core.agent.llm import LLMClient, LLMError, LLMStreamChunk, LLMUsage
 from pyclaw.core.agent.runner import (
@@ -18,7 +15,6 @@ from pyclaw.core.hooks import HookRegistry
 from pyclaw.models import (
     AgentRunConfig,
     CompactionConfig,
-    CompactResult,
     Done,
     ErrorEvent,
     MessageEntry,

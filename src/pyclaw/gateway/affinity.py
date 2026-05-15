@@ -60,9 +60,7 @@ class AffinityRegistry:
         await self._redis.expire(self._key(session_key), self._ttl)
 
     async def release(self, session_key: str) -> bool:
-        result = await self._redis.eval(
-            _RELEASE_SCRIPT, 1, self._key(session_key), self._worker_id
-        )
+        result = await self._redis.eval(_RELEASE_SCRIPT, 1, self._key(session_key), self._worker_id)
         return bool(result)
 
     async def force_claim(self, session_key: str) -> None:

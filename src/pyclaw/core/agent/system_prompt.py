@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Sequence
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ def workspace_section(inputs: PromptInputs) -> str | None:
 
 
 def runtime_section(inputs: PromptInputs) -> str:
-    now = inputs.now_iso or datetime.now(timezone.utc).isoformat()
+    now = inputs.now_iso or datetime.now(UTC).isoformat()
     return (
         "## Runtime\n"
         f"agent={inputs.agent_id} | model={inputs.model} | session={inputs.session_id} | time={now}"
@@ -111,9 +111,7 @@ def runtime_section(inputs: PromptInputs) -> str:
 _TRUNCATION_PRIORITY = ["skills", "bootstrap", "l1_snapshot", "workspace"]
 
 
-def enforce_system_budget(
-    sections: list[PromptSection], budget: int
-) -> list[PromptSection]:
+def enforce_system_budget(sections: list[PromptSection], budget: int) -> list[PromptSection]:
     total = sum(s.estimated_tokens for s in sections)
     if total <= budget:
         return sections

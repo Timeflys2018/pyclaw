@@ -60,9 +60,7 @@ async def test_empty_key_returns_empty(index: RedisL1Index) -> None:
 
 async def test_eviction_by_count(index: RedisL1Index) -> None:
     for i in range(7):
-        await index.index_update(
-            "test:bob", _make_entry(f"e{i}", f"item{i}", ts=1000.0 + i)
-        )
+        await index.index_update("test:bob", _make_entry(f"e{i}", f"item{i}", ts=1000.0 + i))
     result = await index.index_get("test:bob")
     assert len(result) == 5
     ids = {e.id for e in result}
@@ -79,9 +77,7 @@ async def test_eviction_by_chars(index: RedisL1Index) -> None:
     assert result[0].id == "e2"
 
 
-async def test_ttl_is_set(
-    index: RedisL1Index, redis_client: aioredis.Redis
-) -> None:
+async def test_ttl_is_set(index: RedisL1Index, redis_client: aioredis.Redis) -> None:
     await index.index_update("test:dave", _make_entry("e1", "hello"))
     key = f"{TEST_PREFIX}memory:L1:test:dave"
     ttl = await redis_client.ttl(key)

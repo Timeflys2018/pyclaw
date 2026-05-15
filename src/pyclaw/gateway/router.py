@@ -54,7 +54,8 @@ class GatewayRouter:
         if not delivered:
             logger.info(
                 "gateway: target worker %s not reachable; force-claiming session_key=%s",
-                owner, session_key,
+                owner,
+                session_key,
             )
             await self._affinity.force_claim(session_key)
             return "local"

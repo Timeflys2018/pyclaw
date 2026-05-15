@@ -3,8 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from pyclaw.core.agent.llm import LLMClient, LLMResponse, LLMUsage
 from pyclaw.core.agent.runner import AgentRunnerDeps, RunRequest, run_agent_stream
 from pyclaw.core.agent.tools.registry import ToolContext, ToolRegistry, text_result
@@ -91,18 +89,23 @@ class _EchoTool:
         "required": ["text"],
     }
     side_effect = False
+    tool_class = "read"
 
     async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
         return text_result(args.get("_call_id", "x"), f"echo:{args.get('text', '')}")
 
 
 def _usage(in_tokens: int = 10, out_tokens: int = 5) -> LLMUsage:
-    return LLMUsage(input_tokens=in_tokens, output_tokens=out_tokens, total_tokens=in_tokens + out_tokens)
+    return LLMUsage(
+        input_tokens=in_tokens, output_tokens=out_tokens, total_tokens=in_tokens + out_tokens
+    )
 
 
 class TestAgentLoop:
     async def test_simple_text_response(self, tmp_path: Path) -> None:
-        llm = _FakeLLM([LLMResponse(text="hello world", tool_calls=[], usage=_usage(), finish_reason="stop")])
+        llm = _FakeLLM(
+            [LLMResponse(text="hello world", tool_calls=[], usage=_usage(), finish_reason="stop")]
+        )
         registry = ToolRegistry()
         deps = AgentRunnerDeps(llm=llm, tools=registry)
 
@@ -132,7 +135,10 @@ class TestAgentLoop:
                         {
                             "id": "call_1",
                             "type": "function",
-                            "function": {"name": "echo", "arguments": {"text": "hi", "_call_id": "call_1"}},
+                            "function": {
+                                "name": "echo",
+                                "arguments": {"text": "hi", "_call_id": "call_1"},
+                            },
                         }
                     ],
                     usage=_usage(),
@@ -175,7 +181,10 @@ class TestAgentLoop:
                     {
                         "id": "call_x",
                         "type": "function",
-                        "function": {"name": "echo", "arguments": {"text": "loop", "_call_id": "call_x"}},
+                        "function": {
+                            "name": "echo",
+                            "arguments": {"text": "loop", "_call_id": "call_x"},
+                        },
                     }
                 ],
                 usage=_usage(),

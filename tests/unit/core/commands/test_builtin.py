@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pyclaw.infra.settings import Settings
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.commands.builtin import (
     cmd_extract,
@@ -21,6 +20,7 @@ from pyclaw.core.commands.builtin import (
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.registry import CommandRegistry
 from pyclaw.core.sop_extraction import ExtractionResult
+from pyclaw.infra.settings import Settings
 from pyclaw.storage.session.base import InMemorySessionStore
 
 
@@ -100,9 +100,7 @@ async def test_cmd_new_dispatches_followup_when_args_present() -> None:
     router = SessionRouter(store=store)
     await router.resolve_or_create("key1", "ws")
     deps = _mock_deps_with_store(store)
-    ctx, reply, dispatch = _build_ctx(
-        session_key="key1", deps=deps, session_router=router
-    )
+    ctx, reply, dispatch = _build_ctx(session_key="key1", deps=deps, session_router=router)
 
     await cmd_new("帮我做 X", ctx)
 
@@ -116,9 +114,7 @@ async def test_cmd_reset_uses_reset_message() -> None:
     router = SessionRouter(store=store)
     await router.resolve_or_create("key1", "ws")
     deps = _mock_deps_with_store(store)
-    ctx, reply, _ = _build_ctx(
-        session_key="key1", deps=deps, session_router=router
-    )
+    ctx, reply, _ = _build_ctx(session_key="key1", deps=deps, session_router=router)
 
     await cmd_reset("", ctx)
 
@@ -152,9 +148,7 @@ async def test_cmd_whoami_feishu_uses_event() -> None:
     event.event.sender.sender_id.open_id = "ou_xyz"
     event.event.message.chat_type = "p2p"
     event.event.message.chat_id = ""
-    ctx, reply, _ = _build_ctx(
-        channel="feishu", raw={"channel": "feishu", "feishu_event": event}
-    )
+    ctx, reply, _ = _build_ctx(channel="feishu", raw={"channel": "feishu", "feishu_event": event})
 
     await cmd_whoami("", ctx)
 
@@ -169,9 +163,7 @@ async def test_cmd_whoami_feishu_group_includes_chat_id() -> None:
     event.event.sender.sender_id.open_id = "ou_xyz"
     event.event.message.chat_type = "group"
     event.event.message.chat_id = "oc_chat1"
-    ctx, reply, _ = _build_ctx(
-        channel="feishu", raw={"channel": "feishu", "feishu_event": event}
-    )
+    ctx, reply, _ = _build_ctx(channel="feishu", raw={"channel": "feishu", "feishu_event": event})
 
     await cmd_whoami("", ctx)
 
@@ -194,9 +186,7 @@ async def test_cmd_whoami_web_uses_user_id() -> None:
 
 @pytest.mark.asyncio
 async def test_cmd_whoami_web_does_not_access_feishu_event() -> None:
-    ctx, _, _ = _build_ctx(
-        channel="web", user_id="bob", raw={"channel": "web"}
-    )
+    ctx, _, _ = _build_ctx(channel="web", user_id="bob", raw={"channel": "web"})
     await cmd_whoami("", ctx)
 
 
@@ -238,9 +228,7 @@ async def test_cmd_idle_30m() -> None:
     router = SessionRouter(store=store)
     sid, _ = await router.resolve_or_create("k", "ws")
     deps = _mock_deps_with_store(store)
-    ctx, reply, _ = _build_ctx(
-        session_id=sid, session_key="k", deps=deps, session_router=router
-    )
+    ctx, reply, _ = _build_ctx(session_id=sid, session_key="k", deps=deps, session_router=router)
     await cmd_idle("30m", ctx)
     tree = await store.load(sid)
     assert tree is not None
@@ -253,9 +241,7 @@ async def test_cmd_idle_off() -> None:
     router = SessionRouter(store=store)
     sid, _ = await router.resolve_or_create("k", "ws")
     deps = _mock_deps_with_store(store)
-    ctx, reply, _ = _build_ctx(
-        session_id=sid, session_key="k", deps=deps, session_router=router
-    )
+    ctx, reply, _ = _build_ctx(session_id=sid, session_key="k", deps=deps, session_router=router)
     await cmd_idle("off", ctx)
     msg = reply.await_args[0][0]
     assert "关闭" in msg
@@ -367,6 +353,7 @@ async def test_register_builtin_includes_all_commands() -> None:
         "/status",
         "/steer",
         "/tasks",
+        "/tier",
         "/tools",
         "/whoami",
     ]

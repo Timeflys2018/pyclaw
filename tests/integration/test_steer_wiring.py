@@ -10,6 +10,7 @@ Scenarios per tasks.md phase 9:
  3. Feishu path: handle_feishu_message with /steer ... -> rc.pending_steers append (no FeishuCommandAdapter).
  4. End-to-end: pre-populated pending_steers drained in one iteration via the full build_per_turn_suffix.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -19,11 +20,10 @@ import pytest
 from pyclaw.channels.web.chat import SessionQueue, _dispatch_protocol_op
 from pyclaw.channels.web.message_classifier import classify
 from pyclaw.channels.web.protocol import ChatSendMessage
-from pyclaw.channels.web.protocol_ops import handle_stop_command
 from pyclaw.core.agent.hooks.steer_hook import SteerHook
 from pyclaw.core.agent.run_control import RunControl
 from pyclaw.core.agent.system_prompt import PromptInputs, build_per_turn_suffix
-from pyclaw.core.hooks import HookRegistry, PromptBuildContext
+from pyclaw.core.hooks import HookRegistry
 
 
 class _CapturedEvents:
@@ -173,10 +173,12 @@ async def test_end_to_end_one_iteration_cycle():
     hook = SteerHook()
     await hook.on_run_start("sess_e2e", rc)
 
-    rc.pending_steers.extend([
-        SteerMessage(kind="steer", text="e2e_steer"),
-        SteerMessage(kind="sidebar", text="e2e_side"),
-    ])
+    rc.pending_steers.extend(
+        [
+            SteerMessage(kind="steer", text="e2e_steer"),
+            SteerMessage(kind="sidebar", text="e2e_side"),
+        ]
+    )
     assert len(rc.pending_steers) == 2
 
     registry = HookRegistry()

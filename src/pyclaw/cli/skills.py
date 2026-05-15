@@ -98,6 +98,7 @@ def cmd_install(args: argparse.Namespace) -> None:
             print(f"   SKILL.md: {dest / 'SKILL.md'}")
 
             from pyclaw.skills.parser import parse_skill_file
+
             manifest = parse_skill_file(dest / "SKILL.md")
             print(f"   Name: {manifest.name}")
             print(f"   Description: {manifest.description[:80]}")
@@ -105,7 +106,7 @@ def cmd_install(args: argparse.Namespace) -> None:
                 print(f"   Requires bins: {', '.join(manifest.requirements.bins)}")
             if manifest.requirements.env:
                 print(f"   Requires env: {', '.join(manifest.requirements.env)}")
-            print(f"\n   Run `pyclaw-skill list` to verify discovery.")
+            print("\n   Run `pyclaw-skill list` to verify discovery.")
         finally:
             await client.close()
 
@@ -202,7 +203,12 @@ def cmd_curator_list(args: argparse.Namespace) -> None:
             "SELECT id, content, use_count, last_used_at "
             "FROM procedures WHERE type='auto_sop' AND status='active'"
         )
-        headers = ("id      ", "content                                                     ", "use_cnt", "last_used_at    ")
+        headers = (
+            "id      ",
+            "content                                                     ",
+            "use_cnt",
+            "last_used_at    ",
+        )
     elif args.stale:
         stale_days = settings.evolution.curator.stale_after_days
         threshold = int(time.time()) - stale_days * 86400
@@ -211,13 +217,23 @@ def cmd_curator_list(args: argparse.Namespace) -> None:
             "FROM procedures WHERE status='active' "
             f"AND COALESCE(last_used_at, created_at) < {threshold}"
         )
-        headers = ("id      ", "content                                                     ", "use_cnt", "last_used_at    ")
+        headers = (
+            "id      ",
+            "content                                                     ",
+            "use_cnt",
+            "last_used_at    ",
+        )
     elif args.archived:
         sql = (
             "SELECT id, content, archived_at, archive_reason "
             "FROM procedures WHERE status='archived'"
         )
-        headers = ("id      ", "content                                                     ", "archived_at     ", "reason          ")
+        headers = (
+            "id      ",
+            "content                                                     ",
+            "archived_at     ",
+            "reason          ",
+        )
     else:
         print("Specify one of: --auto, --stale, --archived")
         sys.exit(1)
@@ -335,7 +351,12 @@ def cmd_curator_graduate(args: argparse.Namespace) -> None:
         return
 
     if preview:
-        headers = ("id      ", "content                                            ", "use_cnt", "age_days")
+        headers = (
+            "id      ",
+            "content                                            ",
+            "use_cnt",
+            "age_days",
+        )
         rows_fmt: list[tuple[str, ...]] = []
         for row in candidates:
             eid, skey, content, use_count, created_at = row
@@ -438,8 +459,12 @@ def main() -> None:
     p_cur_restore.add_argument("entry_id", help="Entry ID (or prefix) to restore")
 
     p_cur_graduate = curator_sub.add_parser("graduate", help="Graduate SOPs to SKILL.md")
-    p_cur_graduate.add_argument("--preview", action="store_true", help="List candidates without executing")
-    p_cur_graduate.add_argument("--id", dest="id", help="Force-graduate a specific entry (skip thresholds)")
+    p_cur_graduate.add_argument(
+        "--preview", action="store_true", help="List candidates without executing"
+    )
+    p_cur_graduate.add_argument(
+        "--id", dest="id", help="Force-graduate a specific entry (skip thresholds)"
+    )
 
     args = parser.parse_args()
 

@@ -206,9 +206,7 @@ async def with_safety_timeout(
     kind: str = "compaction",
 ) -> T:
     try:
-        return await run_with_timeout(
-            fn(), timeout_s=timeout_s, abort_event=abort_event, kind=kind
-        )
+        return await run_with_timeout(fn(), timeout_s=timeout_s, abort_event=abort_event, kind=kind)
     except (AgentTimeoutError, AgentAbortedError):
         if on_cancel is not None:
             try:

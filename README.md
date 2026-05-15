@@ -238,7 +238,8 @@ graph TB
 | **Context Engine** | ✅ | Frozen/per-turn split, memory search, L1 snapshot, prompt budget |
 | **Session Store** | ✅ | Redis (production) + InMemory (dev), SessionKey/SessionId rotation, DAG tree |
 | **Feishu Channel** | ✅ | WebSocket cluster (50 workers), CardKit streaming, slash commands |
-| **Web Channel** | ✅ | React 19 SPA · Linear/Cursor visual · execution trace · multimodal · ⌘K palette · keyboard shortcuts · session CRUD · OpenAI-compat SSE · JWT auth · tool approval |
+| **Web Channel** | ✅ | React 19 SPA · Linear/Cursor visual · execution trace · multimodal · ⌘K palette · keyboard shortcuts · session CRUD · OpenAI-compat SSE · JWT auth · **tool approval modal + 3-tier permissions (read-only / approval / yolo)** |
+| **Tool Approval** | ✅ | End-to-end: WebToolApprovalHook + Feishu CardKit interactive card (originator-only authorization) · per-turn tier override · structured JSON audit log. See [permissions guide](./docs/en/permissions.md) |
 | **Skill Hub** | ✅ | ClawHub-compatible, progressive disclosure, 5-layer discovery, `pyclaw-skill` CLI |
 | **Prompt Engineering** | ✅ | `PromptBudgetConfig`, frozen prefix caching, priority truncation |
 | **TaskManager** | ✅ | Centralized async lifecycle, K8s-grade graceful shutdown |
@@ -364,6 +365,7 @@ PyClaw is configured via a single `pyclaw.json` discovered in `./pyclaw.json`, `
 
 - **[Configuration reference (EN)](./docs/en/configuration.md)** · **[配置参考 (中文)](./docs/zh/configuration.md)** — every Settings field, env-var override map, scenario-driven examples
 - **[Deployment guide (EN)](./docs/en/deployment.md)** · **[部署指南 (中文)](./docs/zh/deployment.md)** — local dev, single Docker, 3-worker active-active with [`deploy/docker-compose.multi.yml`](./deploy/docker-compose.multi.yml), no-Docker `make worker[1-3]`
+- **[Permissions & tool approval (EN)](./docs/en/permissions.md)** · **[权限与工具审批 (中文)](./docs/zh/permissions.md)** — three permission tiers (`read-only` / `approval` / `yolo`), per-channel UX (Web modal vs Feishu CardKit), audit log schema
 - **[`configs/pyclaw.example.json`](./configs/pyclaw.example.json)** — complete runnable template (167 lines)
 
 ---

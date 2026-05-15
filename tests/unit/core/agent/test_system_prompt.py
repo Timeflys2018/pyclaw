@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pyclaw.core.agent.system_prompt import (
     PromptInputs,
-    PromptSection,
     SkillSummary,
     SystemPromptResult,
     build_frozen_prefix,
@@ -10,7 +9,6 @@ from pyclaw.core.agent.system_prompt import (
     build_system_prompt,
 )
 from pyclaw.core.hooks import (
-    AgentHook,
     HookRegistry,
     PromptBuildContext,
     PromptBuildResult,
@@ -52,16 +50,18 @@ class TestToolingSection:
         assert "Run shell command" in prompt
 
     async def test_tool_description_uses_first_line(self) -> None:
-        prompt = await build_system_prompt(
-            _base_inputs(tools=[("bash", "Line one.\nLine two.")])
-        )
+        prompt = await build_system_prompt(_base_inputs(tools=[("bash", "Line one.\nLine two.")]))
         assert "Line one." in prompt
         assert "Line two." not in prompt
 
 
 class TestSkillsSection:
     async def test_emits_available_skills_xml(self) -> None:
-        skills = [SkillSummary(name="github", description="GitHub ops", location="~/skills/github/SKILL.md")]
+        skills = [
+            SkillSummary(
+                name="github", description="GitHub ops", location="~/skills/github/SKILL.md"
+            )
+        ]
         prompt = await build_system_prompt(_base_inputs(skills=skills))
         assert "<available_skills>" in prompt
         assert "<name>github</name>" in prompt
@@ -112,7 +112,9 @@ class TestBuildFrozenPrefix:
     def test_all_sections(self) -> None:
         inputs = _base_inputs(
             tools=[("bash", "Run shell command")],
-            skills=[SkillSummary(name="git", description="Git ops", location="~/skills/git/SKILL.md")],
+            skills=[
+                SkillSummary(name="git", description="Git ops", location="~/skills/git/SKILL.md")
+            ],
             workspace_path="/tmp/ws",
         )
         result = build_frozen_prefix(inputs)

@@ -10,10 +10,7 @@ from pyclaw.core.agent.incomplete_turn import (
 
 class TestClassifyTurn:
     def test_tool_calls_means_ok(self) -> None:
-        assert (
-            classify_turn(text="", tool_calls=[{"id": "x"}])
-            == "ok"
-        )
+        assert classify_turn(text="", tool_calls=[{"id": "x"}]) == "ok"
 
     def test_empty_response(self) -> None:
         assert classify_turn(text="", tool_calls=None) == "empty"
@@ -26,10 +23,7 @@ class TestClassifyTurn:
         assert classify_turn(text=text, tool_calls=None) == "reasoning"
 
     def test_reasoning_only_with_explicit_param(self) -> None:
-        assert (
-            classify_turn(text="", tool_calls=None, reasoning="step by step...")
-            == "reasoning"
-        )
+        assert classify_turn(text="", tool_calls=None, reasoning="step by step...") == "reasoning"
 
     def test_planning_phrase_short(self) -> None:
         text = "I'll read the config and update it."

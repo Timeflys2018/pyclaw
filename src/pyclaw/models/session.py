@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
-from typing import Annotated, Any, Literal, Union
+from datetime import UTC, datetime
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -18,7 +18,7 @@ def generate_entry_id(existing_ids: set[str], max_attempts: int = 100) -> str:
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class SessionHeader(BaseModel):
@@ -80,7 +80,7 @@ class CustomEntry(SessionEntryBase):
 
 
 SessionEntry = Annotated[
-    Union[MessageEntry, CompactionEntry, ModelChangeEntry, CustomEntry],
+    MessageEntry | CompactionEntry | ModelChangeEntry | CustomEntry,
     Field(discriminator="type"),
 ]
 
@@ -180,10 +180,12 @@ def _content_blocks_to_llm(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for block in blocks:
         if isinstance(block, ImageBlock):
-            result.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:{block.mime_type};base64,{block.data}"},
-            })
+            result.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{block.mime_type};base64,{block.data}"},
+                }
+            )
         elif isinstance(block, TextBlock):
             if not block.text or not block.text.strip():
                 continue

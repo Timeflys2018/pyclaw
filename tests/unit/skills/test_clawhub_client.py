@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import httpx
+import pytest
 import respx
 
 from pyclaw.skills.clawhub_client import (
@@ -16,8 +17,6 @@ from pyclaw.skills.clawhub_client import (
     create_client,
 )
 from pyclaw.skills.models import ClawHubError
-
-import pytest
 
 BASE = "https://clawhub.ai"
 
@@ -215,19 +214,17 @@ async def test_token_from_env_var() -> None:
 
 
 async def test_no_token_no_auth_header() -> None:
-    with patch.dict(os.environ, {}, clear=True):
-        with patch(
-            "pyclaw.skills.clawhub_client._resolve_token", return_value=None
-        ):
-            with respx.mock:
-                route = respx.get(
-                    f"{BASE}/api/v1/search", params={"q": "test"}
-                ).mock(
-                    return_value=httpx.Response(200, json=[]),
-                )
-                client = ClawHubClient(base_url=BASE, token=None)
-                await client.search("test")
-                await client.close()
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch("pyclaw.skills.clawhub_client._resolve_token", return_value=None),
+        respx.mock,
+    ):
+        route = respx.get(f"{BASE}/api/v1/search", params={"q": "test"}).mock(
+            return_value=httpx.Response(200, json=[]),
+        )
+        client = ClawHubClient(base_url=BASE, token=None)
+        await client.search("test")
+        await client.close()
 
     assert "authorization" not in route.calls[0].request.headers
 
@@ -286,12 +283,14 @@ async def test_token_resolution_from_config_file(tmp_path: Path) -> None:
     config_file = config_dir / "config.json"
     config_file.write_text(json.dumps({"auth": {"accessToken": "file-token"}}))
 
-    with patch.dict(os.environ, {}, clear=True):
-        with patch(
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch(
             "pyclaw.skills.clawhub_client._config_file_path",
             return_value=config_file,
-        ):
-            token = _resolve_token()
+        ),
+    ):
+        token = _resolve_token()
     assert token == "file-token"
 
 
@@ -301,12 +300,14 @@ async def test_token_resolution_from_config_file(tmp_path: Path) -> None:
 
 
 async def test_token_resolution_returns_none() -> None:
-    with patch.dict(os.environ, {}, clear=True):
-        with patch(
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch(
             "pyclaw.skills.clawhub_client._config_file_path",
             return_value=Path("/nonexistent/config.json"),
-        ):
-            token = _resolve_token()
+        ),
+    ):
+        token = _resolve_token()
     assert token is None
 
 
@@ -316,9 +317,7 @@ async def test_token_resolution_returns_none() -> None:
 
 
 async def test_create_client() -> None:
-    with patch(
-        "pyclaw.skills.clawhub_client._resolve_token", return_value=None
-    ):
+    with patch("pyclaw.skills.clawhub_client._resolve_token", return_value=None):
         client = await create_client(base_url="https://custom.hub")
     assert isinstance(client, ClawHubClient)
     await client.close()
@@ -333,14 +332,14 @@ async def test_token_resolution_nested_credentials(tmp_path: Path) -> None:
     config_dir = tmp_path / ".config" / "clawhub"
     config_dir.mkdir(parents=True)
     config_file = config_dir / "config.json"
-    config_file.write_text(
-        json.dumps({"credentials": {"token": "nested-token"}})
-    )
+    config_file.write_text(json.dumps({"credentials": {"token": "nested-token"}}))
 
-    with patch.dict(os.environ, {}, clear=True):
-        with patch(
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch(
             "pyclaw.skills.clawhub_client._config_file_path",
             return_value=config_file,
-        ):
-            token = _resolve_token()
+        ),
+    ):
+        token = _resolve_token()
     assert token == "nested-token"

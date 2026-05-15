@@ -57,11 +57,14 @@ export interface WSClientIdentify {
   token: string
 }
 
+export type PermissionTier = 'read-only' | 'approval' | 'yolo'
+
 export interface WSClientChatSend {
   type: 'chat.send'
   conversation_id: string
   content: string
   attachments?: ImageBlock[]
+  tier?: PermissionTier
 }
 
 export interface WSClientChatAbort {

@@ -58,9 +58,7 @@ async def test_store_l3_procedure_and_search(backend: SqliteMemoryBackend) -> No
 
 
 async def test_l3_search_excludes_archived(backend: SqliteMemoryBackend) -> None:
-    active = _make_entry(
-        id="p1", layer="L3", type="workflow", content="active procedure step"
-    )
+    active = _make_entry(id="p1", layer="L3", type="workflow", content="active procedure step")
     archived = _make_entry(
         id="p2", layer="L3", type="workflow", content="archived procedure step", status="archived"
     )

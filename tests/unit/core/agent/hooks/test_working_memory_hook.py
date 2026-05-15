@@ -113,6 +113,8 @@ class TestWorkingMemoryHook:
         from pyclaw.models import CompactResult
 
         ctx = CompactionContext(session_id="s", workspace_id="w", agent_id="a")
-        cr = CompactResult(ok=True, compacted=True, summary="sum", tokens_before=100, tokens_after=50)
+        cr = CompactResult(
+            ok=True, compacted=True, summary="sum", tokens_before=100, tokens_after=50
+        )
         result = await hook.after_compaction(ctx, cr)
         assert result is None

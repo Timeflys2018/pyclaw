@@ -29,9 +29,7 @@ def create_jwt(user_id: str, secret: str, expires_in: int = 86400) -> str:
         json.dumps({"sub": user_id, "iat": now, "exp": now + expires_in}).encode()
     )
     signature = _base64url_encode(
-        hmac.new(
-            secret.encode(), f"{header}.{payload}".encode(), hashlib.sha256
-        ).digest()
+        hmac.new(secret.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest()
     )
     return f"{header}.{payload}.{signature}"
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -83,9 +83,26 @@ class ExtractResponse(BaseModel):
     message: str
 
 
-async def _load_and_verify(
-    session_id: str, user_id: str
-) -> SessionTree:
+class WebSettingsResponse(BaseModel):
+    default_permission_tier: str
+    tool_approval_timeout_seconds: int
+    tools_requiring_approval: list[str]
+
+
+@web_router.get("/settings", response_model=WebSettingsResponse)
+async def get_web_settings(request: Request) -> WebSettingsResponse:
+    web_deps = getattr(request.app.state, "web_deps", None)
+    if web_deps is None:
+        raise HTTPException(status_code=500, detail="Web deps not configured")
+    web_settings = web_deps.settings_full.channels.web
+    return WebSettingsResponse(
+        default_permission_tier=web_settings.default_permission_tier,
+        tool_approval_timeout_seconds=web_settings.tool_approval_timeout_seconds,
+        tools_requiring_approval=list(web_settings.tools_requiring_approval),
+    )
+
+
+async def _load_and_verify(session_id: str, user_id: str) -> SessionTree:
     store = _get_store()
     tree = await store.load(session_id)
     if tree is None:

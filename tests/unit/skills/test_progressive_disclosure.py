@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from textwrap import dedent
 from unittest.mock import patch
-
-import pytest
 
 from pyclaw.infra.settings import SkillSettings
 from pyclaw.skills.models import SkillManifest
@@ -24,6 +21,7 @@ def _skill(
 # ---------------------------------------------------------------------------
 # format_skills_index
 # ---------------------------------------------------------------------------
+
 
 class TestFormatSkillsIndex:
     def test_renders_name_and_description_only(self) -> None:
@@ -56,6 +54,7 @@ class TestFormatSkillsIndex:
 # ---------------------------------------------------------------------------
 # resolve_skills_prompt with progressive_disclosure
 # ---------------------------------------------------------------------------
+
 
 class TestResolveSkillsPromptProgressive:
     def _make_eligible(self) -> list[SkillManifest]:
@@ -97,6 +96,7 @@ class TestResolveSkillsPromptProgressive:
 # ---------------------------------------------------------------------------
 # _skills_cache and get_skill_detail
 # ---------------------------------------------------------------------------
+
 
 class TestSkillsCache:
     def _make_eligible(self) -> list[SkillManifest]:

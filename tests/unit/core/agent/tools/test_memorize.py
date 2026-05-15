@@ -90,9 +90,7 @@ async def test_memorize_invalid_layer(bad_layer):
     session_id = await _build_session_with_tool_use(session_store)
 
     tool = MemorizeTool(memory_store=memory_store, session_store=session_store)
-    result = await tool.execute(
-        {"content": "something", "layer": bad_layer}, _ctx(session_id)
-    )
+    result = await tool.execute({"content": "something", "layer": bad_layer}, _ctx(session_id))
 
     assert result.is_error is True
     assert "layer" in result.content[0].text
@@ -107,9 +105,7 @@ async def test_memorize_no_tool_use_in_session():
     session_id = await _build_session_no_tool_use(session_store)
 
     tool = MemorizeTool(memory_store=memory_store, session_store=session_store)
-    result = await tool.execute(
-        {"content": "remember this", "layer": "L2"}, _ctx(session_id)
-    )
+    result = await tool.execute({"content": "remember this", "layer": "L2"}, _ctx(session_id))
 
     assert result.is_error is True
     assert "requires at least one successful tool execution" in result.content[0].text
@@ -187,9 +183,7 @@ async def test_memorize_session_not_found():
     memory_store = AsyncMock()
 
     tool = MemorizeTool(memory_store=memory_store, session_store=session_store)
-    result = await tool.execute(
-        {"content": "test", "layer": "L2"}, _ctx("nonexistent:s:abc123")
-    )
+    result = await tool.execute({"content": "test", "layer": "L2"}, _ctx("nonexistent:s:abc123"))
 
     assert result.is_error is True
     assert "session not found" in result.content[0].text
@@ -205,9 +199,7 @@ async def test_memorize_store_raises():
     session_id = await _build_session_with_tool_use(session_store)
 
     tool = MemorizeTool(memory_store=memory_store, session_store=session_store)
-    result = await tool.execute(
-        {"content": "something", "layer": "L2"}, _ctx(session_id)
-    )
+    result = await tool.execute({"content": "something", "layer": "L2"}, _ctx(session_id))
 
     assert result.is_error is True
     assert "store failed" in result.content[0].text

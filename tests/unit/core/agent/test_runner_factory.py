@@ -37,7 +37,9 @@ async def test_factory_passes_full_providers_dict_to_llm_client() -> None:
     settings = _settings_with_providers(
         {
             "anthropic": ProviderSettings(api_key="ak", base_url="ab", prefixes=["anthropic"]),
-            "openai": ProviderSettings(api_key="ok", base_url="ob", prefixes=["openai", "azure_openai"]),
+            "openai": ProviderSettings(
+                api_key="ok", base_url="ob", prefixes=["openai", "azure_openai"]
+            ),
         },
         default_model="anthropic/foo",
     )
@@ -61,9 +63,11 @@ async def test_factory_single_provider_routes_via_layer4_catch_all(
 
     async def fake_acompletion(**kwargs):
         captured.update(kwargs)
+
         async def _empty():
             if False:
                 yield None
+
         return _empty()
 
     monkeypatch.setattr("litellm.acompletion", fake_acompletion)

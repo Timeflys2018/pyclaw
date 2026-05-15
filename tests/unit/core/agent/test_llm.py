@@ -5,25 +5,29 @@ import pytest
 from pyclaw.core.agent.llm import (
     LLMError,
     LLMErrorCode,
-    classify_error,
-    resolve_provider_for_model,
-    session_entries_to_llm_messages,
-    finalize_tool_calls,
-    merge_tool_call_deltas,
     _extract_usage,
     _prepend_system,
+    classify_error,
+    finalize_tool_calls,
+    merge_tool_call_deltas,
+    resolve_provider_for_model,
+    session_entries_to_llm_messages,
 )
 from pyclaw.infra.settings import ProviderSettings
 
 
-def _ps(*, api_key: str = "k", base_url: str = "u",
-        models: list[str] | dict | None = None, prefixes: list[str] | None = None) -> ProviderSettings:
+def _ps(
+    *,
+    api_key: str = "k",
+    base_url: str = "u",
+    models: list[str] | dict | None = None,
+    prefixes: list[str] | None = None,
+) -> ProviderSettings:
     if isinstance(models, dict):
         models_dict = models
     elif isinstance(models, list):
         models_dict = {
-            mid: {"modalities": {"input": ["text"], "output": ["text"]}}
-            for mid in models
+            mid: {"modalities": {"input": ["text"], "output": ["text"]}} for mid in models
         }
     else:
         models_dict = {}
@@ -37,7 +41,10 @@ def _ps(*, api_key: str = "k", base_url: str = "u",
 
 class TestClassifyError:
     def test_context_overflow(self) -> None:
-        assert classify_error(Exception("maximum context length exceeded")) == LLMErrorCode.CONTEXT_OVERFLOW
+        assert (
+            classify_error(Exception("maximum context length exceeded"))
+            == LLMErrorCode.CONTEXT_OVERFLOW
+        )
 
     def test_rate_limit(self) -> None:
         assert classify_error(Exception("rate limit reached 429")) == LLMErrorCode.RATE_LIMIT
@@ -70,7 +77,13 @@ class TestMessageConversion:
             {
                 "role": "assistant",
                 "content": "",
-                "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "read", "arguments": {}}}],
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "read", "arguments": {}},
+                    }
+                ],
             }
         ]
         out = session_entries_to_llm_messages(entries)
@@ -87,13 +100,25 @@ class TestToolCallStreamMerging:
         buffer: dict[int, dict] = {}
         merge_tool_call_deltas(
             buffer,
-            [{"index": 0, "id": "call_abc", "type": "function",
-              "function": {"name": "read", "arguments": '{"pa'}}],
+            [
+                {
+                    "index": 0,
+                    "id": "call_abc",
+                    "type": "function",
+                    "function": {"name": "read", "arguments": '{"pa'},
+                }
+            ],
         )
         merge_tool_call_deltas(
             buffer,
-            [{"index": 0, "id": None, "type": None,
-              "function": {"name": None, "arguments": 'th": "x"}'}}],
+            [
+                {
+                    "index": 0,
+                    "id": None,
+                    "type": None,
+                    "function": {"name": None, "arguments": 'th": "x"}'},
+                }
+            ],
         )
 
         finalized = finalize_tool_calls(buffer)
@@ -106,10 +131,18 @@ class TestToolCallStreamMerging:
         merge_tool_call_deltas(
             buffer,
             [
-                {"index": 0, "id": "c1", "type": "function",
-                 "function": {"name": "read", "arguments": "{}"}},
-                {"index": 1, "id": "c2", "type": "function",
-                 "function": {"name": "write", "arguments": "{}"}},
+                {
+                    "index": 0,
+                    "id": "c1",
+                    "type": "function",
+                    "function": {"name": "read", "arguments": "{}"},
+                },
+                {
+                    "index": 1,
+                    "id": "c2",
+                    "type": "function",
+                    "function": {"name": "write", "arguments": "{}"},
+                },
             ],
         )
         finalized = finalize_tool_calls(buffer)
@@ -274,7 +307,9 @@ class TestResolveProviderForModel:
         name, _ = resolve_provider_for_model("anthropic/ppio/pa/claude-sonnet-4-6", providers)
         assert name == "anthropic"
 
-    def test_unknown_prefix_policy_default_without_default_provider_falls_back_to_fail(self) -> None:
+    def test_unknown_prefix_policy_default_without_default_provider_falls_back_to_fail(
+        self,
+    ) -> None:
         providers = {"anthropic": _ps(), "openai": _ps()}
         with pytest.raises(LLMError) as exc_info:
             resolve_provider_for_model(
@@ -292,6 +327,7 @@ class TestLLMClientMultiProvider:
     @staticmethod
     def _make_anthropic_openai_client():
         from pyclaw.core.agent.llm import LLMClient
+
         providers = {
             "anthropic": _ps(api_key="ak", base_url="ab", prefixes=["anthropic"]),
             "openai": _ps(api_key="ok", base_url="ob", prefixes=["openai", "azure_openai"]),
@@ -304,7 +340,9 @@ class TestLLMClientMultiProvider:
             yield None
 
     @pytest.mark.asyncio
-    async def test_stream_routes_anthropic_credentials(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_stream_routes_anthropic_credentials(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         captured: dict[str, object] = {}
 
         async def fake_acompletion(**kwargs):
@@ -313,8 +351,10 @@ class TestLLMClientMultiProvider:
 
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         client = self._make_anthropic_openai_client()
-        async for _ in client.stream(messages=[{"role": "user", "content": "hi"}],
-                                     model="anthropic/ppio/pa/claude-sonnet-4-6"):
+        async for _ in client.stream(
+            messages=[{"role": "user", "content": "hi"}],
+            model="anthropic/ppio/pa/claude-sonnet-4-6",
+        ):
             pass
         assert captured["api_key"] == "ak"
         assert captured["api_base"] == "ab"
@@ -332,11 +372,13 @@ class TestLLMClientMultiProvider:
 
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         client = self._make_anthropic_openai_client()
-        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
-                                     model="anthropic/foo"):
+        async for _ in client.stream(
+            messages=[{"role": "user", "content": "x"}], model="anthropic/foo"
+        ):
             pass
-        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
-                                     model="azure_openai/gpt-5"):
+        async for _ in client.stream(
+            messages=[{"role": "user", "content": "x"}], model="azure_openai/gpt-5"
+        ):
             pass
         assert calls[0]["api_key"] == "ak" and calls[0]["api_base"] == "ab"
         assert calls[1]["api_key"] == "ok" and calls[1]["api_base"] == "ob"
@@ -393,8 +435,9 @@ class TestLLMClientMultiProvider:
             api_base="legacy_b",
             providers=providers,
         )
-        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
-                                     model="anthropic/foo"):
+        async for _ in client.stream(
+            messages=[{"role": "user", "content": "x"}], model="anthropic/foo"
+        ):
             pass
         assert captured["api_key"] == "new_k"
         assert captured["api_base"] == "new_b"
@@ -412,21 +455,21 @@ class TestLLMClientMultiProvider:
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         client = self._make_anthropic_openai_client()
         with pytest.raises(LLMError) as exc_info:
-            async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
-                                         model="vertex_ai/gemini"):
+            async for _ in client.stream(
+                messages=[{"role": "user", "content": "x"}], model="vertex_ai/gemini"
+            ):
                 pass
         assert exc_info.value.code == LLMErrorCode.PROVIDER_NOT_FOUND
         assert called == []
 
     def test_positional_providers_raises_typeerror(self) -> None:
         from pyclaw.core.agent.llm import LLMClient
+
         with pytest.raises(TypeError):
             LLMClient("m", "k", "b", {"anthropic": _ps()})  # type: ignore[misc]
 
     @pytest.mark.asyncio
-    async def test_complete_path_routes_credentials(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_complete_path_routes_credentials(self, monkeypatch: pytest.MonkeyPatch) -> None:
         captured: dict[str, object] = {}
 
         async def fake_acompletion(**kwargs):
@@ -447,6 +490,7 @@ class TestLLMClientMultiProvider:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from pyclaw.core.agent.llm import LLMClient
+
         captured: dict[str, object] = {}
 
         async def fake_acompletion(**kwargs):
@@ -456,14 +500,16 @@ class TestLLMClientMultiProvider:
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         providers = {
             "openai": _ps(
-                api_key="k", base_url="u",
+                api_key="k",
+                base_url="u",
                 prefixes=["azure_openai"],
             ),
         }
         providers["openai"].litellm_provider = "openai"
         client = LLMClient(default_model="azure_openai/foo", providers=providers)
-        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
-                                     model="azure_openai/gpt-5.4"):
+        async for _ in client.stream(
+            messages=[{"role": "user", "content": "x"}], model="azure_openai/gpt-5.4"
+        ):
             pass
         assert captured["custom_llm_provider"] == "openai"
         assert captured["model"] == "azure_openai/gpt-5.4"
@@ -480,8 +526,9 @@ class TestLLMClientMultiProvider:
 
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         client = self._make_anthropic_openai_client()
-        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
-                                     model="anthropic/foo"):
+        async for _ in client.stream(
+            messages=[{"role": "user", "content": "x"}], model="anthropic/foo"
+        ):
             pass
         assert captured["custom_llm_provider"] == "anthropic"
 
@@ -490,6 +537,7 @@ class TestLLMClientMultiProvider:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from pyclaw.core.agent.llm import LLMClient
+
         captured: dict[str, object] = {}
 
         async def fake_acompletion(**kwargs):
@@ -502,8 +550,9 @@ class TestLLMClientMultiProvider:
         }
         assert providers["openai"].litellm_provider is None
         client = LLMClient(default_model="azure_openai/foo", providers=providers)
-        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
-                                     model="azure_openai/gpt-5.4"):
+        async for _ in client.stream(
+            messages=[{"role": "user", "content": "x"}], model="azure_openai/gpt-5.4"
+        ):
             pass
         assert captured["custom_llm_provider"] == "openai"
 
@@ -512,6 +561,7 @@ class TestLLMClientMultiProvider:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from pyclaw.core.agent.llm import LLMClient
+
         captured: dict[str, object] = {}
 
         async def fake_acompletion(**kwargs):
@@ -521,10 +571,10 @@ class TestLLMClientMultiProvider:
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         ps = _ps(api_key="k", base_url="u", prefixes=["azure_openai"])
         ps.litellm_provider = "openai"
-        client = LLMClient(default_model="azure_openai/foo",
-                          providers={"mify_us": ps})
-        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
-                                     model="azure_openai/gpt-5.4"):
+        client = LLMClient(default_model="azure_openai/foo", providers={"mify_us": ps})
+        async for _ in client.stream(
+            messages=[{"role": "user", "content": "x"}], model="azure_openai/gpt-5.4"
+        ):
             pass
         assert captured["custom_llm_provider"] == "openai"
 
@@ -533,6 +583,7 @@ class TestLLMClientMultiProvider:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from pyclaw.core.agent.llm import LLMClient
+
         captured: dict[str, object] = {}
 
         async def fake_acompletion(**kwargs):
@@ -541,8 +592,7 @@ class TestLLMClientMultiProvider:
 
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         client = LLMClient(default_model="legacy", api_key="k", api_base="u")
-        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
-                                     model="anything"):
+        async for _ in client.stream(messages=[{"role": "user", "content": "x"}], model="anything"):
             pass
         assert "custom_llm_provider" not in captured
 
@@ -551,6 +601,7 @@ class TestLLMClientMultiProvider:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from pyclaw.core.agent.llm import LLMClient
+
         calls: list[dict[str, object]] = []
 
         async def fake_acompletion(**kwargs):
@@ -566,19 +617,25 @@ class TestLLMClientMultiProvider:
             default_model="anthropic/foo",
             providers={"anthropic": anthropic_ps, "openai": openai_ps},
         )
-        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
-                                     model="anthropic/foo"):
+        async for _ in client.stream(
+            messages=[{"role": "user", "content": "x"}], model="anthropic/foo"
+        ):
             pass
-        async for _ in client.stream(messages=[{"role": "user", "content": "x"}],
-                                     model="azure_openai/bar"):
+        async for _ in client.stream(
+            messages=[{"role": "user", "content": "x"}], model="azure_openai/bar"
+        ):
             pass
         assert calls[0]["custom_llm_provider"] == "anthropic"
         assert calls[1]["custom_llm_provider"] == "openai"
 
 
-def _ps_with_models(models: dict[str, dict] | None = None, *,
-                    api_key: str = "k", base_url: str = "u",
-                    prefixes: list[str] | None = None) -> ProviderSettings:
+def _ps_with_models(
+    models: dict[str, dict] | None = None,
+    *,
+    api_key: str = "k",
+    base_url: str = "u",
+    prefixes: list[str] | None = None,
+) -> ProviderSettings:
     return ProviderSettings(
         api_key=api_key,
         base_url=base_url,
@@ -593,7 +650,11 @@ class TestModelSupportsInput:
 
         providers = {
             "openai": _ps_with_models(
-                {"azure_openai/gpt-5.4": {"modalities": {"input": ["text", "image"], "output": ["text"]}}},
+                {
+                    "azure_openai/gpt-5.4": {
+                        "modalities": {"input": ["text", "image"], "output": ["text"]}
+                    }
+                },
                 prefixes=["azure_openai"],
             )
         }
@@ -604,7 +665,11 @@ class TestModelSupportsInput:
 
         providers = {
             "openai": _ps_with_models(
-                {"azure_openai/gpt-5.4": {"modalities": {"input": ["text", "image"], "output": ["text"]}}},
+                {
+                    "azure_openai/gpt-5.4": {
+                        "modalities": {"input": ["text", "image"], "output": ["text"]}
+                    }
+                },
                 prefixes=["azure_openai"],
             )
         }
@@ -615,7 +680,11 @@ class TestModelSupportsInput:
 
         providers = {
             "openai": _ps_with_models(
-                {"azure_openai/gpt-5.3-codex": {"modalities": {"input": ["text"], "output": ["text"]}}},
+                {
+                    "azure_openai/gpt-5.3-codex": {
+                        "modalities": {"input": ["text"], "output": ["text"]}
+                    }
+                },
                 prefixes=["azure_openai"],
             )
         }
@@ -643,7 +712,11 @@ class TestModelSupportsInput:
 
         providers = {
             "openai": _ps_with_models(
-                {"azure_openai/gpt-5.4": {"modalities": {"input": ["text", "image"], "output": ["text"]}}},
+                {
+                    "azure_openai/gpt-5.4": {
+                        "modalities": {"input": ["text", "image"], "output": ["text"]}
+                    }
+                },
                 prefixes=["azure_openai"],
             )
         }
@@ -655,10 +728,13 @@ class TestMessagesHaveUserImageContent:
         from pyclaw.core.agent.llm import messages_have_user_image_content
 
         msgs = [
-            {"role": "user", "content": [
-                {"type": "text", "text": "what's this?"},
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
-            ]}
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "what's this?"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                ],
+            }
         ]
         assert messages_have_user_image_content(msgs) is True
 
@@ -666,9 +742,15 @@ class TestMessagesHaveUserImageContent:
         from pyclaw.core.agent.llm import messages_have_user_image_content
 
         msgs = [
-            {"role": "user", "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "abc"}},
-            ]}
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/png", "data": "abc"},
+                    },
+                ],
+            }
         ]
         assert messages_have_user_image_content(msgs) is True
 
@@ -688,9 +770,12 @@ class TestMessagesHaveUserImageContent:
         from pyclaw.core.agent.llm import messages_have_user_image_content
 
         msgs = [
-            {"role": "assistant", "content": [
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
-            ]}
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                ],
+            }
         ]
         assert messages_have_user_image_content(msgs) is False
 
@@ -698,9 +783,12 @@ class TestMessagesHaveUserImageContent:
         from pyclaw.core.agent.llm import messages_have_user_image_content
 
         msgs = [
-            {"role": "system", "content": [
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
-            ]}
+            {
+                "role": "system",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                ],
+            }
         ]
         assert messages_have_user_image_content(msgs) is False
 
@@ -710,9 +798,12 @@ class TestMessagesHaveUserImageContent:
         msgs = [
             {"role": "user", "content": "first turn"},
             {"role": "assistant", "content": "ok"},
-            {"role": "user", "content": [
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
-            ]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                ],
+            },
         ]
         assert messages_have_user_image_content(msgs) is True
 
@@ -756,10 +847,15 @@ class TestLLMClientSecondaryVisionPreflight:
 
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         client = self._vision_text_client()
-        msgs = [{"role": "user", "content": [
-            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
-            {"type": "text", "text": "what is this"},
-        ]}]
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                    {"type": "text", "text": "what is this"},
+                ],
+            }
+        ]
         async for _ in client.stream(messages=msgs, model="azure_openai/gpt-5.4"):
             pass
         assert captured["model"] == "azure_openai/gpt-5.4"
@@ -773,9 +869,14 @@ class TestLLMClientSecondaryVisionPreflight:
 
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         client = self._vision_text_client()
-        msgs = [{"role": "user", "content": [
-            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
-        ]}]
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                ],
+            }
+        ]
         with pytest.raises(LLMError) as excinfo:
             async for _ in client.stream(messages=msgs, model="azure_openai/gpt-5.3-codex"):
                 pass
@@ -808,9 +909,14 @@ class TestLLMClientSecondaryVisionPreflight:
 
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         client = self._vision_text_client()
-        msgs = [{"role": "user", "content": [
-            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
-        ]}]
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                ],
+            }
+        ]
         with pytest.raises(LLMError) as excinfo:
             await client.complete(messages=msgs, model="azure_openai/gpt-5.3-codex")
         assert excinfo.value.code == LLMErrorCode.VISION_NOT_SUPPORTED
@@ -829,9 +935,14 @@ class TestLLMClientSecondaryVisionPreflight:
 
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         client = LLMClient(default_model="legacy", api_key="lk", api_base="lb")
-        msgs = [{"role": "user", "content": [
-            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
-        ]}]
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                ],
+            }
+        ]
         async for _ in client.stream(messages=msgs, model="anything"):
             pass
         assert captured["model"] == "anything"
@@ -845,9 +956,14 @@ class TestLLMClientSecondaryVisionPreflight:
 
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         client = self._vision_text_client()
-        msgs = [{"role": "user", "content": [
-            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
-        ]}]
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                ],
+            }
+        ]
         with pytest.raises(LLMError) as excinfo:
             async for _ in client.stream(messages=msgs, model="azure_openai/gpt-5.3-codex"):
                 pass
@@ -864,9 +980,14 @@ class TestLLMClientSecondaryVisionPreflight:
 
         monkeypatch.setattr("litellm.acompletion", fake_acompletion)
         client = self._vision_text_client()
-        msgs = [{"role": "user", "content": [
-            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
-        ]}]
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                ],
+            }
+        ]
         with pytest.raises(LLMError) as excinfo:
             async for _ in client.stream(messages=msgs, model="azure_openai/gpt-5.3-codex"):
                 pass

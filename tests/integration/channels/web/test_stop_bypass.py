@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import tempfile
 import time
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -25,7 +26,9 @@ from pyclaw.infra.task_manager import TaskManager
 from pyclaw.models.agent import ErrorEvent
 
 
-def _setup_state(tm: TaskManager, sq: SessionQueue) -> tuple[ConnectionState, AsyncMock, WebSettings]:
+def _setup_state(
+    tm: TaskManager, sq: SessionQueue
+) -> tuple[ConnectionState, AsyncMock, WebSettings]:
     workspace_base = Path(tempfile.mkdtemp())
     mock_ws = AsyncMock()
     mock_ws.app.state.workspace_base = workspace_base
@@ -34,7 +37,10 @@ def _setup_state(tm: TaskManager, sq: SessionQueue) -> tuple[ConnectionState, As
     mock_ws.app.state.web_settings = settings
     mock_ws.app.state.task_manager = tm
     state = ConnectionState(
-        ws=mock_ws, ws_session_id="ws-1", user_id="me", authenticated=True,
+        ws=mock_ws,
+        ws_session_id="ws-1",
+        user_id="me",
+        authenticated=True,
     )
     return state, mock_ws, settings
 
@@ -58,7 +64,10 @@ async def test_stop_bypass_aborts_inflight_run_within_200ms() -> None:
             await asyncio.sleep(0.01)
 
     long_msg = ChatSendMessage(
-        type="chat.send", conversation_id="conv-1", content="long task", attachments=[],
+        type="chat.send",
+        conversation_id="conv-1",
+        content="long task",
+        attachments=[],
     )
 
     with (
@@ -72,7 +81,10 @@ async def test_stop_bypass_aborts_inflight_run_within_200ms() -> None:
         assert rc.is_active() is True, "Long running task should be active"
 
         stop_msg = ChatSendMessage(
-            type="chat.send", conversation_id="conv-1", content="/stop", attachments=[],
+            type="chat.send",
+            conversation_id="conv-1",
+            content="/stop",
+            attachments=[],
         )
 
         send_t = time.monotonic()
@@ -80,7 +92,7 @@ async def test_stop_bypass_aborts_inflight_run_within_200ms() -> None:
 
         try:
             await asyncio.wait_for(run_task, timeout=1.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             run_task.cancel()
             pytest.fail("Long task did not abort within 1s of /stop")
 
@@ -91,7 +103,8 @@ async def test_stop_bypass_aborts_inflight_run_within_200ms() -> None:
 
     sent_payloads = [c[0][0] for c in mock_ws.send_json.call_args_list]
     stop_replies = [
-        p for p in sent_payloads
+        p
+        for p in sent_payloads
         if p["type"] == SERVER_CHAT_DONE and "已停止" in p["data"]["final_message"]
     ]
     assert len(stop_replies) == 1, f"expected 1 '🛑 已停止' reply, got {stop_replies!r}"
@@ -116,16 +129,19 @@ async def test_stop_with_no_active_run_replies_friendly() -> None:
     state, mock_ws, settings = _setup_state(tm, sq)
 
     stop_msg = ChatSendMessage(
-        type="chat.send", conversation_id="conv-idle", content="/stop", attachments=[],
+        type="chat.send",
+        conversation_id="conv-idle",
+        content="/stop",
+        attachments=[],
     )
     with patch("pyclaw.channels.web.chat._get_session_queue", return_value=sq):
         await enqueue_chat(state, stop_msg, settings)
 
     sent_payloads = [c[0][0] for c in mock_ws.send_json.call_args_list]
     matching = [
-        p for p in sent_payloads
-        if p["type"] == SERVER_CHAT_DONE
-        and "没有正在运行" in p["data"]["final_message"]
+        p
+        for p in sent_payloads
+        if p["type"] == SERVER_CHAT_DONE and "没有正在运行" in p["data"]["final_message"]
     ]
     assert len(matching) == 1
     assert matching[0]["data"]["aborted"] is False

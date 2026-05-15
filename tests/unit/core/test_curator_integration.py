@@ -48,9 +48,18 @@ def _create_procedure_db(db_path: Path, entries: list[dict]) -> None:
             "INSERT INTO procedures (id, session_key, type, content, source_session_id, "
             "created_at, updated_at, last_used_at, use_count, status) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (e["id"], e["session_key"], e.get("type", "auto_sop"), e["content"],
-             "ses_test", e["created_at"], e["updated_at"],
-             e.get("last_used_at"), e.get("use_count", 0), e.get("status", "active")),
+            (
+                e["id"],
+                e["session_key"],
+                e.get("type", "auto_sop"),
+                e["content"],
+                "ses_test",
+                e["created_at"],
+                e["updated_at"],
+                e.get("last_used_at"),
+                e.get("use_count", 0),
+                e.get("status", "active"),
+            ),
         )
     conn.close()
 
@@ -273,9 +282,7 @@ async def test_null_last_used_at_uses_created_at(tmp_path: Path) -> None:
 
     # Verify proc_young is still active
     conn = apsw.Connection(str(db_path))
-    young_row = conn.execute(
-        "SELECT status FROM procedures WHERE id='proc_young'"
-    ).fetchone()
+    young_row = conn.execute("SELECT status FROM procedures WHERE id='proc_young'").fetchone()
     assert young_row[0] == "active"
 
     # Verify proc_old is archived

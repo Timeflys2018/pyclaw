@@ -1,5 +1,5 @@
 """Tests for CuratorSettings configuration."""
-import pytest
+
 from pyclaw.infra.settings import CuratorSettings, EvolutionSettings
 
 
@@ -27,22 +27,26 @@ class TestCuratorSettingsDefaults:
 
 class TestCuratorSettingsAlias:
     def test_camel_case_alias_parsing(self):
-        s = CuratorSettings.model_validate({
-            "checkIntervalSeconds": 7200,
-            "intervalSeconds": 1209600,
-            "staleAfterDays": 14,
-            "archiveAfterDays": 60,
-        })
+        s = CuratorSettings.model_validate(
+            {
+                "checkIntervalSeconds": 7200,
+                "intervalSeconds": 1209600,
+                "staleAfterDays": 14,
+                "archiveAfterDays": 60,
+            }
+        )
         assert s.check_interval_seconds == 7200
         assert s.interval_seconds == 1209600
         assert s.stale_after_days == 14
         assert s.archive_after_days == 60
 
     def test_snake_case_also_works(self):
-        s = CuratorSettings.model_validate({
-            "check_interval_seconds": 1800,
-            "interval_seconds": 86400,
-        })
+        s = CuratorSettings.model_validate(
+            {
+                "check_interval_seconds": 1800,
+                "interval_seconds": 86400,
+            }
+        )
         assert s.check_interval_seconds == 1800
         assert s.interval_seconds == 86400
 
@@ -63,20 +67,24 @@ class TestEvolutionSettingsNestedCurator:
         assert e.curator.archive_after_days == 90
 
     def test_curator_nested_from_dict(self):
-        e = EvolutionSettings.model_validate({
-            "curator": {
-                "enabled": False,
-                "archiveAfterDays": 30,
+        e = EvolutionSettings.model_validate(
+            {
+                "curator": {
+                    "enabled": False,
+                    "archiveAfterDays": 30,
+                }
             }
-        })
+        )
         assert e.curator.enabled is False
         assert e.curator.archive_after_days == 30
 
     def test_extra_fields_ignored(self):
-        s = CuratorSettings.model_validate({
-            "enabled": True,
-            "unknownField": "ignored",
-        })
+        s = CuratorSettings.model_validate(
+            {
+                "enabled": True,
+                "unknownField": "ignored",
+            }
+        )
         assert s.enabled is True
 
 
@@ -90,12 +98,14 @@ class TestCuratorGraduationSettings:
         assert s.promotion_min_days == 7
 
     def test_graduation_alias_parsing(self):
-        s = CuratorSettings.model_validate({
-            "graduationEnabled": False,
-            "graduationMode": "enrich",
-            "promotionMinUseCount": 10,
-            "promotionMinDays": 14,
-        })
+        s = CuratorSettings.model_validate(
+            {
+                "graduationEnabled": False,
+                "graduationMode": "enrich",
+                "promotionMinUseCount": 10,
+                "promotionMinDays": 14,
+            }
+        )
         assert s.graduation_enabled is False
         assert s.graduation_mode == "enrich"
         assert s.promotion_min_use_count == 10
@@ -112,11 +122,13 @@ class TestCuratorLLMReviewSettings:
         assert s.llm_review_max_batch == 20
 
     def test_llm_review_alias_parsing(self):
-        s = CuratorSettings.model_validate({
-            "llmReviewEnabled": True,
-            "llmReviewActions": ["promote", "archive"],
-            "llmReviewMaxBatch": 10,
-        })
+        s = CuratorSettings.model_validate(
+            {
+                "llmReviewEnabled": True,
+                "llmReviewActions": ["promote", "archive"],
+                "llmReviewMaxBatch": 10,
+            }
+        )
         assert s.llm_review_enabled is True
         assert s.llm_review_actions == ["promote", "archive"]
         assert s.llm_review_max_batch == 10

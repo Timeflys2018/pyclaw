@@ -35,7 +35,7 @@ def _compact_home_path(file_path: str) -> str:
     home = str(Path.home())
     prefix = home + "/"
     if file_path.startswith(prefix):
-        return "~/" + file_path[len(prefix):]
+        return "~/" + file_path[len(prefix) :]
     return file_path
 
 

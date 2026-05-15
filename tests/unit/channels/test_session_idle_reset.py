@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from pyclaw.channels.session_router import SessionRouter
-from pyclaw.infra.settings import FeishuSettings
 from pyclaw.storage.session.base import InMemorySessionStore
 
 
@@ -41,10 +40,12 @@ async def test_idle_reset_triggers_rotation(
     store: InMemorySessionStore, router: SessionRouter
 ) -> None:
     sid, _ = await router.resolve_or_create("key1", "ws")
-    stale_ts = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    stale_ts = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
     tree = await store.load(sid)
     assert tree is not None
-    updated = tree.model_copy(update={"header": tree.header.model_copy(update={"last_interaction_at": stale_ts})})
+    updated = tree.model_copy(
+        update={"header": tree.header.model_copy(update={"last_interaction_at": stale_ts})}
+    )
     await store.save_header(updated)
 
     needs_reset = await router.check_idle_reset("key1", sid, idle_minutes=30)
@@ -71,10 +72,12 @@ async def test_idle_minutes_zero_never_resets(
     store: InMemorySessionStore, router: SessionRouter
 ) -> None:
     sid, _ = await router.resolve_or_create("key1", "ws")
-    stale_ts = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat()
+    stale_ts = (datetime.now(UTC) - timedelta(days=365)).isoformat()
     tree = await store.load(sid)
     assert tree is not None
-    updated = tree.model_copy(update={"header": tree.header.model_copy(update={"last_interaction_at": stale_ts})})
+    updated = tree.model_copy(
+        update={"header": tree.header.model_copy(update={"last_interaction_at": stale_ts})}
+    )
     await store.save_header(updated)
 
     result = await router.check_idle_reset("key1", sid, idle_minutes=0)

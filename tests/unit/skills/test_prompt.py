@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
-import pytest
-
+from pyclaw.core.utils.xml import xml_escape
 from pyclaw.infra.settings import SkillSettings
 from pyclaw.skills.models import SkillManifest
-from pyclaw.core.utils.xml import xml_escape
 from pyclaw.skills.prompt import (
     _compact_home_path,
     build_skills_prompt,
@@ -15,18 +12,21 @@ from pyclaw.skills.prompt import (
     format_skills_full,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-def _skill(name: str, description: str = "A skill", file_path: str = "/tmp/skills/SKILL.md") -> SkillManifest:
+
+def _skill(
+    name: str, description: str = "A skill", file_path: str = "/tmp/skills/SKILL.md"
+) -> SkillManifest:
     return SkillManifest(name=name, description=description, file_path=file_path)
 
 
 # ---------------------------------------------------------------------------
 # 1. Empty skills list → returns ""
 # ---------------------------------------------------------------------------
+
 
 class TestEmptySkillsList:
     def test_format_full_empty(self) -> None:
@@ -42,6 +42,7 @@ class TestEmptySkillsList:
 # ---------------------------------------------------------------------------
 # 2. Full format renders correctly — XML structure, preamble
 # ---------------------------------------------------------------------------
+
 
 class TestFullFormat:
     def test_renders_xml_with_description(self) -> None:
@@ -72,6 +73,7 @@ class TestFullFormat:
 # 3. Compact format renders correctly — no description, different preamble
 # ---------------------------------------------------------------------------
 
+
 class TestCompactFormat:
     def test_no_description_element(self) -> None:
         skills = [_skill("git", "Use git for version control")]
@@ -91,16 +93,17 @@ class TestCompactFormat:
 # 4. XML escaping — special chars in name/description/location
 # ---------------------------------------------------------------------------
 
+
 class TestXmlEscaping:
     def test_xml_escape_all_chars(self) -> None:
-        assert xml_escape('a & b') == 'a &amp; b'
-        assert xml_escape('a < b') == 'a &lt; b'
-        assert xml_escape('a > b') == 'a &gt; b'
-        assert xml_escape('a "b"') == 'a &quot;b&quot;'
+        assert xml_escape("a & b") == "a &amp; b"
+        assert xml_escape("a < b") == "a &lt; b"
+        assert xml_escape("a > b") == "a &gt; b"
+        assert xml_escape('a "b"') == "a &quot;b&quot;"
         assert xml_escape("a 'b'") == "a &apos;b&apos;"
 
     def test_xml_escape_combined(self) -> None:
-        assert xml_escape('<a & "b">') == '&lt;a &amp; &quot;b&quot;&gt;'
+        assert xml_escape('<a & "b">') == "&lt;a &amp; &quot;b&quot;&gt;"
 
     def test_xml_escape_in_full_format(self) -> None:
         skill = _skill("R&D <team>", 'Use "special" tools', "/path/with<brackets>/SKILL.md")
@@ -113,6 +116,7 @@ class TestXmlEscaping:
 # ---------------------------------------------------------------------------
 # 5. Home path compaction
 # ---------------------------------------------------------------------------
+
 
 class TestHomePathCompaction:
     def test_compacts_home_path(self) -> None:
@@ -138,6 +142,7 @@ class TestHomePathCompaction:
 # 6. Budget: full format fits — no warning
 # ---------------------------------------------------------------------------
 
+
 class TestBudgetFullFits:
     def test_full_format_within_budget(self) -> None:
         skills = [
@@ -157,6 +162,7 @@ class TestBudgetFullFits:
 # ---------------------------------------------------------------------------
 # 7. Budget: full exceeds, compact fits — compact warning
 # ---------------------------------------------------------------------------
+
 
 class TestBudgetCompactFallback:
     def test_compact_fallback_with_warning(self) -> None:
@@ -184,6 +190,7 @@ class TestBudgetCompactFallback:
 # ---------------------------------------------------------------------------
 # 8. Budget: compact also exceeds, binary search truncation
 # ---------------------------------------------------------------------------
+
 
 class TestBudgetBinarySearch:
     def test_binary_search_truncation(self) -> None:
@@ -219,6 +226,7 @@ class TestBudgetBinarySearch:
 # 9. Count cap — max_skills_in_prompt
 # ---------------------------------------------------------------------------
 
+
 class TestCountCap:
     def test_count_cap_limits_skills(self) -> None:
         skills = [_skill(f"skill-{i}", "Desc", f"/s/{i}/SKILL.md") for i in range(5)]
@@ -247,6 +255,7 @@ class TestCountCap:
 # 10. Overhead reserve — compact budget = max - 150
 # ---------------------------------------------------------------------------
 
+
 class TestOverheadReserve:
     def test_overhead_reserve_applied(self) -> None:
         """Compact budget should be max_skills_prompt_chars - 150."""
@@ -263,7 +272,9 @@ class TestOverheadReserve:
 
         # Budget: compact length + 140 → compact budget = compact_len - 10, so compact doesn't fit
         budget_tight = len(compact_text) + 140
-        settings_tight = SkillSettings(max_skills_prompt_chars=budget_tight, max_skills_in_prompt=150)
+        settings_tight = SkillSettings(
+            max_skills_prompt_chars=budget_tight, max_skills_in_prompt=150
+        )
         # Full won't fit (it's bigger), compact budget = budget_tight - 150 < compact_text
         # This triggers binary search on a single skill
         result_tight = build_skills_prompt(skills, settings_tight)
@@ -274,6 +285,7 @@ class TestOverheadReserve:
 # ---------------------------------------------------------------------------
 # 11. Alphabetical sort — output sorted by name
 # ---------------------------------------------------------------------------
+
 
 class TestAlphabeticalSort:
     def test_sorted_by_name(self) -> None:
@@ -294,6 +306,7 @@ class TestAlphabeticalSort:
 # ---------------------------------------------------------------------------
 # 12. Preamble text difference — full vs compact
 # ---------------------------------------------------------------------------
+
 
 class TestPreambleTextDifference:
     def test_full_says_description(self) -> None:

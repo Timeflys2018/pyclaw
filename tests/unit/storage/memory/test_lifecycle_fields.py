@@ -1,8 +1,11 @@
 """Tests for L3 lifecycle field activation (use_count, last_used_at)."""
+
 import time
+
 import pytest
-from pyclaw.storage.memory.sqlite import SqliteMemoryBackend
+
 from pyclaw.storage.memory.base import MemoryEntry
+from pyclaw.storage.memory.sqlite import SqliteMemoryBackend
 
 
 @pytest.fixture

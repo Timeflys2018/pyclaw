@@ -49,6 +49,9 @@ class FeishuChannelPlugin:
         admin_user_ids: list[str] | None = None,
         gateway_router: Any = None,  # noqa: ANN401
         worker_registry: Any = None,  # noqa: ANN401
+        tool_approval_hook: Any = None,  # noqa: ANN401
+        approval_registry: Any = None,  # noqa: ANN401
+        audit_logger: Any = None,  # noqa: ANN401
     ) -> None:
         self._settings = settings
         self._settings_full = settings_full
@@ -65,6 +68,9 @@ class FeishuChannelPlugin:
         self._admin_user_ids: list[str] = list(admin_user_ids or [])
         self._gateway_router = gateway_router
         self._worker_registry = worker_registry
+        self._tool_approval_hook = tool_approval_hook
+        self._approval_registry = approval_registry
+        self._audit_logger = audit_logger
         self._ws_client: lark.ws.Client | None = None
         self._main_loop: asyncio.AbstractEventLoop | None = None
         self._ws_loop: asyncio.AbstractEventLoop | None = None
@@ -77,6 +83,7 @@ class FeishuChannelPlugin:
 
     async def start(self) -> None:
         from pyclaw.storage.session.base import SessionStore as SessionStoreProtocol
+
         if not isinstance(self._deps.session_store, SessionStoreProtocol):
             raise TypeError(
                 f"session_store {type(self._deps.session_store).__name__!r} does not "
@@ -94,7 +101,9 @@ class FeishuChannelPlugin:
 
         from pyclaw.channels.feishu.queue import FeishuQueueRegistry
 
-        assert self._deps.task_manager is not None, "Feishu channel requires task_manager in AgentRunnerDeps"
+        assert self._deps.task_manager is not None, (
+            "Feishu channel requires task_manager in AgentRunnerDeps"
+        )
         queue_registry = FeishuQueueRegistry(task_manager=self._deps.task_manager)
 
         memory_store = self._memory_store
@@ -118,9 +127,7 @@ class FeishuChannelPlugin:
                 logger.warning("queue cleanup failed for %s", old_session_id, exc_info=True)
             if memory_store is not None:
                 archive_owner = (
-                    old_session_id.split(":s:", 1)[0]
-                    if ":s:" in old_session_id
-                    else None
+                    old_session_id.split(":s:", 1)[0] if ":s:" in old_session_id else None
                 )
                 task_manager.spawn(
                     f"archive:{old_session_id}",
@@ -171,6 +178,9 @@ class FeishuChannelPlugin:
             gateway_router=self._gateway_router,
             task_manager=task_manager,
             worker_registry=self._worker_registry,
+            tool_approval_hook=self._tool_approval_hook,
+            approval_registry=self._approval_registry,
+            audit_logger=self._audit_logger,
         )
         self._ctx = ctx
 
@@ -186,7 +196,7 @@ class FeishuChannelPlugin:
                 main_loop,
             )
 
-        dispatcher = (
+        dispatcher_builder = (
             EventDispatcherHandler.builder("", "")
             .register_p2_im_message_receive_v1(_sync_handler)
             .register_p2_im_message_reaction_created_v1(_sync_reaction_handler)
@@ -195,8 +205,20 @@ class FeishuChannelPlugin:
             .register_p2_im_message_message_read_v1(lambda _: None)
             .register_p2_im_chat_access_event_bot_p2p_chat_entered_v1(lambda _: None)
             .register_p1_customized_event("p2p_chat_create", lambda _: None)
-            .build()
         )
+
+        if self._approval_registry is not None:
+            from pyclaw.channels.feishu.card_callback import make_card_action_handler
+
+            card_action_cb = make_card_action_handler(
+                self._approval_registry,
+                main_loop,
+            )
+            dispatcher_builder = dispatcher_builder.register_p2_card_action_trigger(
+                card_action_cb,
+            )
+
+        dispatcher = dispatcher_builder.build()
 
         self._ws_client = lark.ws.Client(
             self._settings.app_id,

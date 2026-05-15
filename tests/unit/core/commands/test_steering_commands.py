@@ -235,13 +235,15 @@ async def test_cmd_steer_4x500_plus_2char_triggers_char_cap_drop():
 async def test_cmd_steer_mixed_kinds_share_buffer_and_cap():
     rc = RunControl()
     rc.active = True
-    rc.pending_steers.extend([
-        SteerMessage(kind="steer", text="s1"),
-        SteerMessage(kind="steer", text="s2"),
-        SteerMessage(kind="sidebar", text="b1"),
-        SteerMessage(kind="sidebar", text="b2"),
-        SteerMessage(kind="steer", text="s3"),
-    ])
+    rc.pending_steers.extend(
+        [
+            SteerMessage(kind="steer", text="s1"),
+            SteerMessage(kind="steer", text="s2"),
+            SteerMessage(kind="sidebar", text="b1"),
+            SteerMessage(kind="sidebar", text="b2"),
+            SteerMessage(kind="steer", text="s3"),
+        ]
+    )
     ctx, replies = _make_ctx(channel="feishu", rc=rc)
 
     await cmd_steer("s4", ctx)

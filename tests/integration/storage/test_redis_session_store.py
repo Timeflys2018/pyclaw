@@ -8,7 +8,7 @@ import redis.asyncio as aioredis
 
 from pyclaw.models import SessionHeader, SessionTree, generate_entry_id
 from pyclaw.models.session import MessageEntry
-from pyclaw.storage.lock.redis import LockAcquireError, RedisLockManager
+from pyclaw.storage.lock.redis import RedisLockManager
 from pyclaw.storage.session.redis import RedisSessionStore, SessionLockError
 
 TEST_PREFIX = "pyclaw-test:"
@@ -35,9 +35,7 @@ def lock_manager(redis_client: aioredis.Redis) -> RedisLockManager:
 
 @pytest.fixture
 def store(redis_client: aioredis.Redis, lock_manager: RedisLockManager) -> RedisSessionStore:
-    return RedisSessionStore(
-        redis_client, lock_manager, ttl_seconds=60, key_prefix=TEST_PREFIX
-    )
+    return RedisSessionStore(redis_client, lock_manager, ttl_seconds=60, key_prefix=TEST_PREFIX)
 
 
 def _make_tree(session_id: str) -> SessionTree:

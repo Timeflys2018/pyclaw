@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from pyclaw.core.agent.llm import LLMClient, LLMResponse, LLMStreamChunk, LLMUsage
+from pyclaw.core.agent.llm import LLMClient, LLMStreamChunk, LLMUsage
 from pyclaw.core.agent.runner import AgentRunnerDeps, RunRequest, run_agent_stream
 from pyclaw.core.agent.tools.registry import ToolRegistry
 from pyclaw.models import AgentRunConfig, Done, PromptBudgetConfig
@@ -47,9 +47,8 @@ class _CapturingLLM(LLMClient):
 def _force_long_frozen_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
     from pyclaw.core.agent import system_prompt as sp
 
-    long_identity = (
-        "You are PyClaw, a multi-channel AI assistant with tool access. "
-        + ("PADDING " * 800)
+    long_identity = "You are PyClaw, a multi-channel AI assistant with tool access. " + (
+        "PADDING " * 800
     )
 
     real_init = sp.PromptInputs.__init__
@@ -145,9 +144,7 @@ class TestDoneEventCachePropagation:
 
 
 class TestModelMaxOutputFlow:
-    async def test_get_model_info_value_flows_to_history_budget(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_get_model_info_value_flows_to_history_budget(self, tmp_path: Path) -> None:
         llm = _CapturingLLM(default_model="fake-model")
         prompt_budget = PromptBudgetConfig(
             system_zone_tokens=4000,
@@ -171,21 +168,21 @@ class TestModelMaxOutputFlow:
             captured.append({"max_output": model_max_output, "result": result})
             return result
 
-        with patch.object(PromptBudgetConfig, "compute_history_budget", spy_compute):
-            with patch(
-                "litellm.get_model_info", return_value={"max_output_tokens": 8192}
+        with (
+            patch.object(PromptBudgetConfig, "compute_history_budget", spy_compute),
+            patch("litellm.get_model_info", return_value={"max_output_tokens": 8192}),
+        ):
+            async for _ in run_agent_stream(
+                RunRequest(
+                    session_id="s4",
+                    workspace_id="default",
+                    agent_id="main",
+                    user_message="hi",
+                ),
+                deps,
+                tool_workspace_path=tmp_path,
             ):
-                async for _ in run_agent_stream(
-                    RunRequest(
-                        session_id="s4",
-                        workspace_id="default",
-                        agent_id="main",
-                        user_message="hi",
-                    ),
-                    deps,
-                    tool_workspace_path=tmp_path,
-                ):
-                    pass
+                pass
 
         assert len(captured) >= 1
         call = captured[0]
@@ -216,21 +213,21 @@ class TestModelMaxOutputFlow:
             captured.append({"max_output": model_max_output, "result": result})
             return result
 
-        with patch.object(PromptBudgetConfig, "compute_history_budget", spy_compute):
-            with patch(
-                "litellm.get_model_info", side_effect=Exception("model not mapped")
+        with (
+            patch.object(PromptBudgetConfig, "compute_history_budget", spy_compute),
+            patch("litellm.get_model_info", side_effect=Exception("model not mapped")),
+        ):
+            async for _ in run_agent_stream(
+                RunRequest(
+                    session_id="s5",
+                    workspace_id="default",
+                    agent_id="main",
+                    user_message="hi",
+                ),
+                deps,
+                tool_workspace_path=tmp_path,
             ):
-                async for _ in run_agent_stream(
-                    RunRequest(
-                        session_id="s5",
-                        workspace_id="default",
-                        agent_id="main",
-                        user_message="hi",
-                    ),
-                    deps,
-                    tool_workspace_path=tmp_path,
-                ):
-                    pass
+                pass
 
         assert len(captured) >= 1
         assert captured[0]["max_output"] is None
@@ -238,9 +235,7 @@ class TestModelMaxOutputFlow:
         expected_reserve = int(remaining * 0.5)
         assert captured[0]["result"] == remaining - expected_reserve
 
-    async def test_explicit_output_reserve_overrides_model_max_output(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_explicit_output_reserve_overrides_model_max_output(self, tmp_path: Path) -> None:
         llm = _CapturingLLM(default_model="fake-model")
         prompt_budget = PromptBudgetConfig(
             system_zone_tokens=4000,
@@ -264,21 +259,21 @@ class TestModelMaxOutputFlow:
             captured.append({"max_output": model_max_output, "result": result})
             return result
 
-        with patch.object(PromptBudgetConfig, "compute_history_budget", spy_compute):
-            with patch(
-                "litellm.get_model_info", return_value={"max_output_tokens": 8192}
+        with (
+            patch.object(PromptBudgetConfig, "compute_history_budget", spy_compute),
+            patch("litellm.get_model_info", return_value={"max_output_tokens": 8192}),
+        ):
+            async for _ in run_agent_stream(
+                RunRequest(
+                    session_id="s6",
+                    workspace_id="default",
+                    agent_id="main",
+                    user_message="hi",
+                ),
+                deps,
+                tool_workspace_path=tmp_path,
             ):
-                async for _ in run_agent_stream(
-                    RunRequest(
-                        session_id="s6",
-                        workspace_id="default",
-                        agent_id="main",
-                        user_message="hi",
-                    ),
-                    deps,
-                    tool_workspace_path=tmp_path,
-                ):
-                    pass
+                pass
 
         assert len(captured) >= 1
         assert captured[0]["max_output"] == 8192

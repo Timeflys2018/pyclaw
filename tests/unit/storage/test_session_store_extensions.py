@@ -26,7 +26,9 @@ async def test_set_then_get_current_session_id(store: InMemorySessionStore) -> N
 
 
 @pytest.mark.asyncio
-async def test_create_new_session_returns_tree_with_session_key(store: InMemorySessionStore) -> None:
+async def test_create_new_session_returns_tree_with_session_key(
+    store: InMemorySessionStore,
+) -> None:
     tree = await store.create_new_session("feishu:cli_x:ou_a", "feishu_cli_x_ou_a", "default")
     assert tree.header.session_key == "feishu:cli_x:ou_a"
     assert tree.header.id.startswith("feishu:cli_x:ou_a:s:")
@@ -44,8 +46,7 @@ async def test_create_new_session_registers_as_current(store: InMemorySessionSto
 @pytest.mark.asyncio
 async def test_create_new_session_sets_parent_session_id(store: InMemorySessionStore) -> None:
     tree = await store.create_new_session(
-        "feishu:cli_x:ou_a", "ws", "default",
-        parent_session_id="feishu:cli_x:ou_a:s:old12345"
+        "feishu:cli_x:ou_a", "ws", "default", parent_session_id="feishu:cli_x:ou_a:s:old12345"
     )
     assert tree.header.parent_session == "feishu:cli_x:ou_a:s:old12345"
 

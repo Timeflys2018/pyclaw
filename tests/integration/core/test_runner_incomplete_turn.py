@@ -12,9 +12,7 @@ from pyclaw.core.agent.tools.registry import ToolContext, ToolRegistry, text_res
 from pyclaw.models import (
     AgentRunConfig,
     Done,
-    MessageEntry,
     RetryConfig,
-    TextChunk,
     ToolResult,
 )
 
@@ -207,6 +205,7 @@ class _EchoTool:
     description = "echo"
     parameters: dict = {"type": "object", "properties": {}}
     side_effect = False
+    tool_class = "read"
 
     async def execute(self, args: dict, context: ToolContext) -> ToolResult:
         return text_result(args.get("_call_id", ""), "ok")

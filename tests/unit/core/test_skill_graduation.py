@@ -4,8 +4,6 @@ import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from pyclaw.core.skill_graduation import (
     generate_skill_md_enrich,
     generate_skill_md_template,
@@ -78,9 +76,7 @@ class TestGenerateSkillMdTemplate:
         assert 'source_session: "feishu:cli_xxx:ou_yyy"' in result
 
     def test_contains_body(self):
-        result = generate_skill_md_template(
-            "my-skill", "Does X", "1. Step A\n2. Step B", "s:k:u"
-        )
+        result = generate_skill_md_template("my-skill", "Does X", "1. Step A\n2. Step B", "s:k:u")
         assert "# my-skill" in result
         assert "Does X" in result
         assert "## Procedure" in result
@@ -117,9 +113,7 @@ class TestGenerateSkillMdEnrich:
         )
 
         result = asyncio.run(
-            generate_skill_md_enrich(
-                "my-sop", "desc", "1. Step", "s:k:u", llm_client, "gpt-4"
-            )
+            generate_skill_md_enrich("my-sop", "desc", "1. Step", "s:k:u", llm_client, "gpt-4")
         )
         assert "enriched" in result
         llm_client.complete.assert_awaited_once()
@@ -135,9 +129,7 @@ class TestGenerateSkillMdEnrich:
         llm_client.complete.return_value = FakeLLMResponse(text="short")
 
         result = asyncio.run(
-            generate_skill_md_enrich(
-                "my-sop", "desc", "1. Step", "s:k:u", llm_client, None
-            )
+            generate_skill_md_enrich("my-sop", "desc", "1. Step", "s:k:u", llm_client, None)
         )
         assert "name: my-sop" in result
         assert "## Procedure" in result
@@ -147,9 +139,7 @@ class TestGenerateSkillMdEnrich:
         llm_client.complete.side_effect = RuntimeError("connection failed")
 
         result = asyncio.run(
-            generate_skill_md_enrich(
-                "my-sop", "desc", "1. Step", "s:k:u", llm_client, None
-            )
+            generate_skill_md_enrich("my-sop", "desc", "1. Step", "s:k:u", llm_client, None)
         )
         assert "name: my-sop" in result
 
@@ -162,9 +152,7 @@ class TestGenerateSkillMdEnrich:
         llm_client.complete = slow_complete
 
         result = asyncio.run(
-            generate_skill_md_enrich(
-                "my-sop", "desc", "1. Step", "s:k:u", llm_client, None
-            )
+            generate_skill_md_enrich("my-sop", "desc", "1. Step", "s:k:u", llm_client, None)
         )
         assert "name: my-sop" in result
 

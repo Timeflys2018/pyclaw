@@ -22,12 +22,15 @@ def _settings(**kwargs):
 
 def _candidate(turn_id: str, tool_names: list[str]) -> str:
     import json
-    return json.dumps({
-        "turn_id": turn_id,
-        "user_msg": "test",
-        "tool_names": tool_names,
-        "timestamp": 1.0,
-    })
+
+    return json.dumps(
+        {
+            "turn_id": turn_id,
+            "user_msg": "test",
+            "tool_names": tool_names,
+            "timestamp": 1.0,
+        }
+    )
 
 
 def _redis(tool_calls_per_turn=None, lock_held=False):
@@ -262,9 +265,9 @@ class TestSetnxLock:
 
         tm = _task_manager()
         redis = MagicMock()
-        redis.hgetall = AsyncMock(return_value={
-            f"call_{i}": _candidate(f"call_{i}", ["read"]) for i in range(5)
-        })
+        redis.hgetall = AsyncMock(
+            return_value={f"call_{i}": _candidate(f"call_{i}", ["read"]) for i in range(5)}
+        )
         set_results = iter([True, None])
 
         async def fake_set(*args, **kwargs):
@@ -274,13 +277,21 @@ class TestSetnxLock:
         redis.delete = AsyncMock(return_value=1)
 
         r1 = await maybe_spawn_extraction(
-            task_manager=tm, memory_store=MagicMock(), session_store=MagicMock(),
-            redis_client=redis, llm_client=_llm(), session_id="ses_1",
+            task_manager=tm,
+            memory_store=MagicMock(),
+            session_store=MagicMock(),
+            redis_client=redis,
+            llm_client=_llm(),
+            session_id="ses_1",
             settings=_settings(),
         )
         r2 = await maybe_spawn_extraction(
-            task_manager=tm, memory_store=MagicMock(), session_store=MagicMock(),
-            redis_client=redis, llm_client=_llm(), session_id="ses_1",
+            task_manager=tm,
+            memory_store=MagicMock(),
+            session_store=MagicMock(),
+            redis_client=redis,
+            llm_client=_llm(),
+            session_id="ses_1",
             settings=_settings(),
         )
 
@@ -300,8 +311,14 @@ class TestSetnxLock:
         session_store.load = AsyncMock(return_value=None)
 
         await _extract_then_reset(
-            MagicMock(), session_store, redis, _llm(),
-            "ses_1", _settings(), None, "pyclaw:sop_extracting:ses_1",
+            MagicMock(),
+            session_store,
+            redis,
+            _llm(),
+            "ses_1",
+            _settings(),
+            None,
+            "pyclaw:sop_extracting:ses_1",
         )
 
         redis.delete.assert_any_call("pyclaw:sop_extracting:ses_1")
@@ -315,8 +332,14 @@ class TestSetnxLock:
         redis.hgetall = AsyncMock(side_effect=RuntimeError("boom"))
 
         await _extract_then_reset(
-            MagicMock(), MagicMock(), redis, _llm(),
-            "ses_1", _settings(), None, "pyclaw:sop_extracting:ses_1",
+            MagicMock(),
+            MagicMock(),
+            redis,
+            _llm(),
+            "ses_1",
+            _settings(),
+            None,
+            "pyclaw:sop_extracting:ses_1",
         )
 
         redis.delete.assert_any_call("pyclaw:sop_extracting:ses_1")
@@ -340,13 +363,21 @@ class TestSetnxLock:
         redis.hgetall = fake_hgetall
 
         r1 = await maybe_spawn_extraction(
-            task_manager=tm, memory_store=MagicMock(), session_store=MagicMock(),
-            redis_client=redis, llm_client=_llm(), session_id="ses_1",
+            task_manager=tm,
+            memory_store=MagicMock(),
+            session_store=MagicMock(),
+            redis_client=redis,
+            llm_client=_llm(),
+            session_id="ses_1",
             settings=_settings(),
         )
         r2 = await maybe_spawn_extraction(
-            task_manager=tm, memory_store=MagicMock(), session_store=MagicMock(),
-            redis_client=redis, llm_client=_llm(), session_id="ses_1",
+            task_manager=tm,
+            memory_store=MagicMock(),
+            session_store=MagicMock(),
+            redis_client=redis,
+            llm_client=_llm(),
+            session_id="ses_1",
             settings=_settings(),
         )
 

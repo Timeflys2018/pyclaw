@@ -18,6 +18,7 @@ class _SlowTool:
     description = "a slow tool"
     parameters: dict = {"type": "object", "properties": {}}
     side_effect = False
+    tool_class = "read"
 
     async def execute(self, args: dict, context: ToolContext) -> ToolResult:
         await asyncio.sleep(5)
@@ -29,6 +30,7 @@ class _FastTool:
     description = "a fast tool"
     parameters: dict = {"type": "object", "properties": {}}
     side_effect = False
+    tool_class = "read"
 
     async def execute(self, args: dict, context: ToolContext) -> ToolResult:
         return ToolResult(tool_call_id="unused", content=[TextBlock(text="ok")])
@@ -39,6 +41,7 @@ class _PerToolOverride:
     description = "declares its own timeout"
     parameters: dict = {"type": "object", "properties": {}}
     side_effect = False
+    tool_class = "read"
     timeout_seconds = 0.05
 
     async def execute(self, args: dict, context: ToolContext) -> ToolResult:
@@ -63,9 +66,7 @@ def _call(name: str, cid: str = "c1") -> dict:
 async def test_tool_default_timeout_enforced() -> None:
     reg = ToolRegistry()
     reg.register(_SlowTool())
-    results = await execute_tool_calls(
-        reg, [_call("slow")], _ctx(), default_tool_timeout_s=0.05
-    )
+    results = await execute_tool_calls(reg, [_call("slow")], _ctx(), default_tool_timeout_s=0.05)
     assert len(results) == 1
     assert results[0].is_error
     assert "timed out" in results[0].content[0].text.lower()
@@ -87,9 +88,7 @@ async def test_tool_per_tool_timeout_override() -> None:
 async def test_tool_finishes_within_timeout() -> None:
     reg = ToolRegistry()
     reg.register(_FastTool())
-    results = await execute_tool_calls(
-        reg, [_call("fast")], _ctx(), default_tool_timeout_s=1.0
-    )
+    results = await execute_tool_calls(reg, [_call("fast")], _ctx(), default_tool_timeout_s=1.0)
     assert len(results) == 1
     assert not results[0].is_error
     assert results[0].content[0].text == "ok"
@@ -99,8 +98,6 @@ async def test_tool_finishes_within_timeout() -> None:
 async def test_tool_zero_timeout_disables() -> None:
     reg = ToolRegistry()
     reg.register(_FastTool())
-    results = await execute_tool_calls(
-        reg, [_call("fast")], _ctx(), default_tool_timeout_s=0.0
-    )
+    results = await execute_tool_calls(reg, [_call("fast")], _ctx(), default_tool_timeout_s=0.0)
     assert len(results) == 1
     assert not results[0].is_error

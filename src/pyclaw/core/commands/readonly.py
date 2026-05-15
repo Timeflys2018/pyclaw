@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.models.session import MessageEntry
@@ -44,9 +44,7 @@ async def cmd_queue(args: str, ctx: CommandContext) -> None:
     if provider is None or not hasattr(provider, "queue_position"):
         await ctx.reply("📮 队列信息 unavailable（当前 channel 不支持）。")
         return
-    position = provider.queue_position(
-        ctx.session_id if ctx.channel != "web" else _web_cid(ctx)
-    )
+    position = provider.queue_position(ctx.session_id if ctx.channel != "web" else _web_cid(ctx))
     if position == 0:
         await ctx.reply("📮 队列空闲（0 pending, idle）。")
     elif position == 1:
@@ -88,10 +86,14 @@ async def cmd_context(args: str, ctx: CommandContext) -> None:
         lines.append("")
         lines.append("🎯 **Prompt budget reservations** (frozen+dynamic zones, per turn)")
         if system_zone > 0:
-            lines.append(f"- System zone (frozen): `{system_zone:,}` tokens (identity/tools/skills/workspace/L1)")
+            lines.append(
+                f"- System zone (frozen): `{system_zone:,}` tokens (identity/tools/skills/workspace/L1)"
+            )
         if dynamic_zone > 0:
             lines.append(f"- Dynamic zone: `{dynamic_zone:,}` tokens (memory search injection)")
-        lines.append("ℹ Input tokens above include frozen + per-turn + dynamic + message history; detailed per-zone breakdown is in server logs (`token_usage` line).")
+        lines.append(
+            "ℹ Input tokens above include frozen + per-turn + dynamic + message history; detailed per-zone breakdown is in server logs (`token_usage` line)."
+        )
 
     await ctx.reply("\n".join(lines))
 
@@ -138,8 +140,7 @@ async def cmd_resume(args: str, ctx: CommandContext) -> None:
             target = matches[0]
         elif len(matches) == 0:
             await ctx.reply(
-                f"⚠ 找不到后缀为 `{arg}` 的 session。"
-                "使用 `/resume` 查看可用 sessions。"
+                f"⚠ 找不到后缀为 `{arg}` 的 session。使用 `/resume` 查看可用 sessions。"
             )
             return
         else:
@@ -172,7 +173,7 @@ async def cmd_resume(args: str, ctx: CommandContext) -> None:
 
 def _format_message_tail(tree, n: int = 5) -> list[str]:
     out: list[str] = []
-    recent_ids = tree.order[-(n * 3):]
+    recent_ids = tree.order[-(n * 3) :]
     msgs: list[MessageEntry] = []
     for eid in recent_ids:
         entry = tree.entries.get(eid)
@@ -205,9 +206,9 @@ def _relative_time(iso_ts: str) -> str:
         dt = datetime.fromisoformat(iso_ts)
     except ValueError:
         return iso_ts
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     elapsed = (now - dt).total_seconds()
     if elapsed < 60:
         return "刚刚"

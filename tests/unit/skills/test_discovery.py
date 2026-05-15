@@ -6,14 +6,13 @@ from textwrap import dedent
 
 import pytest
 
+from pyclaw.infra.settings import SkillSettings
 from pyclaw.skills.discovery import (
     _is_valid_skill_dir,
     _scan_directory,
     _validate_path_containment,
     discover_skills,
 )
-from pyclaw.infra.settings import SkillSettings
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -50,6 +49,7 @@ def _make_skill_raw(root: Path, name: str, content: str) -> Path:
 # 1. _is_valid_skill_dir
 # ---------------------------------------------------------------------------
 
+
 class TestIsValidSkillDir:
     def test_normal_name(self) -> None:
         assert _is_valid_skill_dir("my-skill") is True
@@ -70,6 +70,7 @@ class TestIsValidSkillDir:
 # ---------------------------------------------------------------------------
 # 2. Single directory with valid skills
 # ---------------------------------------------------------------------------
+
 
 class TestScanDirectory:
     def test_discovers_all_skills(self, tmp_path: Path) -> None:
@@ -213,6 +214,7 @@ class TestScanDirectory:
 # 3. _validate_path_containment
 # ---------------------------------------------------------------------------
 
+
 class TestValidatePathContainment:
     def test_valid_path(self, tmp_path: Path) -> None:
         child = tmp_path / "skills" / "my-skill" / "SKILL.md"
@@ -247,6 +249,7 @@ class TestValidatePathContainment:
 # ---------------------------------------------------------------------------
 # 4. discover_skills — integration
 # ---------------------------------------------------------------------------
+
 
 class TestDiscoverSkills:
     def test_no_directories_exist(self, tmp_path: Path) -> None:

@@ -41,9 +41,7 @@ class TestClaim:
         redis.set.return_value = True
         reg = AffinityRegistry(redis, worker_id="w1", ttl_seconds=300)
         assert await reg.claim("sess1") is True
-        redis.set.assert_called_once_with(
-            "pyclaw:affinity:sess1", "w1", nx=True, ex=300
-        )
+        redis.set.assert_called_once_with("pyclaw:affinity:sess1", "w1", nx=True, ex=300)
 
     @pytest.mark.asyncio
     async def test_fails_when_key_exists_for_other(self) -> None:
@@ -89,9 +87,7 @@ class TestForceClaim:
         redis = _make_redis()
         reg = AffinityRegistry(redis, worker_id="w1", ttl_seconds=300)
         await reg.force_claim("sess1")
-        redis.set.assert_called_once_with(
-            "pyclaw:affinity:sess1", "w1", ex=300
-        )
+        redis.set.assert_called_once_with("pyclaw:affinity:sess1", "w1", ex=300)
 
 
 class TestIsMine:
@@ -115,6 +111,4 @@ class TestKeyPrefix:
         redis.set.return_value = True
         reg = AffinityRegistry(redis, worker_id="w1", key_prefix="myapp:")
         await reg.claim("sess1")
-        redis.set.assert_called_once_with(
-            "myapp:affinity:sess1", "w1", nx=True, ex=300
-        )
+        redis.set.assert_called_once_with("myapp:affinity:sess1", "w1", nx=True, ex=300)

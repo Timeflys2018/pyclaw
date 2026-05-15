@@ -1,4 +1,5 @@
 """ForgetTool — agent 主动归档失败/过时的 SOP。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -32,6 +33,7 @@ class ForgetTool:
         "required": ["entry_id", "reason"],
     }
     side_effect = True
+    tool_class = "write"
 
     def __init__(self, memory_store: MemoryStore, session_store: SessionStore) -> None:
         self._memory_store = memory_store
@@ -75,9 +77,7 @@ class ForgetTool:
         preview = content_preview[:50] + "..." if len(content_preview) > 50 else content_preview
         return text_result(call_id, f"已归档: {preview}\n原因: {reason}")
 
-    async def _resolve_entry_id(
-        self, session_key: str, entry_id: str
-    ) -> tuple[str | None, str]:
+    async def _resolve_entry_id(self, session_key: str, entry_id: str) -> tuple[str | None, str]:
         """Resolve short/full entry_id to (full_id, content) or (None, error_msg)."""
         sqlite = getattr(self._memory_store, "_sqlite", None)
         if sqlite is None:
@@ -87,15 +87,19 @@ class ForgetTool:
 
         def _lookup() -> list[tuple[str, str]]:
             if len(entry_id) >= 32:
-                rows = list(conn.execute(
-                    "SELECT id, content FROM procedures WHERE id=? AND status='active'",
-                    (entry_id,),
-                ))
+                rows = list(
+                    conn.execute(
+                        "SELECT id, content FROM procedures WHERE id=? AND status='active'",
+                        (entry_id,),
+                    )
+                )
             else:
-                rows = list(conn.execute(
-                    "SELECT id, content FROM procedures WHERE id LIKE ? AND status='active'",
-                    (f"{entry_id}%",),
-                ))
+                rows = list(
+                    conn.execute(
+                        "SELECT id, content FROM procedures WHERE id LIKE ? AND status='active'",
+                        (f"{entry_id}%",),
+                    )
+                )
             return [(r[0], r[1]) for r in rows]
 
         matches = await asyncio.to_thread(_lookup)

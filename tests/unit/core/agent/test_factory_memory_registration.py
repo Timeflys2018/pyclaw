@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from pyclaw.core.agent.factory import create_agent_runner_deps
 from pyclaw.core.agent.hooks.memory_nudge_hook import MemoryNudgeHook
 from pyclaw.core.agent.hooks.working_memory_hook import WorkingMemoryHook
@@ -69,9 +67,7 @@ async def test_memory_store_passed_to_context_engine() -> None:
     store = InMemorySessionStore()
     mem_store = AsyncMock()
 
-    deps = await create_agent_runner_deps(
-        settings, store, memory_store=mem_store
-    )
+    deps = await create_agent_runner_deps(settings, store, memory_store=mem_store)
 
     from pyclaw.core.context_engine import DefaultContextEngine
 

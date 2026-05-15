@@ -68,9 +68,7 @@ def test_sqlite_backend_creates_composite() -> None:
         storage, memory, embedding = _make_settings()
         redis_client = MagicMock()
 
-        result = create_memory_store(
-            storage, memory, embedding, redis_client, key_prefix="test:"
-        )
+        result = create_memory_store(storage, memory, embedding, redis_client, key_prefix="test:")
 
         mock_embedding_cls.assert_called_once_with(
             model="test-model",

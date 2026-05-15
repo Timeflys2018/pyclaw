@@ -9,8 +9,7 @@ import pytest
 from pyclaw.core.agent.llm import LLMClient, LLMResponse, LLMStreamChunk, LLMUsage
 from pyclaw.core.agent.runner import AgentRunnerDeps, RunRequest, run_agent_stream
 from pyclaw.core.agent.tools.registry import ToolRegistry
-from pyclaw.core.hooks import SkillProvider
-from pyclaw.models import AgentRunConfig, Done, ErrorEvent, PromptBudgetConfig
+from pyclaw.models import AgentRunConfig, Done, PromptBudgetConfig
 
 
 class _FakeLLM(LLMClient):
@@ -19,7 +18,9 @@ class _FakeLLM(LLMClient):
         self._responses = list(responses)
         self.calls: list[dict[str, Any]] = []
 
-    async def stream(self, *, messages, model=None, tools=None, system=None, idle_seconds=0.0, abort_event=None):  # type: ignore[override]
+    async def stream(
+        self, *, messages, model=None, tools=None, system=None, idle_seconds=0.0, abort_event=None
+    ):  # type: ignore[override]
         self.calls.append({"messages": messages, "system": system})
         if not self._responses:
             raise AssertionError("FakeLLM exhausted")
@@ -43,7 +44,9 @@ class _MockSkillProvider:
 
 class TestSkillProviderIntegration:
     async def test_skills_prompt_appears_in_system_message(self, tmp_path: Path) -> None:
-        llm = _FakeLLM([LLMResponse(text="ok", tool_calls=[], usage=_usage(), finish_reason="stop")])
+        llm = _FakeLLM(
+            [LLMResponse(text="ok", tool_calls=[], usage=_usage(), finish_reason="stop")]
+        )
         provider = _MockSkillProvider("<skills>test-skill</skills>")
 
         deps = AgentRunnerDeps(
@@ -66,18 +69,23 @@ class TestSkillProviderIntegration:
         assert "<skills>test-skill</skills>" in system_sent
 
     async def test_skills_prompt_in_frozen_prefix_not_per_turn(self, tmp_path: Path) -> None:
-        llm = _FakeLLM([
-            LLMResponse(
-                text="",
-                tool_calls=[{
-                    "id": "c1", "type": "function",
-                    "function": {"name": "unknown_tool", "arguments": "{}"},
-                }],
-                usage=_usage(),
-                finish_reason="tool_calls",
-            ),
-            LLMResponse(text="done", tool_calls=[], usage=_usage(), finish_reason="stop"),
-        ])
+        llm = _FakeLLM(
+            [
+                LLMResponse(
+                    text="",
+                    tool_calls=[
+                        {
+                            "id": "c1",
+                            "type": "function",
+                            "function": {"name": "unknown_tool", "arguments": "{}"},
+                        }
+                    ],
+                    usage=_usage(),
+                    finish_reason="tool_calls",
+                ),
+                LLMResponse(text="done", tool_calls=[], usage=_usage(), finish_reason="stop"),
+            ]
+        )
         provider = _MockSkillProvider("FROZEN_SKILLS_MARKER")
         registry = ToolRegistry()
 
@@ -89,7 +97,9 @@ class TestSkillProviderIntegration:
         )
 
         async for _ in run_agent_stream(
-            RunRequest(session_id="s2", workspace_id="default", agent_id="main", user_message="test"),
+            RunRequest(
+                session_id="s2", workspace_id="default", agent_id="main", user_message="test"
+            ),
             deps,
             tool_workspace_path=tmp_path,
         ):
@@ -100,7 +110,9 @@ class TestSkillProviderIntegration:
             assert "FROZEN_SKILLS_MARKER" in call["system"]
 
     async def test_no_skill_provider_still_works(self, tmp_path: Path) -> None:
-        llm = _FakeLLM([LLMResponse(text="ok", tool_calls=[], usage=_usage(), finish_reason="stop")])
+        llm = _FakeLLM(
+            [LLMResponse(text="ok", tool_calls=[], usage=_usage(), finish_reason="stop")]
+        )
         deps = AgentRunnerDeps(llm=llm, tools=ToolRegistry(), skill_provider=None)
 
         events = []
@@ -115,15 +127,21 @@ class TestSkillProviderIntegration:
 
 
 class TestTokenLogging:
-    async def test_token_usage_logged_per_turn(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-        llm = _FakeLLM([
-            LLMResponse(text="ok", tool_calls=[], usage=_usage(200, 80), finish_reason="stop"),
-        ])
+    async def test_token_usage_logged_per_turn(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        llm = _FakeLLM(
+            [
+                LLMResponse(text="ok", tool_calls=[], usage=_usage(200, 80), finish_reason="stop"),
+            ]
+        )
         deps = AgentRunnerDeps(llm=llm, tools=ToolRegistry())
 
         with caplog.at_level(logging.INFO, logger="pyclaw.core.agent.runner"):
             async for _ in run_agent_stream(
-                RunRequest(session_id="s4", workspace_id="default", agent_id="main", user_message="hi"),
+                RunRequest(
+                    session_id="s4", workspace_id="default", agent_id="main", user_message="hi"
+                ),
                 deps,
                 tool_workspace_path=tmp_path,
             ):
@@ -142,24 +160,37 @@ class TestTokenLogging:
         assert "cache_creation=" in msg
         assert "cache_read=" in msg
 
-    async def test_token_log_per_iteration_in_multi_turn(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-        llm = _FakeLLM([
-            LLMResponse(
-                text="",
-                tool_calls=[{
-                    "id": "c1", "type": "function",
-                    "function": {"name": "unknown", "arguments": "{}"},
-                }],
-                usage=_usage(100, 20),
-                finish_reason="tool_calls",
-            ),
-            LLMResponse(text="done", tool_calls=[], usage=_usage(150, 30), finish_reason="stop"),
-        ])
-        deps = AgentRunnerDeps(llm=llm, tools=ToolRegistry(), config=AgentRunConfig(max_iterations=10))
+    async def test_token_log_per_iteration_in_multi_turn(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        llm = _FakeLLM(
+            [
+                LLMResponse(
+                    text="",
+                    tool_calls=[
+                        {
+                            "id": "c1",
+                            "type": "function",
+                            "function": {"name": "unknown", "arguments": "{}"},
+                        }
+                    ],
+                    usage=_usage(100, 20),
+                    finish_reason="tool_calls",
+                ),
+                LLMResponse(
+                    text="done", tool_calls=[], usage=_usage(150, 30), finish_reason="stop"
+                ),
+            ]
+        )
+        deps = AgentRunnerDeps(
+            llm=llm, tools=ToolRegistry(), config=AgentRunConfig(max_iterations=10)
+        )
 
         with caplog.at_level(logging.INFO, logger="pyclaw.core.agent.runner"):
             async for _ in run_agent_stream(
-                RunRequest(session_id="s5", workspace_id="default", agent_id="main", user_message="test"),
+                RunRequest(
+                    session_id="s5", workspace_id="default", agent_id="main", user_message="test"
+                ),
                 deps,
                 tool_workspace_path=tmp_path,
             ):
@@ -170,8 +201,12 @@ class TestTokenLogging:
         assert "turn=1" in token_logs[0].message
         assert "turn=2" in token_logs[1].message
 
-    async def test_bootstrap_tokens_included_in_log(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-        llm = _FakeLLM([LLMResponse(text="ok", tool_calls=[], usage=_usage(), finish_reason="stop")])
+    async def test_bootstrap_tokens_included_in_log(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        llm = _FakeLLM(
+            [LLMResponse(text="ok", tool_calls=[], usage=_usage(), finish_reason="stop")]
+        )
 
         from pyclaw.core.context_engine import DefaultContextEngine
         from pyclaw.storage.workspace.file import FileWorkspaceStore
@@ -186,7 +221,12 @@ class TestTokenLogging:
         session_id = f"{workspace_id}:s:test6"
         with caplog.at_level(logging.INFO, logger="pyclaw.core.agent.runner"):
             async for _ in run_agent_stream(
-                RunRequest(session_id=session_id, workspace_id=workspace_id, agent_id="main", user_message="hi"),
+                RunRequest(
+                    session_id=session_id,
+                    workspace_id=workspace_id,
+                    agent_id="main",
+                    user_message="hi",
+                ),
                 deps,
                 tool_workspace_path=tmp_path,
             ):
@@ -201,7 +241,9 @@ class TestTokenLogging:
 
 class TestHistoryBudget:
     async def test_history_budget_passed_to_assemble(self, tmp_path: Path) -> None:
-        llm = _FakeLLM([LLMResponse(text="ok", tool_calls=[], usage=_usage(), finish_reason="stop")])
+        llm = _FakeLLM(
+            [LLMResponse(text="ok", tool_calls=[], usage=_usage(), finish_reason="stop")]
+        )
 
         budget_config = PromptBudgetConfig(
             system_zone_tokens=4096,
@@ -209,8 +251,6 @@ class TestHistoryBudget:
             output_reserve_tokens=128000,
         )
         config = AgentRunConfig(context_window=1_000_000, prompt_budget=budget_config)
-
-        from unittest.mock import AsyncMock, patch
 
         original_assemble = None
         captured_token_budget = []

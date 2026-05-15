@@ -8,7 +8,6 @@ from pyclaw.core.hooks import (
 )
 from pyclaw.models import CompactResult
 
-
 _NUDGE_TEXT = (
     "<nudge>Consider using `memorize` to save important facts or workflows "
     "for future sessions.</nudge>"

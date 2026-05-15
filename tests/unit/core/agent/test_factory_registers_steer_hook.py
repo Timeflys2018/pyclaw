@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 from pyclaw.core.agent.factory import create_agent_runner_deps
 from pyclaw.core.agent.hooks.memory_nudge_hook import MemoryNudgeHook
-from pyclaw.core.agent.hooks.sop_tracker_hook import SopCandidateTracker
 from pyclaw.core.agent.hooks.steer_hook import SteerHook
 from pyclaw.core.agent.hooks.working_memory_hook import WorkingMemoryHook
 from pyclaw.infra.settings import Settings

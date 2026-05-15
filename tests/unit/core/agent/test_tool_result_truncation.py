@@ -25,9 +25,7 @@ class TestTruncateToolResult:
     def test_long_output_truncated(self) -> None:
         result = _make_result("a" * 1000)
         out = truncate_tool_result(result, max_chars=100)
-        text_total = "".join(
-            b.text for b in out.content if isinstance(b, TextBlock)
-        )
+        text_total = "".join(b.text for b in out.content if isinstance(b, TextBlock))
         assert text_total.startswith("a" * 100)
         assert "[... 900 more characters truncated]" in text_total
 
@@ -69,9 +67,7 @@ class TestTruncateToolResult:
             is_error=False,
         )
         out = truncate_tool_result(result, max_chars=60)
-        joined = "".join(
-            b.text for b in out.content if isinstance(b, TextBlock)
-        )
+        joined = "".join(b.text for b in out.content if isinstance(b, TextBlock))
         assert "a" * 50 in joined
         assert "b" * 10 in joined
         assert "[... 40 more characters truncated]" in joined

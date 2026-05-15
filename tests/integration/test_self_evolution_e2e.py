@@ -220,24 +220,32 @@ class TestSelfEvolutionE2E:
         session_store = _mock_session_store(tree)
 
         # 3. Mock LLM returns one SOP
-        llm_response = json.dumps([
-            {
-                "name": "deploy-flow",
-                "description": "deploy iteration workflow",
-                "procedure": "1. build 2. push 3. apply",
-            }
-        ])
+        llm_response = json.dumps(
+            [
+                {
+                    "name": "deploy-flow",
+                    "description": "deploy iteration workflow",
+                    "procedure": "1. build 2. push 3. apply",
+                }
+            ]
+        )
         llm = _mock_llm(llm_response)
 
         # 4. Trigger extraction (simulating on_session_rotated)
         await extract_sop_background(
-            sqlite_memory, session_store, fake_redis, llm,
-            session_id, evolution_settings,
+            sqlite_memory,
+            session_store,
+            fake_redis,
+            llm,
+            session_id,
+            evolution_settings,
         )
 
         # 5. Verify L3 has the auto_sop
         results = await sqlite_memory.search(
-            session_key, "deploy", layers=["L3"],
+            session_key,
+            "deploy",
+            layers=["L3"],
         )
         assert len(results) >= 1
         assert any(r.type == "auto_sop" for r in results)
@@ -258,31 +266,51 @@ class TestSelfEvolutionE2E:
         # Session 1: extract a deploy SOP
         tracker = SopCandidateTracker(fake_redis, evolution_settings)
         for i in range(3):
-            await tracker.before_prompt_build(PromptBuildContext(
-                session_id=session1_id, workspace_id="ws", agent_id="a",
-                available_tools=[], prompt=f"Deploy app step {i}",
-            ))
-            await tracker.after_response(ResponseObservation(
-                session_id=session1_id, assistant_text="ok",
-                tool_calls=[{"id": f"call_{i}", "function": {"name": "bash"}}],
-            ))
+            await tracker.before_prompt_build(
+                PromptBuildContext(
+                    session_id=session1_id,
+                    workspace_id="ws",
+                    agent_id="a",
+                    available_tools=[],
+                    prompt=f"Deploy app step {i}",
+                )
+            )
+            await tracker.after_response(
+                ResponseObservation(
+                    session_id=session1_id,
+                    assistant_text="ok",
+                    tool_calls=[{"id": f"call_{i}", "function": {"name": "bash"}}],
+                )
+            )
 
         turns = [(f"call_{i}", f"Deploy app step {i}", "bash") for i in range(3)]
         tree = _build_session_tree(session1_id, turns)
         session_store = _mock_session_store(tree)
-        llm = _mock_llm(json.dumps([{
-            "name": "deploy-app",
-            "description": "deploy app workflow",
-            "procedure": "1. build container 2. push registry 3. apply manifest",
-        }]))
+        llm = _mock_llm(
+            json.dumps(
+                [
+                    {
+                        "name": "deploy-app",
+                        "description": "deploy app workflow",
+                        "procedure": "1. build container 2. push registry 3. apply manifest",
+                    }
+                ]
+            )
+        )
         await extract_sop_background(
-            sqlite_memory, session_store, fake_redis, llm,
-            session1_id, evolution_settings,
+            sqlite_memory,
+            session_store,
+            fake_redis,
+            llm,
+            session1_id,
+            evolution_settings,
         )
 
         # Session 2 (different session_id, same session_key): search L3
         results = await sqlite_memory.search(
-            session_key, "deploy app", layers=["L3"],
+            session_key,
+            "deploy app",
+            layers=["L3"],
         )
         assert len(results) >= 1
         assert "deploy" in results[0].content.lower()
@@ -335,8 +363,12 @@ class TestSelfEvolutionE2E:
 
         # No candidates were recorded — call extract directly to confirm skip
         await extract_sop_background(
-            sqlite_memory, session_store, fake_redis, llm,
-            session_id, evolution_settings,
+            sqlite_memory,
+            session_store,
+            fake_redis,
+            llm,
+            session_id,
+            evolution_settings,
         )
 
         # No candidates means early return — no LLM call, no L3 entries
@@ -354,11 +386,13 @@ class TestSelfEvolutionE2E:
         disabled_settings = EvolutionSettings(enabled=False)
         tracker = SopCandidateTracker(fake_redis, disabled_settings)
 
-        await tracker.after_response(ResponseObservation(
-            session_id="user1:s:disabled",
-            assistant_text="ok",
-            tool_calls=[{"id": "c1", "function": {"name": "bash"}}],
-        ))
+        await tracker.after_response(
+            ResponseObservation(
+                session_id="user1:s:disabled",
+                assistant_text="ok",
+                tool_calls=[{"id": "c1", "function": {"name": "bash"}}],
+            )
+        )
 
         # No candidates written
         assert await fake_redis.hlen("pyclaw:sop_candidates:user1:s:disabled") == 0
@@ -385,11 +419,17 @@ class TestSelfEvolutionE2E:
         turns = [(f"c_{i}", f"Task {i}", "read") for i in range(3)]
         tree = _build_session_tree(session_id, turns)
         session_store = _mock_session_store(tree)
-        llm = _mock_llm(json.dumps([{
-            "name": "task-flow",
-            "description": "task workflow",
-            "procedure": "1. read 2. process",
-        }]))
+        llm = _mock_llm(
+            json.dumps(
+                [
+                    {
+                        "name": "task-flow",
+                        "description": "task workflow",
+                        "procedure": "1. read 2. process",
+                    }
+                ]
+            )
+        )
 
         task_manager = MagicMock()
 
@@ -405,7 +445,8 @@ class TestSelfEvolutionE2E:
         task_manager.spawn = fake_spawn
 
         tracker = SopCandidateTracker(
-            fake_redis, evolution_settings,
+            fake_redis,
+            evolution_settings,
             task_manager=task_manager,
             memory_store=sqlite_memory,
             session_store=session_store,
@@ -413,7 +454,9 @@ class TestSelfEvolutionE2E:
         )
 
         ctx = CompactionContext(
-            session_id=session_id, workspace_id="ws", agent_id="a",
+            session_id=session_id,
+            workspace_id="ws",
+            agent_id="a",
         )
         result = CompactResult(ok=True, compacted=True, reason="threshold")
 

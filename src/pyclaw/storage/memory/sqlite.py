@@ -4,7 +4,6 @@ import asyncio
 import logging
 import time
 import uuid
-from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -187,9 +186,11 @@ class SqliteMemoryBackend:
 
     def _maybe_migrate_fts(self, conn: apsw.Connection) -> None:
         try:
-            row = list(conn.execute(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name='facts_fts'"
-            ))
+            row = list(
+                conn.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='facts_fts'"
+                )
+            )
             if row and "trigram" in (row[0][0] or ""):
                 logger.info("migrating FTS5 from trigram to jieba tokenizer")
                 conn.execute("DROP TABLE IF EXISTS facts_fts")
@@ -247,8 +248,13 @@ class SqliteMemoryBackend:
                     "type=excluded.type, content=excluded.content, "
                     "source_session_id=excluded.source_session_id, updated_at=excluded.updated_at",
                     (
-                        entry.id, session_key, entry.type, entry.content,
-                        entry.source_session_id, entry.created_at, entry.updated_at,
+                        entry.id,
+                        session_key,
+                        entry.type,
+                        entry.content,
+                        entry.source_session_id,
+                        entry.created_at,
+                        entry.updated_at,
                     ),
                 )
             elif entry.layer == "L3":
@@ -263,9 +269,16 @@ class SqliteMemoryBackend:
                     "updated_at=excluded.updated_at, last_used_at=excluded.last_used_at, "
                     "use_count=excluded.use_count, status=excluded.status",
                     (
-                        entry.id, session_key, entry.type, entry.content,
-                        entry.source_session_id, entry.created_at, entry.updated_at,
-                        entry.last_used_at, entry.use_count, entry.status,
+                        entry.id,
+                        session_key,
+                        entry.type,
+                        entry.content,
+                        entry.source_session_id,
+                        entry.created_at,
+                        entry.updated_at,
+                        entry.last_used_at,
+                        entry.use_count,
+                        entry.status,
                     ),
                 )
             else:
@@ -293,14 +306,19 @@ class SqliteMemoryBackend:
 
             if "L2" in layers:
                 layer_limit = (per_layer_limits or {}).get("L2", limit)
-                rows = self._search_table_sync(conn, "facts", "facts_fts", query, use_like, layer_limit)
+                rows = self._search_table_sync(
+                    conn, "facts", "facts_fts", query, use_like, layer_limit
+                )
                 for row in rows:
                     results.append(
                         MemoryEntry(
-                            id=row["id"], layer="L2", type=row["type"],
+                            id=row["id"],
+                            layer="L2",
+                            type=row["type"],
                             content=row["content"],
                             source_session_id=row["source_session_id"],
-                            created_at=row["created_at"], updated_at=row["updated_at"],
+                            created_at=row["created_at"],
+                            updated_at=row["updated_at"],
                             score=row.get("_score"),
                         )
                     )
@@ -311,12 +329,16 @@ class SqliteMemoryBackend:
                 for row in rows:
                     results.append(
                         MemoryEntry(
-                            id=row["id"], layer="L3", type=row["type"],
+                            id=row["id"],
+                            layer="L3",
+                            type=row["type"],
                             content=row["content"],
                             source_session_id=row["source_session_id"],
-                            created_at=row["created_at"], updated_at=row["updated_at"],
+                            created_at=row["created_at"],
+                            updated_at=row["updated_at"],
                             last_used_at=row["last_used_at"],
-                            use_count=row["use_count"], status=row["status"],
+                            use_count=row["use_count"],
+                            status=row["status"],
                             score=row.get("_score"),
                         )
                     )
@@ -328,8 +350,13 @@ class SqliteMemoryBackend:
         return await asyncio.to_thread(_search_sync)
 
     def _search_table_sync(
-        self, conn: apsw.Connection, table: str, fts_table: str,
-        query: str, use_like: bool, limit: int,
+        self,
+        conn: apsw.Connection,
+        table: str,
+        fts_table: str,
+        query: str,
+        use_like: bool,
+        limit: int,
     ) -> list[dict[str, Any]]:
         if use_like:
             cursor = conn.execute(
@@ -349,7 +376,11 @@ class SqliteMemoryBackend:
         return [_dict_row(cursor, row) for row in cursor]
 
     def _search_procedures_sync(
-        self, conn: apsw.Connection, query: str, use_like: bool, limit: int,
+        self,
+        conn: apsw.Connection,
+        query: str,
+        use_like: bool,
+        limit: int,
     ) -> list[dict[str, Any]]:
         if use_like:
             cursor = conn.execute(
@@ -394,9 +425,7 @@ class SqliteMemoryBackend:
 
         await asyncio.to_thread(_delete_sync)
 
-    async def archive_session(
-        self, session_key: str, session_id: str, summary: str
-    ) -> None:
+    async def archive_session(self, session_key: str, session_id: str, summary: str) -> None:
         conn = await self._get_conn(session_key)
 
         def _archive_sync() -> None:
@@ -416,10 +445,12 @@ class SqliteMemoryBackend:
                 embedding = await self._embedding.embed(summary)
 
                 def _vec_insert() -> None:
-                    archive_id = list(conn.execute(
-                        "SELECT id FROM archives WHERE session_id = ? ORDER BY created_at DESC LIMIT 1",
-                        (session_id,),
-                    ))[0][0]
+                    archive_id = list(
+                        conn.execute(
+                            "SELECT id FROM archives WHERE session_id = ? ORDER BY created_at DESC LIMIT 1",
+                            (session_id,),
+                        )
+                    )[0][0]
                     conn.execute(
                         "INSERT INTO archives_vec (id, embedding) VALUES (?, ?)",
                         (archive_id, sqlite_vec.serialize_float32(embedding)),
@@ -481,16 +512,18 @@ class SqliteMemoryBackend:
         conn = await self._get_conn(session_key)
 
         def _count_sync() -> dict[str, int]:
-            facts_row = list(conn.execute(
-                "SELECT COUNT(*) FROM facts WHERE session_key = ?", (session_key,)
-            ))
-            procs_row = list(conn.execute(
-                "SELECT COUNT(*) FROM procedures WHERE session_key = ? AND status = 'active'",
-                (session_key,),
-            ))
-            archives_row = list(conn.execute(
-                "SELECT COUNT(*) FROM archives WHERE session_key = ?", (session_key,)
-            ))
+            facts_row = list(
+                conn.execute("SELECT COUNT(*) FROM facts WHERE session_key = ?", (session_key,))
+            )
+            procs_row = list(
+                conn.execute(
+                    "SELECT COUNT(*) FROM procedures WHERE session_key = ? AND status = 'active'",
+                    (session_key,),
+                )
+            )
+            archives_row = list(
+                conn.execute("SELECT COUNT(*) FROM archives WHERE session_key = ?", (session_key,))
+            )
             return {
                 "l2": int(facts_row[0][0]) if facts_row else 0,
                 "l3": int(procs_row[0][0]) if procs_row else 0,

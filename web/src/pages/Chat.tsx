@@ -9,6 +9,7 @@ import {
   useSessionStore,
   useUiStore,
   useApprovalStore,
+  usePermissionStore,
 } from '../stores'
 import SessionSidebar from '../components/SessionSidebar'
 import ChatArea from '../components/ChatArea'
@@ -122,10 +123,12 @@ export default function Chat() {
         timestamp: Date.now(),
       }
       appendMessage(convId, userMsg)
+      const tier = usePermissionStore.getState().tier
       send({
         type: 'chat.send',
         conversation_id: convId,
         content: text,
+        tier,
         ...(attachments.length > 0 ? { attachments } : {}),
       })
     },
@@ -250,10 +253,12 @@ export default function Chat() {
       }
       if (!lastUser) return
       const { text, attachments } = splitContent(lastUser.content)
+      const tier = usePermissionStore.getState().tier
       send({
         type: 'chat.send',
         conversation_id: activeConvId,
         content: text,
+        tier,
         ...(attachments.length > 0 ? { attachments } : {}),
       })
     },
@@ -304,6 +309,9 @@ export default function Chat() {
           break
         case 'show-shortcuts':
           setShortcutsOpen(true)
+          break
+        case 'set-tier':
+          usePermissionStore.getState().setTier(selection.action.tier)
           break
       }
     },

@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +72,10 @@ class ForwardConsumer:
                     try:
                         await self._handler(payload)
                     except Exception:
-                        logger.exception("forward handler raised on payload session_key=%s",
-                                         payload.get("session_key"))
+                        logger.exception(
+                            "forward handler raised on payload session_key=%s",
+                            payload.get("session_key"),
+                        )
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -80,7 +83,9 @@ class ForwardConsumer:
                     return
                 logger.warning(
                     "forward consumer subscription on %s lost; retrying in %.1fs",
-                    self.channel, backoff_s, exc_info=True,
+                    self.channel,
+                    backoff_s,
+                    exc_info=True,
                 )
                 await asyncio.sleep(backoff_s)
                 backoff_s = min(backoff_s * 2, max_backoff_s)

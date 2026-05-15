@@ -76,7 +76,7 @@ class TestForwardConsumer:
         consumer = ForwardConsumer(redis, "w1", handler)
         try:
             await asyncio.wait_for(consumer.start(), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
         assert len(received) == 2
@@ -111,7 +111,7 @@ class TestForwardConsumer:
         consumer = ForwardConsumer(redis, "w1", handler)
         try:
             await asyncio.wait_for(consumer.start(), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
         assert len(received) == 1
@@ -143,7 +143,7 @@ class TestForwardConsumer:
         consumer = ForwardConsumer(redis, "w1", handler)
         try:
             await asyncio.wait_for(consumer.start(), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
         assert seen == [1, 2]

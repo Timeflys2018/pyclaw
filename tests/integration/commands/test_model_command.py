@@ -203,31 +203,36 @@ async def test_model_runner_three_level_fallback_priority() -> None:
     assert tree is not None
 
     request_with_explicit = RunRequest(
-        session_id=sid, workspace_id="ws", agent_id="a", user_message="hi", model="explicit-model",
+        session_id=sid,
+        workspace_id="ws",
+        agent_id="a",
+        user_message="hi",
+        model="explicit-model",
     )
     expected_explicit = (
-        request_with_explicit.model
-        or tree.header.model_override
-        or "default-from-llm-client"
+        request_with_explicit.model or tree.header.model_override or "default-from-llm-client"
     )
     assert expected_explicit == "explicit-model"
 
-    tree2 = tree.model_copy(update={"header": tree.header.model_copy(update={"model_override": "override-model"})})
+    tree2 = tree.model_copy(
+        update={"header": tree.header.model_copy(update={"model_override": "override-model"})}
+    )
     request_no_explicit = RunRequest(
-        session_id=sid, workspace_id="ws", agent_id="a", user_message="hi",
+        session_id=sid,
+        workspace_id="ws",
+        agent_id="a",
+        user_message="hi",
     )
     expected_override = (
-        request_no_explicit.model
-        or tree2.header.model_override
-        or "default-from-llm-client"
+        request_no_explicit.model or tree2.header.model_override or "default-from-llm-client"
     )
     assert expected_override == "override-model"
 
-    tree3 = tree.model_copy(update={"header": tree.header.model_copy(update={"model_override": None})})
+    tree3 = tree.model_copy(
+        update={"header": tree.header.model_copy(update={"model_override": None})}
+    )
     expected_default = (
-        request_no_explicit.model
-        or tree3.header.model_override
-        or "default-from-llm-client"
+        request_no_explicit.model or tree3.header.model_override or "default-from-llm-client"
     )
     assert expected_default == "default-from-llm-client"
 
@@ -265,10 +270,7 @@ class TestCmdModelModalityUX:
         await cmd_model("", ctx)
         msg = reply.await_args[0][0]
         assert "azure_openai/gpt-5.3-codex" in msg
-        codex_line = next(
-            line for line in msg.splitlines()
-            if "azure_openai/gpt-5.3-codex" in line
-        )
+        codex_line = next(line for line in msg.splitlines() if "azure_openai/gpt-5.3-codex" in line)
         assert "(" not in codex_line
 
     @pytest.mark.asyncio

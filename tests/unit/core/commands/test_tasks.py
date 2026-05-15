@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.tasks import cmd_tasks
+from pyclaw.infra.settings import Settings
 from pyclaw.infra.task_manager import TaskManager
 
 
@@ -107,7 +107,9 @@ async def test_tasks_list_all_admin_sees_system_tasks(tm: TaskManager) -> None:
 
     reply = AsyncMock()
     ctx = _ctx(
-        task_manager=tm, user_id="admin_user", admin_user_ids=["admin_user"],
+        task_manager=tm,
+        user_id="admin_user",
+        admin_user_ids=["admin_user"],
         reply=reply,
     )
     await cmd_tasks("list --all", ctx)
@@ -128,7 +130,10 @@ async def test_tasks_kill_non_admin_rejected(tm: TaskManager) -> None:
 async def test_tasks_kill_nonexistent(tm: TaskManager) -> None:
     reply = AsyncMock()
     ctx = _ctx(
-        task_manager=tm, user_id="admin", admin_user_ids=["admin"], reply=reply,
+        task_manager=tm,
+        user_id="admin",
+        admin_user_ids=["admin"],
+        reply=reply,
     )
     await cmd_tasks("kill missing_id --confirm", ctx)
     assert "任务不存在" in reply.await_args[0][0]
@@ -143,7 +148,10 @@ async def test_tasks_kill_preview_first(tm: TaskManager) -> None:
 
     reply = AsyncMock()
     ctx = _ctx(
-        task_manager=tm, user_id="admin", admin_user_ids=["admin"], reply=reply,
+        task_manager=tm,
+        user_id="admin",
+        admin_user_ids=["admin"],
+        reply=reply,
     )
     await cmd_tasks(f"kill {tid}", ctx)
     msg = reply.await_args[0][0]
@@ -160,7 +168,10 @@ async def test_tasks_kill_protected_category_rejected(tm: TaskManager) -> None:
 
     reply = AsyncMock()
     ctx = _ctx(
-        task_manager=tm, user_id="admin", admin_user_ids=["admin"], reply=reply,
+        task_manager=tm,
+        user_id="admin",
+        admin_user_ids=["admin"],
+        reply=reply,
     )
     await cmd_tasks(f"kill {tid} --confirm", ctx)
     msg = reply.await_args[0][0]
@@ -181,7 +192,10 @@ async def test_tasks_kill_safe_category_cancels(tm: TaskManager) -> None:
 
     reply = AsyncMock()
     ctx = _ctx(
-        task_manager=tm, user_id="admin", admin_user_ids=["admin"], reply=reply,
+        task_manager=tm,
+        user_id="admin",
+        admin_user_ids=["admin"],
+        reply=reply,
     )
     await cmd_tasks(f"kill {tid} --confirm", ctx)
     msg = reply.await_args[0][0]
@@ -200,7 +214,10 @@ async def test_tasks_list_handles_task_manager_none() -> None:
 async def test_tasks_kill_handles_task_manager_none() -> None:
     reply = AsyncMock()
     ctx = _ctx(
-        task_manager=None, user_id="admin", admin_user_ids=["admin"], reply=reply,
+        task_manager=None,
+        user_id="admin",
+        admin_user_ids=["admin"],
+        reply=reply,
     )
     await cmd_tasks("kill t000001 --confirm", ctx)
     assert "TaskManager 未初始化" in reply.await_args[0][0]

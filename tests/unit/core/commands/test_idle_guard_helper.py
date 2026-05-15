@@ -35,7 +35,10 @@ def _spec(*, requires_idle: bool) -> CommandSpec:
 async def test_returns_true_and_replies_when_busy_and_required() -> None:
     reply = AsyncMock()
     rejected = await idle_guard_check(
-        _spec(requires_idle=True), _FakeQueue(idle=False), "key-1", reply,
+        _spec(requires_idle=True),
+        _FakeQueue(idle=False),
+        "key-1",
+        reply,
     )
     assert rejected is True
     reply.assert_awaited_once()
@@ -47,7 +50,10 @@ async def test_returns_true_and_replies_when_busy_and_required() -> None:
 async def test_returns_false_when_idle_and_required() -> None:
     reply = AsyncMock()
     rejected = await idle_guard_check(
-        _spec(requires_idle=True), _FakeQueue(idle=True), "key-1", reply,
+        _spec(requires_idle=True),
+        _FakeQueue(idle=True),
+        "key-1",
+        reply,
     )
     assert rejected is False
     reply.assert_not_awaited()
@@ -58,10 +64,16 @@ async def test_returns_false_when_not_required_regardless_of_idle() -> None:
     reply = AsyncMock()
 
     rejected_busy = await idle_guard_check(
-        _spec(requires_idle=False), _FakeQueue(idle=False), "key", reply,
+        _spec(requires_idle=False),
+        _FakeQueue(idle=False),
+        "key",
+        reply,
     )
     rejected_idle = await idle_guard_check(
-        _spec(requires_idle=False), _FakeQueue(idle=True), "key", reply,
+        _spec(requires_idle=False),
+        _FakeQueue(idle=True),
+        "key",
+        reply,
     )
 
     assert rejected_busy is False

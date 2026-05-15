@@ -12,10 +12,10 @@ from pyclaw.skills.eligibility import (
 )
 from pyclaw.skills.models import SkillManifest, SkillRequirements
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _skill(
     name: str = "test-skill",
@@ -45,6 +45,7 @@ def _skill(
 # 1. OS rejects even with always=True
 # ---------------------------------------------------------------------------
 
+
 def test_os_rejects_even_with_always(monkeypatch: pytest.MonkeyPatch) -> None:
     """OS mismatch is absolute — `always=True` cannot bypass it."""
     monkeypatch.setattr("sys.platform", "darwin")
@@ -55,6 +56,7 @@ def test_os_rejects_even_with_always(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 # 2. OS passes, always bypasses remaining requires
 # ---------------------------------------------------------------------------
+
 
 def test_os_passes_always_bypasses_requires(monkeypatch: pytest.MonkeyPatch) -> None:
     """OS matches + always=True → skip bins/env checks → eligible."""
@@ -68,6 +70,7 @@ def test_os_passes_always_bypasses_requires(monkeypatch: pytest.MonkeyPatch) -> 
 # 3. No OS field, always bypasses
 # ---------------------------------------------------------------------------
 
+
 def test_no_os_always_bypasses(monkeypatch: pytest.MonkeyPatch) -> None:
     """No OS constraint + always=True → eligible despite missing bins."""
     monkeypatch.setattr("shutil.which", lambda _b: None)
@@ -78,6 +81,7 @@ def test_no_os_always_bypasses(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 # 4. bins all present
 # ---------------------------------------------------------------------------
+
 
 def test_bins_all_present(monkeypatch: pytest.MonkeyPatch) -> None:
     """All required bins found on PATH → eligible."""
@@ -90,8 +94,10 @@ def test_bins_all_present(monkeypatch: pytest.MonkeyPatch) -> None:
 # 5. bins one missing
 # ---------------------------------------------------------------------------
 
+
 def test_bins_one_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     """One required bin missing → rejected."""
+
     def _which(b: str) -> str | None:
         return f"/usr/bin/{b}" if b == "python3" else None
 
@@ -104,8 +110,10 @@ def test_bins_one_missing(monkeypatch: pytest.MonkeyPatch) -> None:
 # 6. anyBins one present
 # ---------------------------------------------------------------------------
 
+
 def test_any_bins_one_present(monkeypatch: pytest.MonkeyPatch) -> None:
     """At least one of anyBins present → eligible."""
+
     def _which(b: str) -> str | None:
         return "/usr/bin/python3" if b == "python3" else None
 
@@ -118,6 +126,7 @@ def test_any_bins_one_present(monkeypatch: pytest.MonkeyPatch) -> None:
 # 7. anyBins none present
 # ---------------------------------------------------------------------------
 
+
 def test_any_bins_none_present(monkeypatch: pytest.MonkeyPatch) -> None:
     """None of anyBins present → rejected."""
     monkeypatch.setattr("shutil.which", lambda _b: None)
@@ -128,6 +137,7 @@ def test_any_bins_none_present(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 # 8. env present
 # ---------------------------------------------------------------------------
+
 
 def test_env_present(monkeypatch: pytest.MonkeyPatch) -> None:
     """All required env vars set → eligible."""
@@ -140,6 +150,7 @@ def test_env_present(monkeypatch: pytest.MonkeyPatch) -> None:
 # 9. env missing
 # ---------------------------------------------------------------------------
 
+
 def test_env_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     """Required env var missing → rejected."""
     monkeypatch.delenv("PYCLAW_MISSING_VAR", raising=False)
@@ -151,6 +162,7 @@ def test_env_missing(monkeypatch: pytest.MonkeyPatch) -> None:
 # 10. No requirements → eligible
 # ---------------------------------------------------------------------------
 
+
 def test_no_requirements() -> None:
     """Skill with no requirements at all → eligible."""
     skill = _skill()
@@ -160,6 +172,7 @@ def test_no_requirements() -> None:
 # ---------------------------------------------------------------------------
 # 11. disable_model_invocation exclusion
 # ---------------------------------------------------------------------------
+
 
 def test_disable_model_invocation_excluded() -> None:
     """Eligible skill with disable_model_invocation=True excluded from filter."""
@@ -172,16 +185,17 @@ def test_disable_model_invocation_excluded() -> None:
 # 12. Mixed eligibility
 # ---------------------------------------------------------------------------
 
+
 def test_mixed_eligibility(monkeypatch: pytest.MonkeyPatch) -> None:
     """5 skills, 3 eligible, 2 not → filter returns 3."""
     monkeypatch.setattr("shutil.which", lambda _b: None)
 
     skills = [
-        _skill(name="a"),                                    # eligible (no reqs)
-        _skill(name="b", bins=["missing"]),                  # rejected
-        _skill(name="c", always=True, bins=["missing"]),     # eligible (always)
-        _skill(name="d", any_bins=["missing1", "missing2"]), # rejected
-        _skill(name="e"),                                    # eligible (no reqs)
+        _skill(name="a"),  # eligible (no reqs)
+        _skill(name="b", bins=["missing"]),  # rejected
+        _skill(name="c", always=True, bins=["missing"]),  # eligible (always)
+        _skill(name="d", any_bins=["missing1", "missing2"]),  # rejected
+        _skill(name="e"),  # eligible (no reqs)
     ]
     result = filter_eligible(skills)
     assert [s.name for s in result] == ["a", "c", "e"]
@@ -190,6 +204,7 @@ def test_mixed_eligibility(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 # 13. filter preserves order
 # ---------------------------------------------------------------------------
+
 
 def test_filter_preserves_order(monkeypatch: pytest.MonkeyPatch) -> None:
     """Eligible skills maintain their original input order."""
@@ -202,6 +217,7 @@ def test_filter_preserves_order(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 # Unit tests for individual check_* functions
 # ---------------------------------------------------------------------------
+
 
 class TestCheckOs:
     def test_empty_os_list(self) -> None:

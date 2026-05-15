@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.memory import cmd_memory
+from pyclaw.infra.settings import Settings
 from pyclaw.storage.memory.base import MemoryEntry
 
 
@@ -120,10 +120,12 @@ async def test_memory_search_empty_query() -> None:
 @pytest.mark.asyncio
 async def test_memory_search_returns_results() -> None:
     store = MagicMock()
-    store.search = AsyncMock(return_value=[
-        _entry("f1", "L2", "matching fact"),
-        _entry("p1", "L3", "matching proc"),
-    ])
+    store.search = AsyncMock(
+        return_value=[
+            _entry("f1", "L2", "matching fact"),
+            _entry("p1", "L3", "matching proc"),
+        ]
+    )
     reply = AsyncMock()
 
     await cmd_memory("search hello world", _ctx(memory_store=store, reply=reply))

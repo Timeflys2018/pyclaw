@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator
-
-import os
 
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 
@@ -38,9 +37,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     if settings.storage.session_backend == "redis":
         redis_client = await get_client(settings.redis)
-        lock_manager = RedisLockManager(
-            redis_client, key_prefix=settings.redis.key_prefix
-        )
+        lock_manager = RedisLockManager(redis_client, key_prefix=settings.redis.key_prefix)
         app.state.session_store = create_session_store(
             settings.storage,
             redis_client,
@@ -97,7 +94,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.memory_store = memory_store
 
     runner_deps = await create_agent_runner_deps(
-        settings, app.state.session_store,
+        settings,
+        app.state.session_store,
         workspace_store=workspace_store,
         task_manager=task_manager,
         memory_store=memory_store,
@@ -149,12 +147,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
                 return
             event_payload = payload.get("payload") or {}
             from pyclaw.gateway.event_codec import reconstruct_feishu_event
+
             try:
                 event = reconstruct_feishu_event(event_payload)
             except Exception:
                 logger.exception("failed to reconstruct forwarded event")
                 return
             from pyclaw.channels.feishu.handler import handle_feishu_message
+
             await handle_feishu_message(event, ctx_obj)
 
         forward_consumer = ForwardConsumer(
@@ -177,12 +177,24 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.feishu_channel = None
     if settings.channels.feishu.enabled:
+        from pyclaw.channels.feishu.approval_registry import FeishuApprovalRegistry
         from pyclaw.channels.feishu.client import FeishuClient
         from pyclaw.channels.feishu.dedup import FeishuDedup
+        from pyclaw.channels.feishu.tool_approval_hook import FeishuToolApprovalHook
         from pyclaw.channels.feishu.webhook import FeishuChannelPlugin
+        from pyclaw.infra.audit_logger import AuditLogger
 
         dedup = FeishuDedup(redis_client=app.state.redis_client)
         feishu_client = FeishuClient(settings.channels.feishu)
+        feishu_approval_registry = FeishuApprovalRegistry()
+        feishu_audit_logger = AuditLogger()
+        feishu_tool_approval_hook = FeishuToolApprovalHook(
+            client=feishu_client,
+            registry=feishu_approval_registry,
+            settings=settings.channels.feishu,
+            audit_logger=feishu_audit_logger,
+            task_manager=task_manager,
+        )
         feishu_channel = FeishuChannelPlugin(
             settings.channels.feishu,
             feishu_client,
@@ -199,6 +211,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             admin_user_ids=settings.admin_user_ids,
             gateway_router=gateway_router,
             worker_registry=worker_registry,
+            tool_approval_hook=feishu_tool_approval_hook,
+            approval_registry=feishu_approval_registry,
+            audit_logger=feishu_audit_logger,
         )
         app.state.feishu_channel = feishu_channel
         await feishu_channel.start()
@@ -206,11 +221,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     if settings.channels.web.enabled:
         from pyclaw.channels.session_router import SessionRouter
-        from pyclaw.channels.web.admin import admin_router, set_admin_registry
-        from pyclaw.channels.web.auth_routes import auth_router
-        from pyclaw.channels.web.openai_compat import openai_router, set_openai_deps
-        from pyclaw.channels.web.routes import set_web_deps, web_router
-        from pyclaw.channels.web.websocket import ws_router
+        from pyclaw.channels.web.admin import set_admin_registry
+        from pyclaw.channels.web.openai_compat import set_openai_deps
+        from pyclaw.channels.web.routes import set_web_deps
 
         app.state.web_settings = settings.channels.web
         app.state.settings = settings
@@ -271,10 +284,18 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         from pyclaw.channels.web.chat import SessionQueue
         from pyclaw.channels.web.deps import WebDeps
+        from pyclaw.channels.web.tool_approval_hook import WebToolApprovalHook
         from pyclaw.channels.web.websocket import ConnectionRegistry
+        from pyclaw.infra.audit_logger import AuditLogger
 
         web_session_queue = SessionQueue(task_manager=task_manager)
         web_connection_registry = ConnectionRegistry()
+        web_audit_logger = AuditLogger()
+        web_tool_approval_hook = WebToolApprovalHook(
+            session_queue=web_session_queue,
+            settings=settings.channels.web,
+            audit_logger=web_audit_logger,
+        )
         app.state.web_deps = WebDeps(
             session_store=app.state.session_store,
             session_router=session_router,
@@ -292,6 +313,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             agent_settings=settings.agent,
             worker_registry=worker_registry,
             admin_user_ids=settings.admin_user_ids,
+            tool_approval_hook=web_tool_approval_hook,
+            audit_logger=web_audit_logger,
         )
 
         logger.info("Web channel enabled (worker=%s)", worker_id)
@@ -305,7 +328,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         from pyclaw.core.curator import create_curator_loop
 
         memory_base_dir = Path(settings.memory.base_dir).expanduser()
-        _l1_index = getattr(memory_store, '_l1', None) if memory_store else None
+        _l1_index = getattr(memory_store, "_l1", None) if memory_store else None
         if _l1_index is not None:
             task_manager.spawn(
                 "curator-scan",
@@ -335,7 +358,10 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     report = await task_manager.shutdown()
     logger.info(
         "shutdown drain complete: completed=%d cancelled=%d timed_out=%d failed=%d duration=%.2fs",
-        report.completed, report.cancelled, report.timed_out, report.failed,
+        report.completed,
+        report.cancelled,
+        report.timed_out,
+        report.failed,
         report.total_duration_s,
     )
 

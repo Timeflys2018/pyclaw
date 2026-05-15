@@ -63,24 +63,33 @@ class TestDistributedMutexValidation:
         mgr = _mock_lock_manager()
         with pytest.raises(ValueError, match="must be less than ttl_ms/2000"):
             DistributedMutex(
-                mgr, "my:lock", task_manager=tm,
-                ttl_ms=30_000, heartbeat_interval_s=20.0,
+                mgr,
+                "my:lock",
+                task_manager=tm,
+                ttl_ms=30_000,
+                heartbeat_interval_s=20.0,
             )
 
     def test_rejects_interval_equal_half_ttl(self, tm: TaskManager) -> None:
         mgr = _mock_lock_manager()
         with pytest.raises(ValueError, match="must be less than ttl_ms/2000"):
             DistributedMutex(
-                mgr, "my:lock", task_manager=tm,
-                ttl_ms=30_000, heartbeat_interval_s=15.0,
+                mgr,
+                "my:lock",
+                task_manager=tm,
+                ttl_ms=30_000,
+                heartbeat_interval_s=15.0,
             )
 
     def test_rejects_interval_exceeding_small_ttl(self, tm: TaskManager) -> None:
         mgr = _mock_lock_manager()
         with pytest.raises(ValueError, match="must be less than ttl_ms/2000"):
             DistributedMutex(
-                mgr, "my:lock", task_manager=tm,
-                ttl_ms=5_000, heartbeat_interval_s=10.0,
+                mgr,
+                "my:lock",
+                task_manager=tm,
+                ttl_ms=5_000,
+                heartbeat_interval_s=10.0,
             )
 
 
@@ -89,11 +98,15 @@ class TestDistributedMutexAcquireRelease:
 
     @pytest.mark.asyncio
     async def test_context_manager_acquires_lock_and_spawns_heartbeat(
-        self, tm: TaskManager,
+        self,
+        tm: TaskManager,
     ) -> None:
         mgr = _mock_lock_manager(token="tok_xyz")
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm, heartbeat_interval_s=10.0,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            heartbeat_interval_s=10.0,
         )
         async with mutex as entered:
             assert entered is mutex
@@ -112,8 +125,11 @@ class TestDistributedMutexAcquireRelease:
     async def test_aenter_passes_ttl_ms_to_acquire(self, tm: TaskManager) -> None:
         mgr = _mock_lock_manager()
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm,
-            ttl_ms=7_500, heartbeat_interval_s=1.0,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            ttl_ms=7_500,
+            heartbeat_interval_s=1.0,
         )
         async with mutex:
             pass
@@ -121,7 +137,8 @@ class TestDistributedMutexAcquireRelease:
 
     @pytest.mark.asyncio
     async def test_acquire_failure_does_not_spawn_heartbeat(
-        self, tm: TaskManager,
+        self,
+        tm: TaskManager,
     ) -> None:
         mgr = _mock_lock_manager()
         mgr.acquire.side_effect = LockAcquireError("pyclaw:my:lock")
@@ -138,7 +155,10 @@ class TestDistributedMutexAcquireRelease:
     async def test_aexit_on_exception_still_cleans_up(self, tm: TaskManager) -> None:
         mgr = _mock_lock_manager()
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm, heartbeat_interval_s=10.0,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            heartbeat_interval_s=10.0,
         )
 
         with pytest.raises(RuntimeError, match="user code"):
@@ -150,18 +170,23 @@ class TestDistributedMutexAcquireRelease:
 
     @pytest.mark.asyncio
     async def test_heartbeat_spawned_with_heartbeat_category(
-        self, tm: TaskManager,
+        self,
+        tm: TaskManager,
     ) -> None:
         """category='heartbeat' is required for /tasks kill protection."""
         mgr = _mock_lock_manager()
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm, heartbeat_interval_s=10.0,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            heartbeat_interval_s=10.0,
         )
         async with mutex:
             hb_tasks = tm.list_tasks(category="heartbeat")
             assert len(hb_tasks) == 1
             assert not any(
-                t.category == "generic" for t in tm.list_tasks(include_done=True)
+                t.category == "generic"
+                for t in tm.list_tasks(include_done=True)
                 if t.name.startswith("mutex-heartbeat")
             )
 
@@ -171,11 +196,15 @@ class TestDistributedMutexCheckAlive:
 
     @pytest.mark.asyncio
     async def test_check_alive_noop_during_normal_hold(
-        self, tm: TaskManager,
+        self,
+        tm: TaskManager,
     ) -> None:
         mgr = _mock_lock_manager()
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm, heartbeat_interval_s=10.0,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            heartbeat_interval_s=10.0,
         )
         async with mutex:
             mutex.check_alive()
@@ -184,7 +213,8 @@ class TestDistributedMutexCheckAlive:
 
     @pytest.mark.asyncio
     async def test_check_alive_raises_when_lost_event_set(
-        self, tm: TaskManager,
+        self,
+        tm: TaskManager,
     ) -> None:
         mgr = _mock_lock_manager()
         call_count = 0
@@ -197,7 +227,10 @@ class TestDistributedMutexCheckAlive:
         mgr.renew = AsyncMock(side_effect=_renew_side_effect)
 
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm, heartbeat_interval_s=0.02,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            heartbeat_interval_s=0.02,
         )
         async with mutex:
             await asyncio.sleep(0.1)
@@ -206,12 +239,16 @@ class TestDistributedMutexCheckAlive:
 
     @pytest.mark.asyncio
     async def test_check_alive_raises_when_heartbeat_task_done_without_event(
-        self, tm: TaskManager,
+        self,
+        tm: TaskManager,
     ) -> None:
         """Double fail-safe path: task done but event not set."""
         mgr = _mock_lock_manager()
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm, heartbeat_interval_s=10.0,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            heartbeat_interval_s=10.0,
         )
         async with mutex:
             assert mutex._heartbeat_task_id is not None
@@ -228,11 +265,15 @@ class TestDistributedMutexPruningRace:
 
     @pytest.mark.asyncio
     async def test_check_alive_raises_when_handle_pruned(
-        self, tm: TaskManager,
+        self,
+        tm: TaskManager,
     ) -> None:
         mgr = _mock_lock_manager()
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm, heartbeat_interval_s=10.0,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            heartbeat_interval_s=10.0,
         )
         async with mutex:
             assert mutex._heartbeat_task_id is not None
@@ -249,13 +290,17 @@ class TestDistributedMutexHeartbeat:
 
     @pytest.mark.asyncio
     async def test_heartbeat_cas_failure_sets_lost_event(
-        self, tm: TaskManager,
+        self,
+        tm: TaskManager,
     ) -> None:
         mgr = _mock_lock_manager()
         mgr.renew = AsyncMock(return_value=False)
 
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm, heartbeat_interval_s=0.02,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            heartbeat_interval_s=0.02,
         )
         async with mutex:
             await asyncio.sleep(0.08)
@@ -263,7 +308,8 @@ class TestDistributedMutexHeartbeat:
 
     @pytest.mark.asyncio
     async def test_heartbeat_connection_error_sets_lost_event(
-        self, tm: TaskManager,
+        self,
+        tm: TaskManager,
     ) -> None:
         mgr = _mock_lock_manager()
         mgr.renew = AsyncMock(
@@ -271,7 +317,10 @@ class TestDistributedMutexHeartbeat:
         )
 
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm, heartbeat_interval_s=0.02,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            heartbeat_interval_s=0.02,
         )
         async with mutex:
             await asyncio.sleep(0.08)
@@ -279,13 +328,17 @@ class TestDistributedMutexHeartbeat:
 
     @pytest.mark.asyncio
     async def test_heartbeat_timeout_error_sets_lost_event(
-        self, tm: TaskManager,
+        self,
+        tm: TaskManager,
     ) -> None:
         mgr = _mock_lock_manager()
-        mgr.renew = AsyncMock(side_effect=asyncio.TimeoutError())
+        mgr.renew = AsyncMock(side_effect=TimeoutError())
 
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm, heartbeat_interval_s=0.02,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            heartbeat_interval_s=0.02,
         )
         async with mutex:
             await asyncio.sleep(0.08)
@@ -293,13 +346,17 @@ class TestDistributedMutexHeartbeat:
 
     @pytest.mark.asyncio
     async def test_heartbeat_renews_periodically_when_alive(
-        self, tm: TaskManager,
+        self,
+        tm: TaskManager,
     ) -> None:
         mgr = _mock_lock_manager()
         mgr.renew = AsyncMock(return_value=True)
 
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm, heartbeat_interval_s=0.02,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            heartbeat_interval_s=0.02,
         )
         async with mutex:
             await asyncio.sleep(0.1)
@@ -308,13 +365,17 @@ class TestDistributedMutexHeartbeat:
 
     @pytest.mark.asyncio
     async def test_heartbeat_clean_cancel_does_not_set_event(
-        self, tm: TaskManager,
+        self,
+        tm: TaskManager,
     ) -> None:
         mgr = _mock_lock_manager()
         mgr.renew = AsyncMock(return_value=True)
 
         mutex = DistributedMutex(
-            mgr, "my:lock", task_manager=tm, heartbeat_interval_s=10.0,
+            mgr,
+            "my:lock",
+            task_manager=tm,
+            heartbeat_interval_s=10.0,
         )
         async with mutex:
             assert mutex.lost is False

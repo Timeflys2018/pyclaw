@@ -8,8 +8,12 @@ import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
     CreateMessageReactionRequest,
     CreateMessageReactionRequestBody,
+    CreateMessageRequest,
+    CreateMessageRequestBody,
     GetMessageResourceRequest,
     ListMessageRequest,
+    PatchMessageRequest,
+    PatchMessageRequestBody,
     ReplyMessageRequest,
     ReplyMessageRequestBody,
 )
@@ -28,10 +32,7 @@ class FeishuClient:
     def __init__(self, settings: FeishuSettings) -> None:
         self._settings = settings
         self._client = (
-            lark.Client.builder()
-            .app_id(settings.app_id)
-            .app_secret(settings.app_secret)
-            .build()
+            lark.Client.builder().app_id(settings.app_id).app_secret(settings.app_secret).build()
         )
         self._bot_sent_message_ids: dict[str, float] = {}
 
@@ -57,12 +58,7 @@ class FeishuClient:
             .content(json.dumps({"text": text}))
             .build()
         )
-        req = (
-            ReplyMessageRequest.builder()
-            .message_id(message_id)
-            .request_body(body)
-            .build()
-        )
+        req = ReplyMessageRequest.builder().message_id(message_id).request_body(body).build()
         resp = await self._client.im.v1.message.areply(req)
         if not resp.success():
             logger.warning("reply_text failed: %s %s", resp.code, resp.msg)
@@ -71,6 +67,68 @@ class FeishuClient:
         if sent_id:
             self._track_bot_message(sent_id)
         return sent_id
+
+    async def reply_interactive_card(self, message_id: str, card_json: str) -> str | None:
+        body = ReplyMessageRequestBody.builder().msg_type("interactive").content(card_json).build()
+        req = ReplyMessageRequest.builder().message_id(message_id).request_body(body).build()
+        resp = await self._client.im.v1.message.areply(req)
+        if not resp.success():
+            logger.warning(
+                "reply_interactive_card failed: %s %s",
+                resp.code,
+                resp.msg,
+            )
+            return None
+        sent_id = resp.data.message_id if resp.data else None
+        if sent_id:
+            self._track_bot_message(sent_id)
+        return sent_id
+
+    async def send_interactive_card(
+        self,
+        *,
+        receive_id: str,
+        receive_id_type: str,
+        card_json: str,
+    ) -> str | None:
+        body = (
+            CreateMessageRequestBody.builder()
+            .receive_id(receive_id)
+            .msg_type("interactive")
+            .content(card_json)
+            .build()
+        )
+        req = (
+            CreateMessageRequest.builder()
+            .receive_id_type(receive_id_type)
+            .request_body(body)
+            .build()
+        )
+        resp = await self._client.im.v1.message.acreate(req)
+        if not resp.success():
+            logger.warning(
+                "send_interactive_card failed: %s %s",
+                resp.code,
+                resp.msg,
+            )
+            return None
+        sent_id = resp.data.message_id if resp.data else None
+        if sent_id:
+            self._track_bot_message(sent_id)
+        return sent_id
+
+    async def patch_interactive_card(self, *, message_id: str, card_json: str) -> bool:
+        body = PatchMessageRequestBody.builder().content(card_json).build()
+        req = PatchMessageRequest.builder().message_id(message_id).request_body(body).build()
+        resp = await self._client.im.v1.message.apatch(req)
+        if not resp.success():
+            logger.warning(
+                "patch_interactive_card failed: %s %s",
+                resp.code,
+                resp.msg,
+            )
+            return False
+        return True
 
     def _track_bot_message(self, message_id: str) -> None:
         now = time.time()
@@ -97,16 +155,16 @@ class FeishuClient:
             .build()
         )
         req = (
-            CreateMessageReactionRequest.builder()
-            .message_id(message_id)
-            .request_body(body)
-            .build()
+            CreateMessageReactionRequest.builder().message_id(message_id).request_body(body).build()
         )
         resp = await self._client.im.v1.message_reaction.acreate(req)
         if not resp.success():
             logger.warning(
                 "create_reaction failed msg=%s emoji=%s: %s %s",
-                message_id, emoji_type, resp.code, resp.msg,
+                message_id,
+                emoji_type,
+                resp.code,
+                resp.msg,
             )
             return False
         return True
@@ -129,7 +187,9 @@ class FeishuClient:
             {
                 "sender_id": getattr(getattr(item, "sender", None), "id", None),
                 "msg_type": getattr(item, "msg_type", ""),
-                "content": getattr(item, "body", {}).content if hasattr(getattr(item, "body", None), "content") else "",
+                "content": getattr(item, "body", {}).content
+                if hasattr(getattr(item, "body", None), "content")
+                else "",
             }
             for item in items
         ]

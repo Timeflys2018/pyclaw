@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pyclaw.infra.settings import Settings
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.core.commands.builtin import cmd_export
 from pyclaw.core.commands.context import CommandContext
+from pyclaw.infra.settings import Settings
 from pyclaw.models import (
     MessageEntry,
     SessionHeader,
@@ -23,13 +23,19 @@ from pyclaw.models import (
 from pyclaw.storage.session.base import InMemorySessionStore
 
 
-async def _make_ctx(workspace_path: Path, *, channel: str = "web") -> tuple[CommandContext, AsyncMock, InMemorySessionStore]:
+async def _make_ctx(
+    workspace_path: Path, *, channel: str = "web"
+) -> tuple[CommandContext, AsyncMock, InMemorySessionStore]:
     store = InMemorySessionStore()
     header = SessionHeader(id="sid-x", workspace_id="ws", agent_id="default", session_key="key")
     tree = SessionTree(header=header)
     user_id = generate_entry_id(set())
     user_entry = MessageEntry(
-        id=user_id, parent_id=None, timestamp=now_iso(), role="user", content="Hello",
+        id=user_id,
+        parent_id=None,
+        timestamp=now_iso(),
+        role="user",
+        content="Hello",
     )
     tree.entries[user_entry.id] = user_entry
     tree.order.append(user_entry.id)
@@ -114,7 +120,11 @@ async def test_export_inline_truncates_to_8192_utf8_bytes() -> None:
     eid = generate_entry_id(set())
     big_text = "工作" * 5000
     entry = MessageEntry(
-        id=eid, parent_id=None, timestamp=now_iso(), role="user", content=big_text,
+        id=eid,
+        parent_id=None,
+        timestamp=now_iso(),
+        role="user",
+        content=big_text,
     )
     tree.entries[entry.id] = entry
     tree.order.append(entry.id)
@@ -144,7 +154,7 @@ async def test_export_inline_truncates_to_8192_utf8_bytes() -> None:
     await cmd_export("inline", ctx)
 
     msg = reply.await_args[0][0]
-    assert len(msg.encode("utf-8")) <= 8192 + len("\n\n…（内容已截断）".encode("utf-8")) + 4
+    assert len(msg.encode("utf-8")) <= 8192 + len("\n\n…（内容已截断）".encode()) + 4
     assert "（内容已截断）" in msg
 
 

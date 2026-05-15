@@ -97,9 +97,7 @@ async def _handle_injection(
     )
 
 
-async def handle_steer_command(
-    state: ConnectionState, conversation_id: str, args: str
-) -> None:
+async def handle_steer_command(state: ConnectionState, conversation_id: str, args: str) -> None:
     await _handle_injection(
         state,
         conversation_id,
@@ -111,9 +109,7 @@ async def handle_steer_command(
     )
 
 
-async def handle_btw_command(
-    state: ConnectionState, conversation_id: str, args: str
-) -> None:
+async def handle_btw_command(state: ConnectionState, conversation_id: str, args: str) -> None:
     await _handle_injection(
         state,
         conversation_id,

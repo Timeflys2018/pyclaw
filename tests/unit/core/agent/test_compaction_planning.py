@@ -37,7 +37,10 @@ class TestTokenEstimation:
         msg = {
             "role": "user",
             "content": [
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64," + "A" * 100_000}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64," + "A" * 100_000},
+                },
                 {"type": "text", "text": "what"},
             ],
         }
@@ -50,7 +53,10 @@ class TestTokenEstimation:
         msg = {
             "role": "user",
             "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "..."}},
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/png", "data": "..."},
+                },
             ],
         }
         tokens = estimate_message_tokens(msg)

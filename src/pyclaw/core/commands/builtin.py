@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 
 from pyclaw.core.commands._helpers import (
     format_session_status,
@@ -32,12 +33,25 @@ async def cmd_reset(args: str, ctx: CommandContext) -> None:
 
 
 async def cmd_status(args: str, ctx: CommandContext) -> None:
+    if ctx.channel == "feishu":
+        channel_settings = ctx.settings.channels.feishu
+    elif ctx.channel == "web":
+        channel_settings = ctx.settings.channels.web
+    else:
+        channel_settings = None
+    default_tier = (
+        getattr(channel_settings, "default_permission_tier", None) or "approval"
+    )
+
     text = await format_session_status(
         ctx.session_key,
         ctx.session_id,
         ctx.deps,
         worker_registry=ctx.worker_registry,
         gateway_router=ctx.gateway_router,
+        redis_client=ctx.redis_client,
+        channel=ctx.channel,
+        channel_default_tier=default_tier,
     )
     await ctx.reply(text)
 
@@ -50,11 +64,7 @@ async def cmd_whoami(args: str, ctx: CommandContext) -> None:
             return
         sender = event.event.sender
         msg = event.event.message
-        open_id = (
-            (sender.sender_id.open_id or "unknown")
-            if sender.sender_id
-            else "unknown"
-        )
+        open_id = (sender.sender_id.open_id or "unknown") if sender.sender_id else "unknown"
         chat_type = msg.chat_type or "unknown"
         lines = [
             "🧭 **身份信息**",
@@ -74,18 +84,14 @@ async def cmd_whoami(args: str, ctx: CommandContext) -> None:
 
 
 async def cmd_history(args: str, ctx: CommandContext) -> None:
-    summaries = await ctx.deps.session_store.list_session_history(
-        ctx.session_key, limit=10
-    )
+    summaries = await ctx.deps.session_store.list_session_history(ctx.session_key, limit=10)
     if not summaries:
         await ctx.reply("📚 当前只有一个会话，还没有历史记录。")
         return
     lines = ["📚 **历史会话**"]
     for i, s in enumerate(summaries, 1):
         ts = s.created_at[:19].replace("T", " ") if s.created_at else "unknown"
-        short_id = (
-            s.session_id.split(":")[-1] if ":" in s.session_id else s.session_id[-8:]
-        )
+        short_id = s.session_id.split(":")[-1] if ":" in s.session_id else s.session_id[-8:]
         lines.append(f"{i}. `...{short_id}` — {ts} — {s.message_count} 条消息")
     await ctx.reply("\n".join(lines))
 
@@ -118,6 +124,77 @@ async def cmd_idle(args: str, ctx: CommandContext) -> None:
     await ctx.reply(f"✅ 空闲超时已设置为 {unit}。")
 
 
+async def cmd_tier(args: str, ctx: CommandContext) -> None:
+    from pyclaw.core.commands.tier_store import (
+        get_session_tier,
+        parse_tier_arg,
+        set_session_tier,
+    )
+
+    arg = args.strip()
+    if ctx.channel == "feishu":
+        channel_settings = ctx.settings.channels.feishu
+    elif ctx.channel == "web":
+        channel_settings = ctx.settings.channels.web
+    else:
+        channel_settings = None
+    default_tier = (
+        getattr(channel_settings, "default_permission_tier", None) or "approval"
+    )
+
+    if not arg:
+        current = await get_session_tier(ctx.redis_client, ctx.session_key)
+        effective = current or default_tier
+        source = "session override" if current else "deployment default"
+        lines = [
+            "🛡 **Permission tier**",
+            f"当前: `{effective}` ({source})",
+            f"部署默认: `{default_tier}`",
+            "",
+            "切换: `/tier read-only` | `/tier approval` | `/tier yolo`",
+        ]
+        await ctx.reply("\n".join(lines))
+        return
+
+    new_tier = parse_tier_arg(arg)
+    if new_tier is None:
+        await ctx.reply(
+            "❌ 无效 tier。可选: `read-only`、`approval`、`yolo`(支持 `ro`/`ap`/`y` 缩写)"
+        )
+        return
+
+    previous = await get_session_tier(ctx.redis_client, ctx.session_key)
+    ok = await set_session_tier(ctx.redis_client, ctx.session_key, new_tier)
+    if not ok:
+        await ctx.reply(
+            "⚠️ Redis 不可用,无法持久化 tier 偏好。"
+            "可改 `pyclaw.json` 的 `channels.feishu.defaultPermissionTier` 后重启。"
+        )
+        return
+
+    audit = getattr(ctx.deps, "audit_logger", None)
+    if audit is not None and previous != new_tier:
+        try:
+            audit.log_tier_change(
+                session_id=ctx.session_id,
+                channel=ctx.channel,
+                from_tier=previous,
+                to_tier=new_tier,
+                user_id=ctx.user_id or None,
+            )
+        except Exception:
+            logger.warning("audit log_tier_change failed", exc_info=True)
+
+    if previous == new_tier:
+        await ctx.reply(f"🛡 已是 `{new_tier}` tier,无需切换。")
+    else:
+        previous_str = f"`{previous}`" if previous else f"`{default_tier}`(默认)"
+        await ctx.reply(
+            f"✅ Permission tier: {previous_str} → `{new_tier}`\n"
+            f"_下条消息生效。重启 PyClaw 后回退到部署默认。_"
+        )
+
+
 async def cmd_extract(args: str, ctx: CommandContext) -> None:
     from pyclaw.core.sop_extraction import format_extraction_result_zh
 
@@ -131,9 +208,7 @@ async def cmd_extract(args: str, ctx: CommandContext) -> None:
         nudge_hook=ctx.nudge_hook,
     )
     if result is None:
-        await ctx.reply(
-            "⏳ 学习超时（>15 秒）已中止，候选数据已保留，1 分钟后可再次 /extract。"
-        )
+        await ctx.reply("⏳ 学习超时（>15 秒）已中止，候选数据已保留，1 分钟后可再次 /extract。")
         return
     if result.skip_reason == "disabled":
         await ctx.reply("⚠️ 自我进化功能未启用。")
@@ -327,9 +402,7 @@ async def cmd_compact(args: str, ctx: CommandContext) -> None:
             first_kept_entry_id=tree.leaf_id or "",
             tokens_before=result.tokens_before,
         )
-        await ctx.deps.session_store.append_entry(
-            ctx.session_id, comp_entry, leaf_id=comp_entry.id
-        )
+        await ctx.deps.session_store.append_entry(ctx.session_id, comp_entry, leaf_id=comp_entry.id)
 
     tokens_saved = max(0, result.tokens_before - (result.tokens_after or 0))
     await ctx.reply(f"✓ 压缩完成，节省约 {tokens_saved} tokens")
@@ -369,7 +442,7 @@ def _failed_compact_result(error: str) -> object:
 
 async def cmd_export(args: str, ctx: CommandContext) -> None:
     import secrets
-    from datetime import datetime, timezone
+    from datetime import datetime
     from pathlib import Path as _Path
 
     from pyclaw.core.session_export import (
@@ -421,7 +494,7 @@ async def cmd_export(args: str, ctx: CommandContext) -> None:
         return
 
     rand = secrets.token_hex(4)
-    utc_iso = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    utc_iso = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     filename = f"session-{rand}-{utc_iso}.{ext}"
     target = exports_dir / filename
 
@@ -430,9 +503,7 @@ async def cmd_export(args: str, ctx: CommandContext) -> None:
     resolved = target.resolve()
     if not _path_is_under(resolved, workspace_resolved):
         target.unlink(missing_ok=True)
-        await ctx.reply(
-            f"⚠️ 导出失败：解析后的路径 `{resolved}` 逃出了工作区"
-        )
+        await ctx.reply(f"⚠️ 导出失败：解析后的路径 `{resolved}` 逃出了工作区")
         return
 
     try:
@@ -559,6 +630,16 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             category="config",
             help_text="设置空闲超时",
             args_hint="<时长>",
+            channels=ALL_CHANNELS,
+        )
+    )
+    registry.register(
+        CommandSpec(
+            name="/tier",
+            handler=cmd_tier,
+            category="config",
+            help_text="查看或切换 permission tier (read-only/approval/yolo)",
+            args_hint="[read-only|approval|yolo]",
             channels=ALL_CHANNELS,
         )
     )

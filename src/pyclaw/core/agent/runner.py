@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pyclaw.core.agent.compaction import estimate_messages_tokens, take_checkpoint
-from pyclaw.core.agent.run_control import RunControl
 from pyclaw.core.agent.incomplete_turn import classify_turn, retry_message_for
 from pyclaw.core.agent.llm import (
     LLMClient,
@@ -20,11 +19,7 @@ from pyclaw.core.agent.llm import (
     merge_tool_call_deltas,
     model_supports_input,
 )
-from pyclaw.core.agent.tool_result_truncation import (
-    resolve_max_output_chars,
-    truncate_tool_result,
-)
-from pyclaw.core.hooks import CompactionContext
+from pyclaw.core.agent.run_control import RunControl
 from pyclaw.core.agent.runtime_util import (
     AgentAbortedError,
     AgentTimeoutError,
@@ -36,6 +31,10 @@ from pyclaw.core.agent.system_prompt import (
     build_frozen_prefix,
     build_per_turn_suffix,
 )
+from pyclaw.core.agent.tool_result_truncation import (
+    resolve_max_output_chars,
+    truncate_tool_result,
+)
 from pyclaw.core.agent.tools.registry import (
     ToolContext,
     ToolRegistry,
@@ -43,7 +42,15 @@ from pyclaw.core.agent.tools.registry import (
     tool_result_to_llm_content,
 )
 from pyclaw.core.context_engine import ContextEngine, DefaultContextEngine
-from pyclaw.core.hooks import HookRegistry, ResponseObservation, SkillProvider, ToolApprovalHook
+from pyclaw.core.hooks import (
+    CompactionContext,
+    HookRegistry,
+    PermissionTier,
+    ResponseObservation,
+    SkillProvider,
+    ToolApprovalHook,
+)
+from pyclaw.infra.task_manager import TaskManager
 from pyclaw.models import (
     AgentRunConfig,
     Done,
@@ -60,7 +67,6 @@ from pyclaw.models import (
     generate_entry_id,
     now_iso,
 )
-from pyclaw.infra.task_manager import TaskManager
 from pyclaw.storage.session.base import InMemorySessionStore, SessionStore
 from pyclaw.storage.workspace.base import WorkspaceStore
 
@@ -80,6 +86,8 @@ class AgentRunnerDeps:
     tool_approval_hook: ToolApprovalHook | None = field(default=None)
     task_manager: TaskManager | None = field(default=None)
     lock_manager: Any = field(default=None)
+    audit_logger: Any = field(default=None)
+    channel: str = "web"
 
 
 @dataclass
@@ -92,6 +100,7 @@ class RunRequest:
     tool_context_extras: dict[str, Any] = field(default_factory=dict)
     attachments: list[Any] = field(default_factory=list)
     extra_system: str = ""
+    permission_tier_override: PermissionTier | None = None
 
 
 @dataclass
@@ -215,6 +224,7 @@ async def run_agent_stream(
     await deps.hooks.notify_run_start(request.session_id, control)
 
     try:
+
         def _run_timed_out() -> bool:
             return run_deadline_s > 0 and (time.monotonic() - run_started) > run_deadline_s
 
@@ -225,9 +235,7 @@ async def run_agent_stream(
             agent_id=request.agent_id,
         )
 
-        effective_model = (
-            request.model or tree.header.model_override or deps.llm.default_model
-        )
+        effective_model = request.model or tree.header.model_override or deps.llm.default_model
 
         if request.attachments and getattr(deps.llm, "_providers", None):
             providers = deps.llm._providers
@@ -279,7 +287,11 @@ async def run_agent_stream(
         if tool_workspace_path and deps.skill_provider:
             skills_prompt_str = deps.skill_provider.resolve_skills_prompt(str(tool_workspace_path))
 
-        tool_summaries = [(t.name, t.description) for t in (deps.tools.get(n) for n in deps.tools.names()) if t is not None]
+        tool_summaries = [
+            (t.name, t.description)
+            for t in (deps.tools.get(n) for n in deps.tools.names())
+            if t is not None
+        ]
         prompt_inputs = PromptInputs(
             session_id=request.session_id,
             workspace_id=request.workspace_id,
@@ -411,7 +423,9 @@ async def run_agent_stream(
                 )
                 guarded_iter = iterate_with_deadline(
                     stream_iter,
-                    deadline_s=remaining_run if remaining_run is not None and remaining_run > 0 else 0.0,
+                    deadline_s=remaining_run
+                    if remaining_run is not None and remaining_run > 0
+                    else 0.0,
                     abort_event=abort_event,
                     kind="run",
                 )
@@ -430,7 +444,9 @@ async def run_agent_stream(
                         terminated_by = "aborted"
                         if text_parts:
                             await _persist_partial_assistant(deps, tree, "".join(text_parts))
-                        yield ErrorEvent(error_code="aborted", message="run aborted during llm stream")
+                        yield ErrorEvent(
+                            error_code="aborted", message="run aborted during llm stream"
+                        )
                         return
                     if chunk.text_delta:
                         text_parts.append(chunk.text_delta)
@@ -635,6 +651,7 @@ async def run_agent_stream(
                 raw_args = fn.get("arguments") or {}
                 if isinstance(raw_args, str):
                     import json as _json
+
                     try:
                         raw_args = _json.loads(raw_args)
                     except Exception:
@@ -646,7 +663,41 @@ async def run_agent_stream(
                     arguments=raw_args,
                 )
 
-            if deps.tool_approval_hook is not None:
+            effective_tier: PermissionTier = request.permission_tier_override or "approval"
+
+            denied_ids: dict[str, str] = {}
+
+            if effective_tier == "read-only":
+                for call, tool_name, _ in parsed_calls:
+                    tool_obj = deps.tools.get(tool_name) if tool_name else None
+                    cls = getattr(tool_obj, "tool_class", "write")
+                    cid = call.get("id", "")
+                    if cls == "write":
+                        denied_ids[cid] = (
+                            f"Tool '{tool_name}' is not available in read-only mode. "
+                            "(Mode can be changed in the input footer.)"
+                        )
+                        _emit_runner_audit(
+                            deps, request.session_id, deps.channel,
+                            tool_name, cid, effective_tier,
+                            decision="deny", decided_by="auto:read-only",
+                        )
+                    else:
+                        _emit_runner_audit(
+                            deps, request.session_id, deps.channel,
+                            tool_name, cid, effective_tier,
+                            decision="approve", decided_by="auto:read-only",
+                        )
+
+            elif effective_tier == "yolo":
+                for call, tool_name, _ in parsed_calls:
+                    _emit_runner_audit(
+                        deps, request.session_id, deps.channel,
+                        tool_name, call.get("id", ""), effective_tier,
+                        decision="approve", decided_by="auto:yolo",
+                    )
+
+            elif effective_tier == "approval" and deps.tool_approval_hook is not None:
                 for call, tool_name, raw_args in parsed_calls:
                     yield ToolApprovalRequest(
                         tool_call_id=call.get("id", ""),
@@ -655,43 +706,41 @@ async def run_agent_stream(
                     )
 
                 decisions = await deps.tool_approval_hook.before_tool_execution(
-                    [
-                        {"id": c.get("id", ""), "name": tn, "args": ra}
-                        for c, tn, ra in parsed_calls
-                    ],
+                    [{"id": c.get("id", ""), "name": tn, "args": ra} for c, tn, ra in parsed_calls],
                     session_id=request.session_id,
+                    tier=effective_tier,
                 )
 
-                denied_ids: set[str] = set()
                 for idx, decision in enumerate(decisions):
                     if decision == "deny":
-                        denied_ids.add(parsed_calls[idx][0].get("id", ""))
+                        cid = parsed_calls[idx][0].get("id", "")
+                        tname = parsed_calls[idx][1]
+                        denied_ids[cid] = f"Tool '{tname}' was denied by approval hook."
 
-                if denied_ids:
-                    response.tool_calls = [
-                        tc for tc in response.tool_calls
-                        if tc.get("id", "") not in denied_ids
-                    ]
-                    if not response.tool_calls:
-                        for call, tool_name, _ in parsed_calls:
-                            cid = call.get("id", "")
-                            if cid in denied_ids:
-                                denied_result = ToolResult(
-                                    tool_call_id=cid,
-                                    content=[TextBlock(text=f"Tool '{tool_name}' was denied by approval hook.")],
-                                    is_error=True,
-                                )
-                                denied_entry = MessageEntry(
-                                    id=generate_entry_id(set(tree.entries.keys())),
-                                    parent_id=tree.leaf_id,
-                                    timestamp=now_iso(),
-                                    role="tool",
-                                    content=tool_result_to_llm_content(denied_result),
-                                    tool_call_id=cid,
-                                )
-                                await _append(deps, tree, denied_entry)
-                                yield ToolCallEnd(tool_call_id=cid, result=denied_result)
-                        continue
+            if denied_ids:
+                response.tool_calls = [
+                    tc for tc in response.tool_calls if tc.get("id", "") not in denied_ids
+                ]
+                for call, _tool_name, _ in parsed_calls:
+                    cid = call.get("id", "")
+                    if cid in denied_ids:
+                        denied_result = ToolResult(
+                            tool_call_id=cid,
+                            content=[TextBlock(text=denied_ids[cid])],
+                            is_error=True,
+                        )
+                        denied_entry = MessageEntry(
+                            id=generate_entry_id(set(tree.entries.keys())),
+                            parent_id=tree.leaf_id,
+                            timestamp=now_iso(),
+                            role="tool",
+                            content=tool_result_to_llm_content(denied_result),
+                            tool_call_id=cid,
+                        )
+                        await _append(deps, tree, denied_entry)
+                        yield ToolCallEnd(tool_call_id=cid, result=denied_result)
+                if not response.tool_calls:
+                    continue
 
             results: list[ToolResult] = await execute_tool_calls(
                 deps.tools,
@@ -808,9 +857,7 @@ async def _try_compaction(
         tree.entries[comp_entry.id] = comp_entry
         tree.order.append(comp_entry.id)
         tree.leaf_id = comp_entry.id
-        await deps.session_store.append_entry(
-            tree.header.id, comp_entry, leaf_id=comp_entry.id
-        )
+        await deps.session_store.append_entry(tree.header.id, comp_entry, leaf_id=comp_entry.id)
         return _CompactionOutcome(ok=True, compacted=True, result=compact_result)
 
     return _CompactionOutcome(ok=True, compacted=False, result=compact_result)
@@ -913,6 +960,35 @@ _MIN_CACHE_TOKENS = 1024
 def _is_anthropic_model(model: str) -> bool:
     m = model.lower()
     return any(m.startswith(p) for p in _ANTHROPIC_PREFIXES)
+
+
+def _emit_runner_audit(
+    deps: AgentRunnerDeps,
+    session_id: str,
+    channel: str,
+    tool_name: str,
+    tool_call_id: str,
+    tier: PermissionTier,
+    *,
+    decision: str,
+    decided_by: str,
+) -> None:
+    audit = getattr(deps, "audit_logger", None)
+    if audit is None:
+        return
+    try:
+        audit.log_decision(
+            conv_id=session_id,
+            session_id=session_id,
+            channel=channel,
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+            tier=tier,
+            decision=decision,
+            decided_by=decided_by,
+        )
+    except Exception:
+        logger.warning("audit log emit failed", exc_info=True)
 
 
 def _build_effective_system(

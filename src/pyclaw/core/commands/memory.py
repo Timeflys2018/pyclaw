@@ -95,9 +95,7 @@ async def _cmd_memory_list(rest: list[str], ctx: CommandContext) -> None:
     limit = _parse_limit(rest)
 
     try:
-        entries = await list_for_user(
-            ctx.memory_store, ctx.session_key, kind=kind, limit=limit
-        )
+        entries = await list_for_user(ctx.memory_store, ctx.session_key, kind=kind, limit=limit)
     except ValueError as exc:
         await ctx.reply(f"❌ {exc}")
         return

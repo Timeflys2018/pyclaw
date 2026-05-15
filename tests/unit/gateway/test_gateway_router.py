@@ -43,9 +43,7 @@ class TestRouteLocal:
         result = await router.route("sess1", {})
 
         assert result == "local"
-        affinity._redis.set.assert_called_once_with(
-            "pyclaw:affinity:sess1", "w1", nx=True, ex=300
-        )
+        affinity._redis.set.assert_called_once_with("pyclaw:affinity:sess1", "w1", nx=True, ex=300)
         forwarder._redis.publish.assert_not_called()
 
 
@@ -75,9 +73,7 @@ class TestRouteForwarded:
         result = await router.route("sess1", {})
 
         assert result == "local"
-        affinity._redis.set.assert_called_with(
-            "pyclaw:affinity:sess1", "w1", ex=300
-        )
+        affinity._redis.set.assert_called_with("pyclaw:affinity:sess1", "w1", ex=300)
 
 
 class TestRaceLoser:

@@ -18,7 +18,6 @@ async def tm():
 
 
 class TestListForOwner:
-
     @pytest.mark.asyncio
     async def test_filters_by_owner(self, tm: TaskManager) -> None:
         async def hang():
@@ -48,7 +47,6 @@ class TestListForOwner:
 
 
 class TestListAll:
-
     @pytest.mark.asyncio
     async def test_includes_system_tasks(self, tm: TaskManager) -> None:
         async def hang():
@@ -68,7 +66,6 @@ class TestListAll:
 
 
 class TestDescribe:
-
     @pytest.mark.asyncio
     async def test_returns_matching_task(self, tm: TaskManager) -> None:
         async def hang():

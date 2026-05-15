@@ -29,30 +29,22 @@ def _extract_zip(
     max_entries: int = 50_000,
 ) -> None:
     if len(zip_bytes) > max_archive_bytes:
-        raise SkillInstallError(
-            f"Archive size {len(zip_bytes)} exceeds limit {max_archive_bytes}"
-        )
+        raise SkillInstallError(f"Archive size {len(zip_bytes)} exceeds limit {max_archive_bytes}")
 
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         names = zf.namelist()
         if len(names) > max_entries:
-            raise SkillInstallError(
-                f"Too many entries ({len(names)}), limit is {max_entries}"
-            )
+            raise SkillInstallError(f"Too many entries ({len(names)}), limit is {max_entries}")
 
         total_extracted = 0
         for entry in names:
             if not _validate_zip_entry(entry, target_dir):
-                raise SkillInstallError(
-                    f"Zip-slip detected for entry: {entry}"
-                )
+                raise SkillInstallError(f"Zip-slip detected for entry: {entry}")
 
             info = zf.getinfo(entry)
             total_extracted += info.file_size
             if total_extracted > max_extracted_bytes:
-                raise SkillInstallError(
-                    f"Extracted size exceeds limit {max_extracted_bytes}"
-                )
+                raise SkillInstallError(f"Extracted size exceeds limit {max_extracted_bytes}")
 
             dest = target_dir / entry
             if entry.endswith("/"):
@@ -82,9 +74,7 @@ def _verify_integrity(zip_bytes: bytes, expected_hash: str | None) -> None:
         return
     actual = hashlib.sha256(zip_bytes).hexdigest()
     if actual.lower() != expected_hash.lower():
-        raise SkillInstallError(
-            f"Hash mismatch: expected {expected_hash}, got {actual}"
-        )
+        raise SkillInstallError(f"Hash mismatch: expected {expected_hash}, got {actual}")
 
 
 def write_origin_json(
@@ -102,9 +92,7 @@ def write_origin_json(
         "installedVersion": version,
         "installedAt": int(time.time() * 1000),
     }
-    (clawhub_dir / "origin.json").write_text(
-        json.dumps(origin, indent=2), encoding="utf-8"
-    )
+    (clawhub_dir / "origin.json").write_text(json.dumps(origin, indent=2), encoding="utf-8")
 
 
 def update_lock_json(workspace_dir: Path, slug: str, version: str) -> None:

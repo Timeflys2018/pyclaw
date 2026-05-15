@@ -13,9 +13,8 @@ from pyclaw.models.session import (
     MessageEntry,
     ModelChangeEntry,
     SessionHistorySummary,
-    now_iso,
 )
-from pyclaw.storage.lock.redis import LockAcquireError, RedisLockManager
+from pyclaw.storage.lock.redis import LockAcquireError
 from pyclaw.storage.protocols import LockManager
 from pyclaw.storage.session.base import _generate_session_id
 
@@ -98,9 +97,7 @@ class RedisSessionStore:
             leaf_id=leaf_raw or None,
         )
 
-    async def append_entry(
-        self, session_id: str, entry: SessionEntry, leaf_id: str
-    ) -> None:
+    async def append_entry(self, session_id: str, entry: SessionEntry, leaf_id: str) -> None:
         lock_key = self._lock_key(session_id)
         try:
             token = await self._lock.acquire(lock_key, ttl_ms=30_000)
@@ -120,7 +117,6 @@ class RedisSessionStore:
                 await pipe.execute()
         finally:
             await self._lock.release(lock_key, token)
-
 
     async def get_current_session_id(self, session_key: str) -> str | None:
         val = await self._client.get(self._skey_current_key(session_key))
@@ -159,18 +155,26 @@ class RedisSessionStore:
         self, session_key: str, limit: int = 20
     ) -> list[SessionHistorySummary]:
         raw = await self._client.zrevrangebyscore(
-            self._skey_history_key(session_key), "+inf", "-inf",
-            start=0, num=limit,
+            self._skey_history_key(session_key),
+            "+inf",
+            "-inf",
+            start=0,
+            num=limit,
         )
         result: list[SessionHistorySummary] = []
         for sid_bytes in raw:
             sid = sid_bytes.decode() if isinstance(sid_bytes, bytes) else sid_bytes
             hdr_raw = await self._client.get(self._hdr_key(sid))
             if hdr_raw is None:
-                result.append(SessionHistorySummary(
-                    session_id=sid, created_at="",
-                    message_count=0, last_message_at=None, parent_session_id=None,
-                ))
+                result.append(
+                    SessionHistorySummary(
+                        session_id=sid,
+                        created_at="",
+                        message_count=0,
+                        last_message_at=None,
+                        parent_session_id=None,
+                    )
+                )
                 continue
             header = SessionHeader.model_validate_json(hdr_raw)
             all_entries = await self._client.hvals(self._entries_key(sid))
@@ -182,13 +186,15 @@ class RedisSessionStore:
                         msg_count += 1
                 except Exception:
                     pass
-            result.append(SessionHistorySummary(
-                session_id=sid,
-                created_at=header.created_at,
-                message_count=msg_count,
-                last_message_at=header.last_interaction_at,
-                parent_session_id=header.parent_session,
-            ))
+            result.append(
+                SessionHistorySummary(
+                    session_id=sid,
+                    created_at=header.created_at,
+                    message_count=msg_count,
+                    last_message_at=header.last_interaction_at,
+                    parent_session_id=header.parent_session,
+                )
+            )
         return result
 
     async def delete_session(self, session_id: str) -> bool:

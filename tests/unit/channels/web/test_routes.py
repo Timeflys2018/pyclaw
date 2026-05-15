@@ -2,17 +2,15 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
-from pyclaw.channels.web.auth import create_jwt
-from pyclaw.channels.web.routes import web_router, set_web_deps
 from pyclaw.channels.session_router import SessionRouter
+from pyclaw.channels.web.auth import create_jwt
+from pyclaw.channels.web.routes import set_web_deps, web_router
 from pyclaw.infra.settings import WebSettings
-from pyclaw.models.session import MessageEntry, SessionTree
+from pyclaw.models.session import MessageEntry
 from pyclaw.storage.session.base import InMemorySessionStore
-
 
 JWT_SECRET = "test-secret"
 
@@ -133,7 +131,7 @@ class TestGetMessages:
             for i in range(5):
                 entry = MessageEntry(
                     id=f"e{i}",
-                    parent_id=f"e{i-1}" if i > 0 else None,
+                    parent_id=f"e{i - 1}" if i > 0 else None,
                     role="user",
                     content=f"msg {i}",
                 )
@@ -153,9 +151,7 @@ class TestGetMessages:
     def test_returns_404_for_nonexistent_session(self) -> None:
         app, _ = _make_app()
         client = TestClient(app)
-        resp = client.get(
-            "/api/sessions/nosuch/messages", headers=_auth_header("user1")
-        )
+        resp = client.get("/api/sessions/nosuch/messages", headers=_auth_header("user1"))
         assert resp.status_code == 404
 
 

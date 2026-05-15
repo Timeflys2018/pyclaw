@@ -7,7 +7,6 @@ from typing import Any
 import pytest
 
 from pyclaw.core.agent.tools.registry import (
-    Tool,
     ToolContext,
     ToolRegistry,
     execute_tool_calls,
@@ -28,6 +27,7 @@ class _StubTool:
         self.description = f"stub tool {name}"
         self.parameters = {"type": "object", "properties": {}}
         self.side_effect = side_effect
+        self.tool_class = "write" if side_effect else "read"
         self.executed_at: float | None = None
         self._delay = delay
         self._raises = raises
@@ -48,7 +48,11 @@ def _ctx() -> ToolContext:
 
 
 def _call(name: str, call_id: str = "c1") -> dict[str, Any]:
-    return {"id": call_id, "type": "function", "function": {"name": name, "arguments": {"_call_id": call_id}}}
+    return {
+        "id": call_id,
+        "type": "function",
+        "function": {"name": name, "arguments": {"_call_id": call_id}},
+    }
 
 
 class TestToolRegistry:

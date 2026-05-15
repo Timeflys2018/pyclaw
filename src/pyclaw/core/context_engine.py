@@ -87,13 +87,16 @@ class DefaultContextEngine:
         self._compaction_timeout_s = compaction_timeout_s
         self._chunk_token_budget = chunk_token_budget
         self._workspace_store = workspace_store
-        self._bootstrap_files: list[str] = bootstrap_files if bootstrap_files is not None else ["AGENTS.md"]
+        self._bootstrap_files: list[str] = (
+            bootstrap_files if bootstrap_files is not None else ["AGENTS.md"]
+        )
         self._bootstrap_cache: dict[str, str] = {}
         self._memory_store = memory_store
         self._l1_cache: dict[str, list[Any]] = {}
         self._archive_cache: dict[str, tuple[str, list[Any]]] = {}
         if memory_settings is None:
             from pyclaw.infra.settings import MemorySettings
+
             memory_settings = MemorySettings()
         self._memory_settings = memory_settings
 
@@ -109,6 +112,7 @@ class DefaultContextEngine:
             cached = self._bootstrap_cache[workspace_id]
             return cached if cached else None
         from pyclaw.core.context.bootstrap import load_bootstrap_context
+
         bootstrap_str = await load_bootstrap_context(
             workspace_id, self._workspace_store, self._bootstrap_files
         )
@@ -125,6 +129,7 @@ class DefaultContextEngine:
             entries = await self._memory_store.index_get(session_key)
         except Exception:
             import logging
+
             logging.getLogger(__name__).warning(
                 "L1 snapshot load failed for session %s", session_id, exc_info=True
             )
@@ -147,14 +152,18 @@ class DefaultContextEngine:
             cfg = self._memory_settings
             try:
                 l2l3_results = await self._memory_store.search(
-                    session_key, prompt,
+                    session_key,
+                    prompt,
                     layers=["L2", "L3"],
                     per_layer_limits={"L2": cfg.search_l2_quota, "L3": cfg.search_l3_quota},
                 )
             except Exception:
                 import logging
+
                 logging.getLogger(__name__).warning(
-                    "memory_store.search (L2/L3) failed for session %s", session_id, exc_info=True,
+                    "memory_store.search (L2/L3) failed for session %s",
+                    session_id,
+                    exc_info=True,
                 )
             if cfg.archive_enabled:
                 cached = self._archive_cache.get(session_id)
@@ -163,7 +172,8 @@ class DefaultContextEngine:
                 else:
                     try:
                         archive_results = await self._memory_store.search_archives(
-                            session_key, prompt,
+                            session_key,
+                            prompt,
                             limit=cfg.archive_max_results,
                             min_similarity=cfg.archive_min_similarity,
                         )
@@ -173,8 +183,11 @@ class DefaultContextEngine:
                         self._archive_cache[session_id] = (prompt, archive_results)
                     except Exception:
                         import logging
+
                         logging.getLogger(__name__).warning(
-                            "memory_store.search_archives (L4) failed for session %s", session_id, exc_info=True,
+                            "memory_store.search_archives (L4) failed for session %s",
+                            session_id,
+                            exc_info=True,
                         )
 
         memory_context = self._format_memory_context(l2l3_results, archive_results)
@@ -196,12 +209,14 @@ class DefaultContextEngine:
         if l2_entries:
             lines.append("<facts>")
             for entry in l2_entries:
-                lines.append(f"- [{getattr(entry, 'type', 'general')}] {getattr(entry, 'content', '')}")
+                lines.append(
+                    f"- [{getattr(entry, 'type', 'general')}] {getattr(entry, 'content', '')}"
+                )
             lines.append("</facts>")
         if l3_entries:
             lines.append("<procedures>")
             for entry in l3_entries:
-                entry_id = getattr(entry, 'id', '')[:8]
+                entry_id = getattr(entry, "id", "")[:8]
                 lines.append(
                     f"- [{getattr(entry, 'type', 'general')}|{entry_id}] "
                     f"{getattr(entry, 'content', '')}"
@@ -212,7 +227,11 @@ class DefaultContextEngine:
             for entry in archive_results:
                 sid_short = getattr(entry, "session_id", "").split(":")[-1][:12]
                 similarity = getattr(entry, "similarity", None)
-                sim_str = f"{similarity:.2f}" if isinstance(similarity, (int, float)) and not isinstance(similarity, bool) else "?"
+                sim_str = (
+                    f"{similarity:.2f}"
+                    if isinstance(similarity, (int, float)) and not isinstance(similarity, bool)
+                    else "?"
+                )
                 summary = getattr(entry, "summary", "")
                 lines.append(f"- [session={sid_short}|sim={sim_str}] {summary}")
             lines.append("</archives>")
@@ -271,9 +290,7 @@ class DefaultContextEngine:
 
         to_summarize_raw = deduped[: plan.cut_index]
         to_summarize = strip_tool_result_details(to_summarize_raw)
-        to_summarize = filter_oversized_messages(
-            to_summarize, context_window=token_budget
-        )
+        to_summarize = filter_oversized_messages(to_summarize, context_window=token_budget)
 
         if self._summarize is None:
             summary = _fallback_summary(to_summarize)
@@ -352,9 +369,7 @@ class DefaultContextEngine:
             except TypeError:
                 return await summarize_fn(effective_payload)  # type: ignore[call-arg]
 
-        chunks = split_into_chunks(
-            messages, chunk_token_budget=self._chunk_token_budget
-        )
+        chunks = split_into_chunks(messages, chunk_token_budget=self._chunk_token_budget)
 
         async def _run() -> str:
             if len(chunks) <= 1:

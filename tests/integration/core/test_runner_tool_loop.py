@@ -73,6 +73,7 @@ class _RealTool:
     description = "echo"
     parameters: dict = {"type": "object", "properties": {}}
     side_effect = False
+    tool_class = "read"
 
     async def execute(self, args: dict, context: ToolContext) -> ToolResult:
         return text_result(args.get("_call_id", ""), "ok")
@@ -83,6 +84,7 @@ class _FailingTool:
     description = "bash fail"
     parameters: dict = {"type": "object", "properties": {}}
     side_effect = True
+    tool_class = "write"
 
     async def execute(self, args: dict, context: ToolContext) -> ToolResult:
         return error_result(args.get("_call_id", ""), "exit 1")

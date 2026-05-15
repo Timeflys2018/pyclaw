@@ -23,6 +23,7 @@ def create_workspace_store(
                 "ensure Redis is configured and pass redis_client to create_workspace_store()"
             )
         from pyclaw.storage.workspace.redis import RedisWorkspaceStore
+
         return RedisWorkspaceStore(redis_client, key_prefix=settings.redis.key_prefix)
 
     raise ValueError(f"unknown workspaces.backend: {backend!r} — valid values: 'file', 'redis'")

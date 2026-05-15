@@ -69,7 +69,8 @@ class HumanReadableNaming:
         if stage2 != stage1:
             logger.warning(
                 "session_key contains dangerous chars, sanitized: %r -> %r",
-                session_key, stage2,
+                session_key,
+                stage2,
             )
         return stage2 + ".db"
 

@@ -19,6 +19,7 @@ class ChatSendMessage:
     conversation_id: str = ""
     content: str = ""
     attachments: list[Any] = field(default_factory=list)
+    tier: Literal["read-only", "approval", "yolo"] | None = None
 
 
 @dataclass
@@ -41,11 +42,7 @@ class PongMessage:
 
 
 ClientMessage = (
-    IdentifyMessage
-    | ChatSendMessage
-    | ChatAbortMessage
-    | ToolApproveMessage
-    | PongMessage
+    IdentifyMessage | ChatSendMessage | ChatAbortMessage | ToolApproveMessage | PongMessage
 )
 
 SERVER_HELLO = "hello"
@@ -68,10 +65,15 @@ _CLIENT_MESSAGE_MAP: dict[str, type[ClientMessage]] = {
 }
 
 
+_VALID_TIERS = frozenset(("read-only", "approval", "yolo"))
+
+
 def parse_client_message(data: dict[str, Any]) -> ClientMessage | None:
     """Route a raw JSON dict to the appropriate client message dataclass.
 
-    Returns ``None`` if ``type`` is missing or unrecognised.
+    Returns ``None`` if ``type`` is missing, unrecognised, or if a known
+    field carries an invalid enum value (e.g. ``tier`` outside
+    :data:`_VALID_TIERS`).
     """
     msg_type = data.get("type")
     if msg_type is None:
@@ -79,6 +81,10 @@ def parse_client_message(data: dict[str, Any]) -> ClientMessage | None:
     cls = _CLIENT_MESSAGE_MAP.get(msg_type)
     if cls is None:
         return None
+    if cls is ChatSendMessage:
+        tier_value = data.get("tier")
+        if tier_value is not None and tier_value not in _VALID_TIERS:
+            return None
     known = {f.name for f in dataclasses.fields(cls)}
     kwargs = {k: v for k, v in data.items() if k in known}
     return cls(**kwargs)

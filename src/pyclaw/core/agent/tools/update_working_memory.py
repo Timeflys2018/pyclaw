@@ -26,6 +26,7 @@ class UpdateWorkingMemoryTool:
         "required": ["key", "value"],
     }
     side_effect = True
+    tool_class = "read"
 
     def __init__(
         self,
@@ -52,7 +53,9 @@ class UpdateWorkingMemoryTool:
             key = args.get("key", "")
             value = args.get("value", "")
             if not key or not isinstance(key, str):
-                return error_result(call_id, "update_working_memory: 'key' must be a non-empty string")
+                return error_result(
+                    call_id, "update_working_memory: 'key' must be a non-empty string"
+                )
             if not isinstance(value, str):
                 return error_result(call_id, "update_working_memory: 'value' must be a string")
 

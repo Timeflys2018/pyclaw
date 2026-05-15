@@ -10,13 +10,23 @@ from pyclaw.storage.memory.sqlite import SqliteMemoryBackend
 
 
 def _entry(
-    *, id: str, layer: str = "L2", content: str, type: str = "fact",
-    status: str = "active", updated_at: float | None = None,
+    *,
+    id: str,
+    layer: str = "L2",
+    content: str,
+    type: str = "fact",
+    status: str = "active",
+    updated_at: float | None = None,
 ) -> MemoryEntry:
     now = time.time() if updated_at is None else updated_at
     return MemoryEntry(
-        id=id, layer=layer, type=type, content=content,
-        created_at=now, updated_at=now, status=status,
+        id=id,
+        layer=layer,
+        type=type,
+        content=content,
+        created_at=now,
+        updated_at=now,
+        status=status,
     )
 
 
@@ -39,10 +49,16 @@ async def test_old_trigram_db_migrated(tmp_path: Path) -> None:
 
     db_path = tmp_path / "ws_migrate.db"
     conn = apsw.Connection(str(db_path))
-    conn.execute("CREATE TABLE facts (id TEXT PRIMARY KEY, session_key TEXT, type TEXT, content TEXT, source_session_id TEXT, created_at REAL, updated_at REAL)")
+    conn.execute(
+        "CREATE TABLE facts (id TEXT PRIMARY KEY, session_key TEXT, type TEXT, content TEXT, source_session_id TEXT, created_at REAL, updated_at REAL)"
+    )
     conn.execute("CREATE INDEX idx_facts_type ON facts(type)")
-    conn.execute("CREATE VIRTUAL TABLE facts_fts USING fts5(content, content=facts, content_rowid=rowid, tokenize='trigram')")
-    conn.execute("INSERT INTO facts VALUES ('e1', 'ws:migrate', 'fact', 'Python 项目配置', NULL, 0, 0)")
+    conn.execute(
+        "CREATE VIRTUAL TABLE facts_fts USING fts5(content, content=facts, content_rowid=rowid, tokenize='trigram')"
+    )
+    conn.execute(
+        "INSERT INTO facts VALUES ('e1', 'ws:migrate', 'fact', 'Python 项目配置', NULL, 0, 0)"
+    )
     conn.execute("INSERT INTO facts_fts(facts_fts) VALUES('rebuild')")
     conn.close()
 
@@ -78,7 +94,9 @@ async def test_per_layer_limits_with_jieba(backend: SqliteMemoryBackend) -> None
         await backend.store(sk, _entry(id=f"p{i}", layer="L3", content=f"部署相关流程{i}"))
 
     results = await backend.search(
-        sk, "部署", layers=["L2", "L3"],
+        sk,
+        "部署",
+        layers=["L2", "L3"],
         per_layer_limits={"L2": 3, "L3": 2},
     )
     l2 = [r for r in results if r.layer == "L2"]
@@ -101,7 +119,8 @@ async def test_memory_ctx_nonzero_simulation(backend: SqliteMemoryBackend) -> No
     await backend.store(sk, _entry(id="p1", layer="L3", content="部署流程: git tag → push → CI"))
 
     results = await backend.search(
-        sk, "我该怎么把项目部署到生产环境",
+        sk,
+        "我该怎么把项目部署到生产环境",
         layers=["L2", "L3"],
         per_layer_limits={"L2": 3, "L3": 2},
     )

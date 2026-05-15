@@ -248,9 +248,7 @@ async def _cmd_curator_review_trigger(rest: list[str], ctx: CommandContext) -> N
         owner=ctx.session_key,
     )
 
-    await ctx.reply(
-        f"✓ 已启动 task `{task_id}`；用 `/tasks list` 查看进度"
-    )
+    await ctx.reply(f"✓ 已启动 task `{task_id}`；用 `/tasks list` 查看进度")
 
 
 def _memory_base_dir(settings: Any):

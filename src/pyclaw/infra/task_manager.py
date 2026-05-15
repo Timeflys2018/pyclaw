@@ -21,7 +21,9 @@ from typing import Literal
 
 logger = logging.getLogger(__name__)
 
-TaskCategory = Literal["heartbeat", "consumer", "archive", "nudge", "evolution", "curator", "generic"]
+TaskCategory = Literal[
+    "heartbeat", "consumer", "archive", "nudge", "evolution", "curator", "generic"
+]
 TaskState = Literal["running", "done", "cancelled", "failed"]
 _PRUNE_AGE_S = 300
 
@@ -29,6 +31,7 @@ _PRUNE_AGE_S = 300
 @dataclass
 class TaskInfo:
     """Snapshot of a managed task's state."""
+
     task_id: str
     name: str
     category: TaskCategory
@@ -42,6 +45,7 @@ class TaskInfo:
 @dataclass
 class TaskHandle:
     """Internal bookkeeping for a spawned task."""
+
     task_id: str
     name: str
     category: TaskCategory
@@ -54,6 +58,7 @@ class TaskHandle:
 @dataclass
 class ShutdownReport:
     """Summary of shutdown outcome."""
+
     completed: int
     cancelled: int
     timed_out: int
@@ -75,8 +80,11 @@ class TaskManager:
         self._default_shutdown_grace_s = default_shutdown_grace_s
 
     def spawn(
-        self, name: str, coro: Coroutine,  # type: ignore[type-arg]
-        *, category: TaskCategory = "generic",
+        self,
+        name: str,
+        coro: Coroutine,  # type: ignore[type-arg]
+        *,
+        category: TaskCategory = "generic",
         on_error: Callable[[BaseException], None] | None = None,
         owner: str | None = None,
     ) -> str:
@@ -89,15 +97,22 @@ class TaskManager:
         self._next_id += 1
         asyncio_task = asyncio.create_task(self._wrap(task_id, coro, on_error), name=name)
         self._tasks[task_id] = TaskHandle(
-            task_id=task_id, name=name, category=category,
-            asyncio_task=asyncio_task, created_at=time.monotonic(),
+            task_id=task_id,
+            name=name,
+            category=category,
+            asyncio_task=asyncio_task,
+            created_at=time.monotonic(),
             owner=owner,
         )
-        logger.debug("spawned task_id=%s name=%s category=%s owner=%s", task_id, name, category, owner)
+        logger.debug(
+            "spawned task_id=%s name=%s category=%s owner=%s", task_id, name, category, owner
+        )
         return task_id
 
     async def _wrap(
-        self, task_id: str, coro: Coroutine,  # type: ignore[type-arg]
+        self,
+        task_id: str,
+        coro: Coroutine,  # type: ignore[type-arg]
         on_error: Callable[[BaseException], None] | None,
     ) -> object:
         try:
@@ -136,14 +151,18 @@ class TaskManager:
     def _maybe_prune(self) -> None:
         now = time.monotonic()
         to_remove = [
-            tid for tid, h in self._tasks.items()
+            tid
+            for tid, h in self._tasks.items()
             if self._task_state(h) != "running" and h.created_at < now - _PRUNE_AGE_S
         ]
         for tid in to_remove:
             del self._tasks[tid]
 
     def list_tasks(
-        self, *, category: TaskCategory | None = None, include_done: bool = False,
+        self,
+        *,
+        category: TaskCategory | None = None,
+        include_done: bool = False,
         owner: str | None = None,
     ) -> list[TaskInfo]:
         """List managed tasks with optional category/owner/state filtering.
@@ -161,12 +180,18 @@ class TaskManager:
                 continue
             if owner is not None and handle.owner != owner:
                 continue
-            result.append(TaskInfo(
-                task_id=handle.task_id, name=handle.name, category=handle.category,
-                state=state, created_at=handle.created_at,
-                duration_s=now - handle.created_at, exception=handle.exception,
-                owner=handle.owner,
-            ))
+            result.append(
+                TaskInfo(
+                    task_id=handle.task_id,
+                    name=handle.name,
+                    category=handle.category,
+                    state=state,
+                    created_at=handle.created_at,
+                    duration_s=now - handle.created_at,
+                    exception=handle.exception,
+                    owner=handle.owner,
+                )
+            )
         return result
 
     def _task_state(self, handle: TaskHandle) -> TaskState:
@@ -217,7 +242,9 @@ class TaskManager:
                 else:
                     completed += 1
         return ShutdownReport(
-            completed=completed, cancelled=cancelled,
-            timed_out=timed_out, failed=failed,
+            completed=completed,
+            cancelled=cancelled,
+            timed_out=timed_out,
+            failed=failed,
             total_duration_s=time.monotonic() - start,
         )

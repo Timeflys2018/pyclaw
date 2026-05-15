@@ -21,6 +21,7 @@ def normalize_for_dedup(text: str) -> str:
 
 def _extract_text(content: Any) -> str:
     from pyclaw.models.utils import extract_text_from_content
+
     return extract_text_from_content(content)
 
 
@@ -69,9 +70,7 @@ def dedupe_duplicate_user_messages(
         previous_ts = last_seen.get(normalized)
         is_duplicate = False
         if previous_ts is not None:
-            if ts is None or window_seconds <= 0:
-                is_duplicate = True
-            elif (ts - previous_ts) <= window_seconds:
+            if ts is None or window_seconds <= 0 or (ts - previous_ts) <= window_seconds:
                 is_duplicate = True
 
         if is_duplicate:

@@ -12,7 +12,7 @@ from pyclaw.channels.feishu.queue import FeishuQueueRegistry
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.infra.settings import FeishuSettings, Settings
 from pyclaw.infra.task_manager import TaskManager
-from pyclaw.models import Done, TextChunk
+from pyclaw.models import Done
 from pyclaw.storage.session.base import InMemorySessionStore
 from pyclaw.storage.workspace.file import FileWorkspaceStore
 
@@ -61,8 +61,16 @@ def _make_ctx(store: InMemorySessionStore, tmp_path: Path) -> FeishuContext:
         def __init__(self) -> None:
             super().__init__(default_model="fake")
 
-        async def stream(self, *, messages, model=None, tools=None, system=None,
-                         idle_seconds=0.0, abort_event=None):
+        async def stream(
+            self,
+            *,
+            messages,
+            model=None,
+            tools=None,
+            system=None,
+            idle_seconds=0.0,
+            abort_event=None,
+        ):
             yield LLMStreamChunk(text_delta="hello from agent")
             yield LLMStreamChunk(finish_reason="stop", usage=LLMUsage())
 
@@ -159,7 +167,9 @@ async def test_handle_feishu_message_group_no_mention_skipped(tmp_path: Path) ->
 async def test_handle_feishu_message_slash_command_intercepted(tmp_path: Path) -> None:
     store = InMemorySessionStore()
     ctx = _make_ctx(store, tmp_path)
-    sid, _ = await ctx.session_router.resolve_or_create("feishu:cli_x:ou_test", "feishu_cli_x_ou_test")
+    sid, _ = await ctx.session_router.resolve_or_create(
+        "feishu:cli_x:ou_test", "feishu_cli_x_ou_test"
+    )
     event = _make_text_event("/help", message_id="msg_help_001")
 
     enqueued = []
@@ -214,7 +224,6 @@ async def test_dispatch_and_reply_fallback_on_card_failure(tmp_path: Path) -> No
     )
 
     async def _mock_stream(*args, **kwargs):
-        from pyclaw.models import Done
         yield Done(final_message="fallback response", usage={})
 
     with patch("pyclaw.channels.feishu.handler.dispatch_message", side_effect=_mock_stream):
@@ -224,8 +233,7 @@ async def test_dispatch_and_reply_fallback_on_card_failure(tmp_path: Path) -> No
             mock_card_cls.return_value = mock_card
 
             await _dispatch_and_reply(
-                inbound, ctx, "msg_fallback_001",
-                tmp_path / "ws", extra_system=""
+                inbound, ctx, "msg_fallback_001", tmp_path / "ws", extra_system=""
             )
 
     ctx.feishu_client.reply_text.assert_awaited_once()
@@ -274,8 +282,16 @@ def _make_ctx_with_workspace_store(store: InMemorySessionStore, tmp_path: Path) 
         def __init__(self) -> None:
             super().__init__(default_model="fake")
 
-        async def stream(self, *, messages, model=None, tools=None, system=None,
-                         idle_seconds=0.0, abort_event=None):
+        async def stream(
+            self,
+            *,
+            messages,
+            model=None,
+            tools=None,
+            system=None,
+            idle_seconds=0.0,
+            abort_event=None,
+        ):
             yield LLMStreamChunk(text_delta="hi")
             yield LLMStreamChunk(finish_reason="stop", usage=LLMUsage())
 
@@ -328,8 +344,10 @@ async def test_channel_skips_bootstrap_when_deps_has_workspace_store(tmp_path: P
         await coro
 
     with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
-        with patch("pyclaw.channels.feishu.handler._dispatch_and_reply",
-                   side_effect=_capture_dispatch_and_reply):
+        with patch(
+            "pyclaw.channels.feishu.handler._dispatch_and_reply",
+            side_effect=_capture_dispatch_and_reply,
+        ):
             await handle_feishu_message(event, ctx)
 
     assert len(extra_systems_seen) == 1
@@ -355,8 +373,10 @@ async def test_channel_no_longer_passes_bootstrap_via_extra_system(tmp_path: Pat
         await coro
 
     with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
-        with patch("pyclaw.channels.feishu.handler._dispatch_and_reply",
-                   side_effect=_capture_dispatch_and_reply):
+        with patch(
+            "pyclaw.channels.feishu.handler._dispatch_and_reply",
+            side_effect=_capture_dispatch_and_reply,
+        ):
             await handle_feishu_message(event, ctx)
 
     assert len(extra_systems_seen) == 1
@@ -378,14 +398,26 @@ async def test_workspace_base_comes_from_context_not_hardcoded(tmp_path: Path) -
     class _OneShotLLM(LLMClient):
         def __init__(self) -> None:
             super().__init__(default_model="fake")
-        async def stream(self, *, messages, model=None, tools=None, system=None,
-                         idle_seconds=0.0, abort_event=None):
+
+        async def stream(
+            self,
+            *,
+            messages,
+            model=None,
+            tools=None,
+            system=None,
+            idle_seconds=0.0,
+            abort_event=None,
+        ):
             yield LLMStreamChunk(text_delta="hi")
             yield LLMStreamChunk(finish_reason="stop", usage=LLMUsage())
 
     deps = AgentRunnerDeps(
-        llm=_OneShotLLM(), tools=ToolRegistry(), hooks=HookRegistry(),
-        session_store=store, config=AgentRunConfig(),
+        llm=_OneShotLLM(),
+        tools=ToolRegistry(),
+        hooks=HookRegistry(),
+        session_store=store,
+        config=AgentRunConfig(),
     )
     dedup = FeishuDedup()
     ws_store = FileWorkspaceStore(base_dir=custom_base)
@@ -397,8 +429,11 @@ async def test_workspace_base_comes_from_context_not_hardcoded(tmp_path: Path) -
         settings=FeishuSettings(enabled=True, app_id="cli_x", app_secret="s"),
         settings_full=Settings(),
         feishu_client=MagicMock(reply_text=AsyncMock(return_value=None), _client=MagicMock()),
-        deps=deps, dedup=dedup, workspace_store=ws_store,
-        bot_open_id="bot", session_router=router,
+        deps=deps,
+        dedup=dedup,
+        workspace_store=ws_store,
+        bot_open_id="bot",
+        session_router=router,
         workspace_base=custom_base,
         queue_registry=qr,
     )
@@ -469,7 +504,7 @@ async def test_handle_post_with_one_image_attaches(tmp_path: Path) -> None:
         '{"zh_cn": {"content": [['
         '{"tag": "text", "text": "look"},'
         '{"tag": "img", "image_key": "img_xyz"}'
-        ']]}}'
+        "]]}}"
     )
     event = _make_post_event(content, message_id="msg_post_one_img")
 
@@ -484,11 +519,13 @@ async def test_handle_post_with_one_image_attaches(tmp_path: Path) -> None:
     async def _run_immediately(session_id, coro, **_kw):
         await coro
 
-    with patch("pyclaw.channels.feishu.handler.feishu_image_to_block",
-               side_effect=fake_image_to_block):
+    with patch(
+        "pyclaw.channels.feishu.handler.feishu_image_to_block", side_effect=fake_image_to_block
+    ):
         with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
-            with patch("pyclaw.channels.feishu.handler._dispatch_and_reply",
-                       side_effect=fake_dispatch):
+            with patch(
+                "pyclaw.channels.feishu.handler._dispatch_and_reply", side_effect=fake_dispatch
+            ):
                 await handle_feishu_message(event, ctx)
 
     inbound = captured["inbound"]
@@ -505,9 +542,7 @@ async def test_handle_seven_images_truncated_to_five_with_warning(
 
     store = InMemorySessionStore()
     ctx = _make_ctx(store, tmp_path)
-    spans = ",".join(
-        f'{{"tag": "img", "image_key": "k{i}"}}' for i in range(7)
-    )
+    spans = ",".join(f'{{"tag": "img", "image_key": "k{i}"}}' for i in range(7))
     content = '{"zh_cn": {"content": [[' + spans + "]]}}"
     event = _make_post_event(content, message_id="msg_seven_imgs")
 
@@ -523,12 +558,15 @@ async def test_handle_seven_images_truncated_to_five_with_warning(
         await coro
 
     import logging
+
     with caplog.at_level(logging.WARNING, logger="pyclaw.channels.feishu.handler"):
-        with patch("pyclaw.channels.feishu.handler.feishu_image_to_block",
-                   side_effect=fake_image_to_block):
+        with patch(
+            "pyclaw.channels.feishu.handler.feishu_image_to_block", side_effect=fake_image_to_block
+        ):
             with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
-                with patch("pyclaw.channels.feishu.handler._dispatch_and_reply",
-                           side_effect=fake_dispatch):
+                with patch(
+                    "pyclaw.channels.feishu.handler._dispatch_and_reply", side_effect=fake_dispatch
+                ):
                     await handle_feishu_message(event, ctx)
 
     inbound = captured["inbound"]
@@ -555,11 +593,13 @@ async def test_handle_pure_image_no_text_forces_empty_string(tmp_path: Path) -> 
     async def _run_immediately(session_id, coro, **_kw):
         await coro
 
-    with patch("pyclaw.channels.feishu.handler.feishu_image_to_block",
-               side_effect=fake_image_to_block):
+    with patch(
+        "pyclaw.channels.feishu.handler.feishu_image_to_block", side_effect=fake_image_to_block
+    ):
         with patch.object(ctx.queue_registry, "enqueue", side_effect=_run_immediately):
-            with patch("pyclaw.channels.feishu.handler._dispatch_and_reply",
-                       side_effect=fake_dispatch):
+            with patch(
+                "pyclaw.channels.feishu.handler._dispatch_and_reply", side_effect=fake_dispatch
+            ):
                 await handle_feishu_message(event, ctx)
 
     inbound = captured["inbound"]

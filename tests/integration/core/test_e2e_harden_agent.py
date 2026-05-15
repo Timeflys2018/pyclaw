@@ -8,10 +8,9 @@ import pytest
 
 from pyclaw.core.agent.llm import LLMClient, LLMError, LLMStreamChunk, LLMUsage
 from pyclaw.core.agent.runner import AgentRunnerDeps, RunRequest, run_agent_stream
-from pyclaw.core.agent.tools.registry import ToolContext, ToolRegistry, text_result
+from pyclaw.core.agent.tools.registry import ToolRegistry
 from pyclaw.core.context_engine import DefaultContextEngine
 from pyclaw.core.hooks import (
-    AgentHook,
     CompactionContext,
     HookRegistry,
     PromptBuildContext,
@@ -29,7 +28,6 @@ from pyclaw.models import (
     SessionHeader,
     SessionTree,
     TimeoutConfig,
-    ToolResult,
     generate_entry_id,
 )
 from pyclaw.storage.session.base import InMemorySessionStore
@@ -110,9 +108,7 @@ class _RecordingHook:
         self.before_compactions: list[CompactionContext] = []
         self.after_compactions: list[tuple[CompactionContext, CompactResult]] = []
 
-    async def before_prompt_build(
-        self, context: PromptBuildContext
-    ) -> PromptBuildResult | None:
+    async def before_prompt_build(self, context: PromptBuildContext) -> PromptBuildResult | None:
         return None
 
     async def after_response(self, observation: ResponseObservation) -> None:

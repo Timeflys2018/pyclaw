@@ -93,7 +93,9 @@ class TestBuildSessionContext:
 
         messages = tree.build_session_context()
         assert len(messages) == 4
-        assert "summary" in messages[0]["content"].lower() or "user talked" in messages[0]["content"]
+        assert (
+            "summary" in messages[0]["content"].lower() or "user talked" in messages[0]["content"]
+        )
         assert messages[0]["role"] == "assistant"
         assert messages[1]["content"] == "three"
         assert messages[3]["content"] == "five"

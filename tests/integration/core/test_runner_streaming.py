@@ -42,6 +42,7 @@ class _EchoTool:
     description = "Echo"
     parameters: dict = {"type": "object", "properties": {"text": {"type": "string"}}}
     side_effect = False
+    tool_class = "read"
 
     async def execute(self, args: dict, context: ToolContext) -> ToolResult:
         return text_result(args.get("_call_id", ""), f"echo:{args.get('text', '')}")
@@ -55,7 +56,9 @@ async def test_text_deltas_yielded_incrementally(tmp_path: Path) -> None:
                 LLMStreamChunk(text_delta="Hel"),
                 LLMStreamChunk(text_delta="lo "),
                 LLMStreamChunk(text_delta="world"),
-                LLMStreamChunk(finish_reason="stop", usage=LLMUsage(input_tokens=5, output_tokens=3)),
+                LLMStreamChunk(
+                    finish_reason="stop", usage=LLMUsage(input_tokens=5, output_tokens=3)
+                ),
             ]
         ]
     )
@@ -180,7 +183,10 @@ async def test_tool_call_emitted_after_text_chunks(tmp_path: Path) -> None:
                             "index": 0,
                             "id": "c1",
                             "type": "function",
-                            "function": {"name": "echo", "arguments": '{"text":"x","_call_id":"c1"}'},
+                            "function": {
+                                "name": "echo",
+                                "arguments": '{"text":"x","_call_id":"c1"}',
+                            },
                         }
                     ]
                 ),

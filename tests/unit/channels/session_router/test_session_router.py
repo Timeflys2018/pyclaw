@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from pyclaw.channels.session_router import SessionRouter
-from pyclaw.models.session import SessionHeader, SessionTree, now_iso
+from pyclaw.models.session import SessionHeader, SessionTree
 from pyclaw.storage.session.base import InMemorySessionStore
 
 
@@ -100,7 +100,7 @@ async def test_check_idle_reset_true_when_exceeded(
     store: InMemorySessionStore, router: SessionRouter
 ) -> None:
     sid, _ = await router.resolve_or_create("key1", "ws")
-    stale_ts = (datetime.now(timezone.utc) - timedelta(minutes=60)).isoformat()
+    stale_ts = (datetime.now(UTC) - timedelta(minutes=60)).isoformat()
     tree = await store.load(sid)
     assert tree is not None
     updated_header = tree.header.model_copy(update={"last_interaction_at": stale_ts})

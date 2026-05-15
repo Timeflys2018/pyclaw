@@ -1,13 +1,11 @@
 import pytest
 
-from pyclaw.core.agent.hooks.memory_nudge_hook import MemoryNudgeHook, _NUDGE_TEXT
+from pyclaw.core.agent.hooks.memory_nudge_hook import _NUDGE_TEXT, MemoryNudgeHook
 from pyclaw.core.hooks import PromptBuildContext, ResponseObservation
 
 
 def _ctx(session_id: str = "s1") -> PromptBuildContext:
-    return PromptBuildContext(
-        session_id=session_id, workspace_id="ws", agent_id="default"
-    )
+    return PromptBuildContext(session_id=session_id, workspace_id="ws", agent_id="default")
 
 
 def _obs(session_id: str = "s1", tool_calls: list | None = None) -> ResponseObservation:
@@ -67,9 +65,11 @@ async def test_memorize_call_resets_counter():
     for _ in range(2):
         await hook.before_prompt_build(_ctx())
     # count=2; memorize resets to 0
-    await hook.after_response(_obs(
-        tool_calls=[{"function": {"name": "memorize", "arguments": "{}"}, "id": "x"}],
-    ))
+    await hook.after_response(
+        _obs(
+            tool_calls=[{"function": {"name": "memorize", "arguments": "{}"}, "id": "x"}],
+        )
+    )
     # Next turn is turn 1, no nudge
     r = await hook.before_prompt_build(_ctx())
     assert r is None
@@ -95,9 +95,11 @@ async def test_after_response_non_memorize_tool_does_not_reset():
     hook = MemoryNudgeHook(interval=3)
     for _ in range(2):
         await hook.before_prompt_build(_ctx())
-    await hook.after_response(_obs(
-        tool_calls=[{"function": {"name": "bash", "arguments": "{}"}, "id": "y"}],
-    ))
+    await hook.after_response(
+        _obs(
+            tool_calls=[{"function": {"name": "bash", "arguments": "{}"}, "id": "y"}],
+        )
+    )
     # Counter should not be reset; turn 3 nudges
     r = await hook.before_prompt_build(_ctx())
     assert r is not None
@@ -107,13 +109,15 @@ async def test_after_response_memorize_alongside_other_calls_resets():
     hook = MemoryNudgeHook(interval=3)
     for _ in range(2):
         await hook.before_prompt_build(_ctx())
-    await hook.after_response(_obs(
-        tool_calls=[
-            {"function": {"name": "bash", "arguments": "{}"}, "id": "a"},
-            {"function": {"name": "memorize", "arguments": "{}"}, "id": "b"},
-            {"function": {"name": "read", "arguments": "{}"}, "id": "c"},
-        ],
-    ))
+    await hook.after_response(
+        _obs(
+            tool_calls=[
+                {"function": {"name": "bash", "arguments": "{}"}, "id": "a"},
+                {"function": {"name": "memorize", "arguments": "{}"}, "id": "b"},
+                {"function": {"name": "read", "arguments": "{}"}, "id": "c"},
+            ],
+        )
+    )
     # Counter reset; turn 1 no nudge
     r = await hook.before_prompt_build(_ctx())
     assert r is None

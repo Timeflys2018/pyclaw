@@ -13,21 +13,17 @@ from pyclaw.storage.session.base import InMemorySessionStore
 
 
 class TestAgentRunnerDepsLockManager:
-
     def test_default_is_none(self) -> None:
         deps = AgentRunnerDeps(llm=MagicMock(), tools=MagicMock())
         assert deps.lock_manager is None
 
     def test_can_assign_lock_manager(self) -> None:
         mock_lock = MagicMock()
-        deps = AgentRunnerDeps(
-            llm=MagicMock(), tools=MagicMock(), lock_manager=mock_lock
-        )
+        deps = AgentRunnerDeps(llm=MagicMock(), tools=MagicMock(), lock_manager=mock_lock)
         assert deps.lock_manager is mock_lock
 
 
 class TestFactoryForwardsLockManager:
-
     @pytest.mark.asyncio
     async def test_factory_accepts_and_forwards_lock_manager(self) -> None:
         mock_lock = MagicMock()

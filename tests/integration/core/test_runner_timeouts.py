@@ -140,15 +140,15 @@ async def test_run_deadline_precision_under_fast_chunks(tmp_path: Path) -> None:
     deps = AgentRunnerDeps(
         llm=llm,
         tools=ToolRegistry(),
-        config=AgentRunConfig(
-            timeouts=TimeoutConfig(run_seconds=run_seconds, idle_seconds=0.0)
-        ),
+        config=AgentRunConfig(timeouts=TimeoutConfig(run_seconds=run_seconds, idle_seconds=0.0)),
     )
 
     start = time.monotonic()
     events: list[Any] = []
     async for event in run_agent_stream(
-        RunRequest(session_id="precision", workspace_id="default", agent_id="main", user_message="hi"),
+        RunRequest(
+            session_id="precision", workspace_id="default", agent_id="main", user_message="hi"
+        ),
         deps,
         tool_workspace_path=tmp_path,
     ):

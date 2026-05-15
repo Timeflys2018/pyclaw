@@ -39,7 +39,9 @@ class TestHumanReadableNamingBackwardCompat:
         ],
     )
     def test_matches_legacy_replace_colon(
-        self, session_key: str, expected: str,
+        self,
+        session_key: str,
+        expected: str,
     ) -> None:
         policy = HumanReadableNaming()
         assert policy.filename_for(session_key) == expected
@@ -88,7 +90,8 @@ class TestHumanReadableNamingSanitization:
         assert result == "web_.._etc_passwd.db"
 
     def test_sanitization_emits_warning(
-        self, caplog: pytest.LogCaptureFixture,
+        self,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         policy = HumanReadableNaming()
         with caplog.at_level(logging.WARNING, logger="pyclaw.storage.memory.naming"):

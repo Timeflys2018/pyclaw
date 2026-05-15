@@ -21,7 +21,7 @@ class _IdleQueue(Protocol):
 
 
 async def idle_guard_check(
-    spec: "CommandSpec",
+    spec: CommandSpec,
     queue_obj: _IdleQueue,
     key: str,
     reply: Callable[[str], Awaitable[None]],
@@ -91,10 +91,13 @@ def parse_idle_duration(arg: str) -> int | None:
 async def format_session_status(
     session_key: str,
     session_id: str,
-    deps: "AgentRunnerDeps",
+    deps: AgentRunnerDeps,
     *,
     worker_registry: Any = None,
     gateway_router: Any = None,
+    redis_client: Any = None,
+    channel: str | None = None,
+    channel_default_tier: str | None = None,
 ) -> str:
     tree = await deps.session_store.load(session_id)
     msg_count = len(tree.entries) if tree else 0
@@ -111,6 +114,14 @@ async def format_session_status(
         f"模型:       {model}",
         f"创建时间:   {created_at[:19].replace('T', ' ')}",
     ]
+
+    if channel == "feishu":
+        from pyclaw.core.commands.tier_store import get_session_tier
+
+        override = await get_session_tier(redis_client, session_key)
+        effective = override or (channel_default_tier or "approval")
+        source = "session" if override else "default"
+        lines.append(f"Tier:       `{effective}` ({source})  — `/tier` 切换")
 
     if worker_registry is not None:
         lines.append("")
@@ -156,7 +167,7 @@ async def run_extract(
     settings: Any,
     nudge_hook: Any = None,
     timeout: float = EXTRACT_TIMEOUT_SECONDS,
-) -> "ExtractionResult | None":
+) -> ExtractionResult | None:
     """Run SOP extraction with timeout. Returns ExtractionResult, or None if timed out, or a synthetic disabled result if any dep is missing."""
     from pyclaw.core.sop_extraction import (
         ExtractionResult,

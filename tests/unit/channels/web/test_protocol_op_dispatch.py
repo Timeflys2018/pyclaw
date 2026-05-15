@@ -90,4 +90,7 @@ async def test_dispatch_unrecognized_protocol_op_emits_diagnostic(monkeypatch):
     await _dispatch_protocol_op(object(), msg)
 
     assert captured, "Should emit a diagnostic reply"
-    assert "未识别" in captured[0]["final_message"] or "unrecognized" in captured[0]["final_message"].lower()
+    assert (
+        "未识别" in captured[0]["final_message"]
+        or "unrecognized" in captured[0]["final_message"].lower()
+    )

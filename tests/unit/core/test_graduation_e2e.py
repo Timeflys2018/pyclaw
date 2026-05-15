@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import logging
 import time
-
-import apsw
-import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock
 
-from pyclaw.core.curator import _scan_single_db, run_curator_scan, CuratorReport
-from pyclaw.core.skill_graduation import parse_sop_content, graduate_single_sop
-from pyclaw.storage.memory.jieba_tokenizer import register_jieba_tokenizer
+import apsw
+import pytest
+
+from pyclaw.core.curator import _scan_single_db, run_curator_scan
+from pyclaw.core.skill_graduation import graduate_single_sop, parse_sop_content
 from pyclaw.infra.settings import CuratorSettings, SkillSettings
-from pyclaw.skills.parser import parse_skill_file
 from pyclaw.skills.discovery import discover_skills
+from pyclaw.skills.parser import parse_skill_file
+from pyclaw.storage.memory.jieba_tokenizer import register_jieba_tokenizer
 
 
 def _create_test_db(path: Path, entries: list[dict]) -> None:
@@ -141,8 +141,8 @@ async def test_full_pipeline_curator_graduates_and_discovers(tmp_path: Path) -> 
 @pytest.mark.asyncio
 async def test_graduated_not_in_search(tmp_path: Path) -> None:
     """9.2: After graduation, search doesn't return it but skill exists."""
-    from pyclaw.storage.memory.sqlite import SqliteMemoryBackend
     from pyclaw.storage.memory.base import MemoryEntry
+    from pyclaw.storage.memory.sqlite import SqliteMemoryBackend
 
     base_dir = tmp_path / "memory"
     base_dir.mkdir(parents=True)
@@ -167,9 +167,7 @@ async def test_graduated_not_in_search(tmp_path: Path) -> None:
 
     # Simulate graduation (UPDATE status)
     conn = await backend._get_conn(session_key)
-    conn.execute(
-        "UPDATE procedures SET status='graduated' WHERE id='grad-search-test'"
-    )
+    conn.execute("UPDATE procedures SET status='graduated' WHERE id='grad-search-test'")
 
     # Verify NOT searchable after graduation
     results2 = await backend.search(session_key, "test sop step", layers=["L3"])
@@ -305,9 +303,7 @@ async def test_curator_log_debug_when_no_changes(tmp_path: Path, caplog) -> None
     assert report.total_graduated == 0
     # Should be DEBUG level, not INFO — no INFO-level "scan" message expected
     info_records = [
-        r
-        for r in caplog.records
-        if r.levelno == logging.INFO and "scan" in r.message.lower()
+        r for r in caplog.records if r.levelno == logging.INFO and "scan" in r.message.lower()
     ]
     assert len(info_records) == 0
 

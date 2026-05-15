@@ -12,9 +12,7 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     if not os.environ.get("PYCLAW_TEST_REDIS_HOST"):
         skip = pytest.mark.skip(reason="PYCLAW_TEST_REDIS_HOST not set")
         for item in items:

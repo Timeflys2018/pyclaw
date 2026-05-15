@@ -64,7 +64,9 @@ class TestUpdateWorkingMemoryTool:
     async def test_writes_to_redis_and_readable_via_hgetall(self) -> None:
         redis = _make_redis()
         tool = UpdateWorkingMemoryTool(redis)
-        result = await tool.execute({"_call_id": "c1", "key": "user_name", "value": "Alice"}, _ctx())
+        result = await tool.execute(
+            {"_call_id": "c1", "key": "user_name", "value": "Alice"}, _ctx()
+        )
 
         assert not result.is_error
         assert "stored 'user_name'" in result.content[0].text

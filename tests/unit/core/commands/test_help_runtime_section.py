@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pyclaw.infra.settings import Settings
 from pyclaw.core.commands.builtin import cmd_help, register_builtin_commands
 from pyclaw.core.commands.context import CommandContext
 from pyclaw.core.commands.registry import CommandRegistry
+from pyclaw.infra.settings import Settings
 
 
 def _make_ctx(registry: CommandRegistry) -> tuple[CommandContext, AsyncMock]:

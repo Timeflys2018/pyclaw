@@ -28,9 +28,7 @@ def _format_task_line(info: Any) -> str:
 async def cmd_tasks(args: str, ctx: CommandContext) -> None:
     parts = args.strip().split()
     if not parts:
-        await ctx.reply(
-            "用法: /tasks list [--all] | /tasks kill <task_id> [--confirm]"
-        )
+        await ctx.reply("用法: /tasks list [--all] | /tasks kill <task_id> [--confirm]")
         return
 
     sub = parts[0]
@@ -102,19 +100,14 @@ async def _cmd_tasks_kill(rest: list[str], ctx: CommandContext) -> None:
             f"  state={info.state}",
         ]
         if info.category in _PROTECTED_KILL_CATEGORIES:
-            preview.append(
-                f"  ⚠️ 此任务类别（{info.category}）被保护，kill 会导致数据不一致"
-            )
-        preview.append(
-            f"用 /tasks kill {info.task_id} --confirm 执行"
-        )
+            preview.append(f"  ⚠️ 此任务类别（{info.category}）被保护，kill 会导致数据不一致")
+        preview.append(f"用 /tasks kill {info.task_id} --confirm 执行")
         await ctx.reply("\n".join(preview))
         return
 
     if info.category in _PROTECTED_KILL_CATEGORIES:
         await ctx.reply(
-            f"❌ 拒绝：此任务类别（{info.category}）不可通过 /tasks kill 终止，"
-            f"会导致数据不一致"
+            f"❌ 拒绝：此任务类别（{info.category}）不可通过 /tasks kill 终止，会导致数据不一致"
         )
         return
 

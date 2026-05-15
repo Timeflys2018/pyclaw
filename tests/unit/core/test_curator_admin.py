@@ -10,7 +10,6 @@ import apsw
 import pytest
 
 from pyclaw.core.curator_admin import (
-    SopRow,
     last_review_timestamp,
     list_archived_sops,
     list_auto_sops,
@@ -19,7 +18,6 @@ from pyclaw.core.curator_admin import (
     restore_sop,
 )
 from pyclaw.storage.memory.jieba_tokenizer import register_jieba_tokenizer
-
 
 _SCHEMA_STATEMENTS = [
     """CREATE TABLE IF NOT EXISTS procedures (
@@ -51,7 +49,10 @@ def _seed_db(db_path: Path, session_key: str, rows: list[dict]) -> None:
                 "created_at, updated_at, last_used_at, use_count, status, archived_at, archive_reason) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    r["id"], session_key, r.get("type", "auto_sop"), r.get("content", "x"),
+                    r["id"],
+                    session_key,
+                    r.get("type", "auto_sop"),
+                    r.get("content", "x"),
                     r.get("source_session_id", "sess"),
                     r.get("created_at", time.time()),
                     r.get("updated_at", time.time()),
@@ -77,25 +78,41 @@ def settings(tmp_path: Path):
 
 
 def test_list_auto_sops_scoped_to_session_key(settings, tmp_path: Path) -> None:
-    _seed_db(tmp_path / "test_user_a.db", "test:user_a", [
-        {"id": "p1", "type": "auto_sop", "status": "active"},
-        {"id": "p2", "type": "manual", "status": "active"},
-    ])
-    _seed_db(tmp_path / "test_user_b.db", "test:user_b", [
-        {"id": "p3", "type": "auto_sop", "status": "active"},
-    ])
+    _seed_db(
+        tmp_path / "test_user_a.db",
+        "test:user_a",
+        [
+            {"id": "p1", "type": "auto_sop", "status": "active"},
+            {"id": "p2", "type": "manual", "status": "active"},
+        ],
+    )
+    _seed_db(
+        tmp_path / "test_user_b.db",
+        "test:user_b",
+        [
+            {"id": "p3", "type": "auto_sop", "status": "active"},
+        ],
+    )
 
     scoped = list_auto_sops(settings, session_key="test:user_a")
     assert [r.entry_id for r in scoped] == ["p1"]
 
 
 def test_list_auto_sops_global_view(settings, tmp_path: Path) -> None:
-    _seed_db(tmp_path / "test_user_a.db", "test:user_a", [
-        {"id": "p1", "type": "auto_sop"},
-    ])
-    _seed_db(tmp_path / "test_user_b.db", "test:user_b", [
-        {"id": "p2", "type": "auto_sop"},
-    ])
+    _seed_db(
+        tmp_path / "test_user_a.db",
+        "test:user_a",
+        [
+            {"id": "p1", "type": "auto_sop"},
+        ],
+    )
+    _seed_db(
+        tmp_path / "test_user_b.db",
+        "test:user_b",
+        [
+            {"id": "p2", "type": "auto_sop"},
+        ],
+    )
 
     all_sops = list_auto_sops(settings, session_key=None)
     assert sorted(r.entry_id for r in all_sops) == ["p1", "p2"]
@@ -104,20 +121,33 @@ def test_list_auto_sops_global_view(settings, tmp_path: Path) -> None:
 def test_list_stale_sops_uses_threshold(settings, tmp_path: Path) -> None:
     old = time.time() - 100 * 86400
     fresh = time.time() - 5 * 86400
-    _seed_db(tmp_path / "test_user_a.db", "test:user_a", [
-        {"id": "old", "status": "active", "last_used_at": old, "created_at": old},
-        {"id": "fresh", "status": "active", "last_used_at": fresh, "created_at": fresh},
-    ])
+    _seed_db(
+        tmp_path / "test_user_a.db",
+        "test:user_a",
+        [
+            {"id": "old", "status": "active", "last_used_at": old, "created_at": old},
+            {"id": "fresh", "status": "active", "last_used_at": fresh, "created_at": fresh},
+        ],
+    )
 
     stale = list_stale_sops(settings, session_key="test:user_a")
     assert [r.entry_id for r in stale] == ["old"]
 
 
 def test_list_archived_sops(settings, tmp_path: Path) -> None:
-    _seed_db(tmp_path / "test_user_a.db", "test:user_a", [
-        {"id": "a1", "status": "archived", "archived_at": time.time(), "archive_reason": "curator:90d"},
-        {"id": "a2", "status": "active"},
-    ])
+    _seed_db(
+        tmp_path / "test_user_a.db",
+        "test:user_a",
+        [
+            {
+                "id": "a1",
+                "status": "archived",
+                "archived_at": time.time(),
+                "archive_reason": "curator:90d",
+            },
+            {"id": "a2", "status": "active"},
+        ],
+    )
 
     archived = list_archived_sops(settings, session_key="test:user_a")
     assert [r.entry_id for r in archived] == ["a1"]
@@ -127,20 +157,33 @@ def test_list_archived_sops(settings, tmp_path: Path) -> None:
 def test_preview_graduation_respects_thresholds(settings, tmp_path: Path) -> None:
     old = time.time() - 30 * 86400
     recent = time.time() - 1 * 86400
-    _seed_db(tmp_path / "test_user_a.db", "test:user_a", [
-        {"id": "eligible", "type": "auto_sop", "use_count": 10, "created_at": old},
-        {"id": "too_new", "type": "auto_sop", "use_count": 10, "created_at": recent},
-        {"id": "low_use", "type": "auto_sop", "use_count": 2, "created_at": old},
-    ])
+    _seed_db(
+        tmp_path / "test_user_a.db",
+        "test:user_a",
+        [
+            {"id": "eligible", "type": "auto_sop", "use_count": 10, "created_at": old},
+            {"id": "too_new", "type": "auto_sop", "use_count": 10, "created_at": recent},
+            {"id": "low_use", "type": "auto_sop", "use_count": 2, "created_at": old},
+        ],
+    )
 
     preview = preview_graduation(settings, session_key="test:user_a")
     assert [r.entry_id for r in preview] == ["eligible"]
 
 
 def test_restore_sop_flips_status(settings, tmp_path: Path) -> None:
-    _seed_db(tmp_path / "test_user_a.db", "test:user_a", [
-        {"id": "restoreme", "status": "archived", "archived_at": time.time(), "archive_reason": "curator"},
-    ])
+    _seed_db(
+        tmp_path / "test_user_a.db",
+        "test:user_a",
+        [
+            {
+                "id": "restoreme",
+                "status": "archived",
+                "archived_at": time.time(),
+                "archive_reason": "curator",
+            },
+        ],
+    )
 
     result = restore_sop("restoreme", settings, session_key="test:user_a")
     assert result.count == 1

@@ -35,17 +35,13 @@ class RedisL1Index:
         entries.sort(key=lambda e: e.updated_at, reverse=True)
         return entries
 
-    async def index_update(
-        self, session_key: str, entry: MemoryEntry
-    ) -> None:
+    async def index_update(self, session_key: str, entry: MemoryEntry) -> None:
         key = self._hash_key(session_key)
         await self._client.hset(key, entry.id, entry.model_dump_json())
         await self._evict(key)
         await self._client.expire(key, self._ttl_seconds)
 
-    async def index_remove(
-        self, session_key: str, entry_id: str
-    ) -> None:
+    async def index_remove(self, session_key: str, entry_id: str) -> None:
         await self._client.hdel(self._hash_key(session_key), entry_id)
 
     async def close(self) -> None:
@@ -55,10 +51,7 @@ class RedisL1Index:
         raw = await self._client.hgetall(key)
         if not raw:
             return
-        entries = [
-            (field, MemoryEntry.model_validate_json(value))
-            for field, value in raw.items()
-        ]
+        entries = [(field, MemoryEntry.model_validate_json(value)) for field, value in raw.items()]
         entries.sort(key=lambda pair: pair[1].updated_at)
 
         while len(entries) > self._max_entries:

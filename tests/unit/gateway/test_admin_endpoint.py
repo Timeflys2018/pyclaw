@@ -3,14 +3,12 @@ from __future__ import annotations
 import time
 from unittest.mock import AsyncMock
 
-import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from pyclaw.channels.web.admin import admin_router, set_admin_registry
 from pyclaw.gateway.worker_registry import WorkerRegistry
 from pyclaw.infra.settings import WebSettings
-
 
 ADMIN_TOKEN = "test-admin-secret"
 

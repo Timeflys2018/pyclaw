@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -110,7 +110,9 @@ class ClawHubClient:
                 status_code=resp.status_code,
             )
         data = resp.json()
-        items: list[Any] = data if isinstance(data, list) else data.get("results", data.get("skills", []))
+        items: list[Any] = (
+            data if isinstance(data, list) else data.get("results", data.get("skills", []))
+        )
         if not isinstance(items, list):
             items = []
         return [
@@ -139,8 +141,12 @@ class ClawHubClient:
             slug=skill_data.get("slug", slug),
             name=skill_data.get("displayName", skill_data.get("name", "")),
             description=skill_data.get("summary", skill_data.get("description", "")),
-            latest_version=latest_ver.get("version", "") if isinstance(latest_ver, dict) else str(latest_ver or ""),
-            author=owner.get("displayName", owner.get("handle")) if isinstance(owner, dict) else None,
+            latest_version=latest_ver.get("version", "")
+            if isinstance(latest_ver, dict)
+            else str(latest_ver or ""),
+            author=owner.get("displayName", owner.get("handle"))
+            if isinstance(owner, dict)
+            else None,
             sha256hash=latest_ver.get("sha256hash") if isinstance(latest_ver, dict) else None,
         )
 

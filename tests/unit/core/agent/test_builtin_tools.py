@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from pyclaw.core.agent.tools.builtin import BashTool, EditTool, ReadTool, WriteTool
 from pyclaw.core.agent.tools.registry import ToolContext
 from pyclaw.core.agent.tools.workspace import WorkspaceResolver

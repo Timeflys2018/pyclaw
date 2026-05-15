@@ -34,13 +34,13 @@ class WebCommandAdapter:
         self,
         text: str,
         *,
-        state: "ConnectionState",
+        state: ConnectionState,
         conversation_id: str,
         session_id: str,
-        deps: "AgentRunnerDeps",
-        session_router: "SessionRouter",
+        deps: AgentRunnerDeps,
+        session_router: SessionRouter,
         workspace_base: Any,
-        settings: "Settings",
+        settings: Settings,
         redis_client: Any = None,
         memory_store: Any = None,
         evolution_settings: Any = None,
@@ -84,7 +84,9 @@ class WebCommandAdapter:
             from pyclaw.channels.web.protocol import ChatSendMessage
 
             if session_queue is None:
-                raise RuntimeError("WebCommandAdapter requires session_queue for dispatch_user_message")
+                raise RuntimeError(
+                    "WebCommandAdapter requires session_queue for dispatch_user_message"
+                )
 
             settings = state.ws.app.state.web_settings
             new_msg = ChatSendMessage(

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -62,12 +61,16 @@ async def test_feishu_dispatch_message_captures_done_usage_into_registry() -> No
     stream_returned = StubStream(Done(final_message="reply", usage=usage))
 
     import pyclaw.channels.feishu.dispatch as dispatch_mod
+
     original = dispatch_mod.run_agent_stream
     dispatch_mod.run_agent_stream = lambda *a, **kw: stream_returned
     try:
         events_collected = []
         async for ev in dispatch_message(
-            inbound, deps, workspace_path=Path("/tmp"), queue_registry=registry,
+            inbound,
+            deps,
+            workspace_path=Path("/tmp"),
+            queue_registry=registry,
         ):
             events_collected.append(ev)
     finally:
@@ -94,21 +97,21 @@ async def test_feishu_command_adapter_reads_last_usage_into_command_context() ->
         captured["last_usage"] = ctx.last_usage
 
     cmd_registry = CommandRegistry()
-    cmd_registry.register(CommandSpec(
-        name="/probe",
-        handler=fake_handler,
-        category="inspection",
-        help_text="",
-        channels=ALL_CHANNELS,
-    ))
+    cmd_registry.register(
+        CommandSpec(
+            name="/probe",
+            handler=fake_handler,
+            category="inspection",
+            help_text="",
+            channels=ALL_CHANNELS,
+        )
+    )
 
     adapter = FeishuCommandAdapter(cmd_registry)
     fctx = MagicMock()
     fctx.deps = MagicMock()
     fctx.session_router = MagicMock()
-    fctx.session_router.resolve_or_create = AsyncMock(
-        return_value=("skey:s:abcd", MagicMock())
-    )
+    fctx.session_router.resolve_or_create = AsyncMock(return_value=("skey:s:abcd", MagicMock()))
     fctx.session_router.update_last_interaction = AsyncMock()
     fctx.queue_registry = queue_registry
     fctx.redis_client = None
@@ -150,7 +153,10 @@ async def test_web_session_queue_captures_done_usage_via_set_last_usage() -> Non
     sq = SessionQueue()
     assert sq.get_last_usage("conv-1") is None
 
-    done = Done(final_message="ok", usage={"input": 500, "output": 50, "cache_creation": 0, "cache_read": 200})
+    done = Done(
+        final_message="ok",
+        usage={"input": 500, "output": 50, "cache_creation": 0, "cache_read": 200},
+    )
     sq.set_last_usage("conv-1", done.usage)
     assert sq.get_last_usage("conv-1") == done.usage
 

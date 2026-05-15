@@ -17,11 +17,10 @@ Use `c.args[2].partial / .role / .content / .tool_calls` (NOT kwargs.get).
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 
-from pyclaw.core.agent.llm import LLMClient, LLMError, LLMStreamChunk, LLMUsage
+from pyclaw.core.agent.llm import LLMClient, LLMError, LLMStreamChunk
 from pyclaw.core.agent.runner import (
     AgentRunnerDeps,
     RunRequest,
@@ -34,7 +33,6 @@ from pyclaw.core.hooks import HookRegistry
 from pyclaw.models import (
     AgentRunConfig,
     CompactionConfig,
-    Done,
     ErrorEvent,
     PromptBudgetConfig,
     SessionHeader,
@@ -83,7 +81,8 @@ async def _partial_entries(store: InMemorySessionStore, session_id: str) -> list
     if tree is None:
         return []
     return [
-        e for e in tree.entries.values()
+        e
+        for e in tree.entries.values()
         if getattr(e, "role", None) == "assistant" and getattr(e, "partial", False)
     ]
 
@@ -123,6 +122,7 @@ class _RaisingLLM(LLMClient):
                 for c in chunks:
                     yield LLMStreamChunk(text_delta=c)
                 raise err
+
             return _gen()
 
         return _gen_factory()
@@ -140,7 +140,9 @@ async def test_persist_partial_on_mid_stream_abort(tmp_path) -> None:
     deps = _make_deps(_AbortMidStreamLLM(abort_event), store)
 
     events: list[Any] = []
-    async for evt in run_agent_stream(_request("ses-abort-mid"), deps, tool_workspace_path=tmp_path, abort=abort_event):
+    async for evt in run_agent_stream(
+        _request("ses-abort-mid"), deps, tool_workspace_path=tmp_path, abort=abort_event
+    ):
         events.append(evt)
 
     errors = [e for e in events if isinstance(e, ErrorEvent)]
@@ -171,7 +173,9 @@ async def test_persist_partial_on_mid_stream_timeout(tmp_path) -> None:
     deps = _make_deps(_RaisingLLM(["partial text from stream"], err), store)
 
     events: list[Any] = []
-    async for evt in run_agent_stream(_request("ses-timeout-mid"), deps, tool_workspace_path=tmp_path):
+    async for evt in run_agent_stream(
+        _request("ses-timeout-mid"), deps, tool_workspace_path=tmp_path
+    ):
         events.append(evt)
 
     errors = [e for e in events if isinstance(e, ErrorEvent)]
@@ -193,7 +197,9 @@ async def test_persist_partial_on_agent_timeout_error_with_text(tmp_path) -> Non
     deps = _make_deps(_RaisingLLM(["chunk one", " chunk two"], err), store)
 
     events: list[Any] = []
-    async for evt in run_agent_stream(_request("ses-agent-timeout"), deps, tool_workspace_path=tmp_path):
+    async for evt in run_agent_stream(
+        _request("ses-agent-timeout"), deps, tool_workspace_path=tmp_path
+    ):
         events.append(evt)
 
     errors = [e for e in events if isinstance(e, ErrorEvent)]
@@ -214,7 +220,9 @@ async def test_persist_partial_on_agent_aborted_error_with_text(tmp_path) -> Non
     deps = _make_deps(_RaisingLLM(["aborted-mid-text"], err), store)
 
     events: list[Any] = []
-    async for evt in run_agent_stream(_request("ses-agent-aborted"), deps, tool_workspace_path=tmp_path):
+    async for evt in run_agent_stream(
+        _request("ses-agent-aborted"), deps, tool_workspace_path=tmp_path
+    ):
         events.append(evt)
 
     errors = [e for e in events if isinstance(e, ErrorEvent)]
@@ -240,7 +248,9 @@ async def test_persist_partial_on_llm_error_compaction_failed_with_text(tmp_path
     deps = _make_deps(_RaisingLLM(["context-overflow-text"], err), store)
 
     events: list[Any] = []
-    async for evt in run_agent_stream(_request("ses-compact-fail"), deps, tool_workspace_path=tmp_path):
+    async for evt in run_agent_stream(
+        _request("ses-compact-fail"), deps, tool_workspace_path=tmp_path
+    ):
         events.append(evt)
 
     errors = [e for e in events if isinstance(e, ErrorEvent)]
@@ -261,7 +271,9 @@ async def test_persist_partial_on_llm_error_non_overflow_with_text(tmp_path) -> 
     deps = _make_deps(_RaisingLLM(["rate-limited-text"], err), store)
 
     events: list[Any] = []
-    async for evt in run_agent_stream(_request("ses-llm-error"), deps, tool_workspace_path=tmp_path):
+    async for evt in run_agent_stream(
+        _request("ses-llm-error"), deps, tool_workspace_path=tmp_path
+    ):
         events.append(evt)
 
     errors = [e for e in events if isinstance(e, ErrorEvent)]
@@ -282,7 +294,9 @@ async def test_no_persist_when_text_parts_empty(tmp_path) -> None:
     deps = _make_deps(_RaisingLLM([], err), store)
 
     events: list[Any] = []
-    async for evt in run_agent_stream(_request("ses-empty-text"), deps, tool_workspace_path=tmp_path):
+    async for evt in run_agent_stream(
+        _request("ses-empty-text"), deps, tool_workspace_path=tmp_path
+    ):
         events.append(evt)
 
     errors = [e for e in events if isinstance(e, ErrorEvent)]
@@ -321,7 +335,9 @@ async def test_pre_llm_paths_do_not_persist(tmp_path) -> None:
     deps = _make_deps(_NeverCalledLLM(), store)
 
     events: list[Any] = []
-    async for evt in run_agent_stream(_request("ses-pre-abort"), deps, tool_workspace_path=tmp_path, abort=abort_event):
+    async for evt in run_agent_stream(
+        _request("ses-pre-abort"), deps, tool_workspace_path=tmp_path, abort=abort_event
+    ):
         events.append(evt)
 
     errors = [e for e in events if isinstance(e, ErrorEvent)]
@@ -362,14 +378,20 @@ async def test_persist_helper_exception_does_not_block_error_event(tmp_path, cap
     events: list[Any] = []
     with caplog.at_level(logging.WARNING, logger="pyclaw.core.agent.runner"):
         async for evt in run_agent_stream(
-            _request("ses-redis-down"), deps, tool_workspace_path=tmp_path, abort=abort_event,
+            _request("ses-redis-down"),
+            deps,
+            tool_workspace_path=tmp_path,
+            abort=abort_event,
         ):
             events.append(evt)
 
     errors = [e for e in events if isinstance(e, ErrorEvent)]
-    assert len(errors) == 1, f"ErrorEvent must still yield even when partial persist fails. Got events: {events}"
+    assert len(errors) == 1, (
+        f"ErrorEvent must still yield even when partial persist fails. Got events: {events}"
+    )
     assert errors[0].error_code == "aborted"
 
     warning_messages = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-    assert any("partial assistant" in m for m in warning_messages), \
+    assert any("partial assistant" in m for m in warning_messages), (
         f"Expected warning about failed partial persist. Captured: {warning_messages}"
+    )

@@ -42,11 +42,7 @@ def _simple_summary(tree: Any) -> str:
     joined = "\n".join(texts)
     if len(joined) <= SIMPLE_SUMMARY_HEAD + SIMPLE_SUMMARY_TAIL + 10:
         return joined
-    return (
-        joined[:SIMPLE_SUMMARY_HEAD]
-        + "\n...\n"
-        + joined[-SIMPLE_SUMMARY_TAIL:]
-    )
+    return joined[:SIMPLE_SUMMARY_HEAD] + "\n...\n" + joined[-SIMPLE_SUMMARY_TAIL:]
 
 
 async def archive_session_background(

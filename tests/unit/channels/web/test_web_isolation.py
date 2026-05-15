@@ -1,28 +1,27 @@
 from __future__ import annotations
 
-import asyncio
 import tempfile
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+from pyclaw.channels.session_router import SessionRouter
 from pyclaw.channels.web.auth import create_jwt
 from pyclaw.channels.web.chat import _run_chat
 from pyclaw.channels.web.openai_compat import openai_router, set_openai_deps
 from pyclaw.channels.web.protocol import (
-    ChatSendMessage,
     SERVER_ERROR,
+    ChatSendMessage,
 )
 from pyclaw.channels.web.websocket import ConnectionState
-from pyclaw.channels.session_router import SessionRouter
 from pyclaw.infra.settings import WebSettings
-from pyclaw.models.agent import Done, TextChunk
+from pyclaw.models.agent import Done
 from pyclaw.storage.session.base import InMemorySessionStore
-
 
 JWT_SECRET = "test-secret"
 
@@ -48,8 +47,10 @@ def _patch_agent_stream():
 
     @contextmanager
     def _combined():
-        with patch("pyclaw.channels.web.chat.run_agent_stream", side_effect=_fake_stream), \
-             patch("pyclaw.channels.web.chat._get_runner_deps", return_value=fake_deps):
+        with (
+            patch("pyclaw.channels.web.chat.run_agent_stream", side_effect=_fake_stream),
+            patch("pyclaw.channels.web.chat._get_runner_deps", return_value=fake_deps),
+        ):
             yield captured_kwargs
 
     return _combined()
@@ -60,9 +61,7 @@ class TestConversationIdOwnership:
     async def test_cross_user_conversation_id_rejected(self) -> None:
         workspace_base = Path(tempfile.mkdtemp())
         mock_ws = _make_mock_ws(workspace_base)
-        state = ConnectionState(
-            ws=mock_ws, ws_session_id="s1", user_id="me", authenticated=True
-        )
+        state = ConnectionState(ws=mock_ws, ws_session_id="s1", user_id="me", authenticated=True)
         settings = WebSettings(jwt_secret="s", heartbeat_interval=60, pong_timeout=10)
 
         msg = ChatSendMessage(conversation_id="web:other_user:xxx", content="hi")
@@ -82,9 +81,7 @@ class TestConversationIdOwnership:
     async def test_own_prefixed_conversation_id_accepted(self) -> None:
         workspace_base = Path(tempfile.mkdtemp())
         mock_ws = _make_mock_ws(workspace_base)
-        state = ConnectionState(
-            ws=mock_ws, ws_session_id="s1", user_id="me", authenticated=True
-        )
+        state = ConnectionState(ws=mock_ws, ws_session_id="s1", user_id="me", authenticated=True)
         settings = WebSettings(jwt_secret="s", heartbeat_interval=60, pong_timeout=10)
 
         msg = ChatSendMessage(conversation_id="web:me:my_conv", content="hi")
@@ -98,9 +95,7 @@ class TestConversationIdOwnership:
     async def test_plain_id_gets_user_prefix(self) -> None:
         workspace_base = Path(tempfile.mkdtemp())
         mock_ws = _make_mock_ws(workspace_base)
-        state = ConnectionState(
-            ws=mock_ws, ws_session_id="s1", user_id="me", authenticated=True
-        )
+        state = ConnectionState(ws=mock_ws, ws_session_id="s1", user_id="me", authenticated=True)
         settings = WebSettings(jwt_secret="s", heartbeat_interval=60, pong_timeout=10)
 
         msg = ChatSendMessage(conversation_id="plain_id", content="hi")
@@ -112,8 +107,10 @@ class TestConversationIdOwnership:
             yield Done(final_message="ok", usage={})
 
         fake_deps = MagicMock(spec=["llm", "tools", "config"])
-        with patch("pyclaw.channels.web.chat.run_agent_stream", side_effect=_fake_stream), \
-             patch("pyclaw.channels.web.chat._get_runner_deps", return_value=fake_deps):
+        with (
+            patch("pyclaw.channels.web.chat.run_agent_stream", side_effect=_fake_stream),
+            patch("pyclaw.channels.web.chat._get_runner_deps", return_value=fake_deps),
+        ):
             await _run_chat(state, msg, settings)
 
         assert len(captured_requests) == 1

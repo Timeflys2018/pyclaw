@@ -38,12 +38,8 @@ class TestWsEndpointSourceContract:
         assert "gateway_router" in source, (
             "websocket_endpoint must read gateway_router from app.state"
         )
-        assert "force_claim" in source, (
-            "websocket_endpoint must call force_claim on connect"
-        )
-        assert 'f"web:{user_id}"' in source, (
-            "session key for web channel must be 'web:{user_id}'"
-        )
+        assert "force_claim" in source, "websocket_endpoint must call force_claim on connect"
+        assert 'f"web:{user_id}"' in source, "session key for web channel must be 'web:{user_id}'"
 
     def test_force_claim_failure_is_caught(self) -> None:
         import inspect
@@ -57,6 +53,6 @@ class TestWsEndpointSourceContract:
             "force_claim must be wrapped in try/except so a Redis blip "
             "doesn't drop the WS connection"
         )
-        assert "except Exception" in source[force_claim_idx:force_claim_idx + 500], (
+        assert "except Exception" in source[force_claim_idx : force_claim_idx + 500], (
             "force_claim failure must be caught (Y6: graceful Redis degradation)"
         )

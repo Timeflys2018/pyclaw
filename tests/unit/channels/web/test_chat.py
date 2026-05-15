@@ -15,28 +15,27 @@ from pyclaw.channels.web.chat import (
     handle_tool_approve,
 )
 from pyclaw.channels.web.protocol import (
-    ChatAbortMessage,
-    ChatSendMessage,
-    ToolApproveMessage,
     SERVER_CHAT_DELTA,
     SERVER_CHAT_DONE,
     SERVER_CHAT_QUEUED,
-    SERVER_CHAT_TOOL_START,
     SERVER_CHAT_TOOL_END,
+    SERVER_CHAT_TOOL_START,
     SERVER_TOOL_APPROVE_REQUEST,
+    ChatAbortMessage,
+    ChatSendMessage,
+    ToolApproveMessage,
 )
 from pyclaw.channels.web.websocket import ConnectionState
 from pyclaw.infra.settings import WebSettings
 from pyclaw.infra.task_manager import TaskManager
 from pyclaw.models.agent import (
     Done,
-    ErrorEvent,
+    TextBlock,
     TextChunk,
     ToolApprovalRequest,
     ToolCallEnd,
     ToolCallStart,
     ToolResult,
-    TextBlock,
 )
 
 
@@ -151,6 +150,7 @@ class TestEnqueueChat:
     @pytest.fixture(autouse=True)
     def _inject_task_manager(self) -> None:
         from pyclaw.channels.web import chat as chat_mod
+
         chat_mod._session_queue.reset()
         chat_mod._session_queue.set_task_manager(TaskManager())
 
@@ -232,9 +232,13 @@ class TestEnqueueChat:
 
         with _patch_agent_stream(events_slow, gate=gate):
             cid = f"queued-test-{id(self)}"
-            await enqueue_chat(state, ChatSendMessage(conversation_id=cid, content="first"), settings)
+            await enqueue_chat(
+                state, ChatSendMessage(conversation_id=cid, content="first"), settings
+            )
             await asyncio.sleep(0.02)
-            await enqueue_chat(state, ChatSendMessage(conversation_id=cid, content="second"), settings)
+            await enqueue_chat(
+                state, ChatSendMessage(conversation_id=cid, content="second"), settings
+            )
             await asyncio.sleep(0.02)
 
             sent_types = [call[0][0]["type"] for call in mock_ws.send_json.call_args_list]
@@ -251,6 +255,7 @@ class TestHandleAbort:
         state = ConnectionState(ws=mock_ws, ws_session_id="s1", user_id="u1", authenticated=True)
 
         from pyclaw.channels.web.chat import _session_queue
+
         abort_ev = _session_queue.get_abort_event("c1")
         assert not abort_ev.is_set()
 
@@ -270,13 +275,14 @@ class TestHandleToolApprove:
         )
 
         from pyclaw.channels.web.chat import _session_queue
+
         decision = _session_queue.get_approval_decision("c1", "tc1")
         assert decision is True
 
 
 def _patch_agent_stream(events: list[Any], gate: asyncio.Event | None = None):
     from contextlib import contextmanager
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import patch
 
     async def _fake_stream(*args: Any, **kwargs: Any):
         if gate is not None:
@@ -288,8 +294,10 @@ def _patch_agent_stream(events: list[Any], gate: asyncio.Event | None = None):
 
     @contextmanager
     def _combined():
-        with patch("pyclaw.channels.web.chat.run_agent_stream", side_effect=_fake_stream), \
-             patch("pyclaw.channels.web.chat._get_runner_deps", return_value=fake_deps):
+        with (
+            patch("pyclaw.channels.web.chat.run_agent_stream", side_effect=_fake_stream),
+            patch("pyclaw.channels.web.chat._get_runner_deps", return_value=fake_deps),
+        ):
             yield
 
     return _combined()

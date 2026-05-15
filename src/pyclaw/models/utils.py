@@ -5,6 +5,7 @@ possibly-list content" logic scattered across compaction/dedup.py,
 compaction/hardening.py, sop_extraction.py, session_export.py, and
 memory_archive.py.
 """
+
 from __future__ import annotations
 
 from typing import Any

@@ -3,8 +3,6 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
-
 from pyclaw.channels.feishu.handler import (
     build_session_id,
     extract_text_and_images_from_event,
@@ -120,7 +118,7 @@ class TestExtractTextAndImagesFromEvent:
             '{"zh_cn": {"content": [['
             '{"tag": "text", "text": "look at this"},'
             '{"tag": "img", "image_key": "img_xyz"}'
-            ']]}}'
+            "]]}}"
         )
         event = _make_event(msg_type="post", content=content)
         text, images = extract_text_and_images_from_event(event)
@@ -134,7 +132,7 @@ class TestExtractTextAndImagesFromEvent:
             '{"tag": "img", "image_key": "k1"},'
             '{"tag": "img", "image_key": "k2"},'
             '{"tag": "img", "image_key": "k3"}'
-            ']]}}'
+            "]]}}"
         )
         event = _make_event(msg_type="post", content=content)
         _, images = extract_text_and_images_from_event(event)
@@ -145,7 +143,7 @@ class TestExtractTextAndImagesFromEvent:
             '{"zh_cn": {"content": [['
             '{"tag": "at", "user_name": "alice"},'
             '{"tag": "text", "text": " hello"}'
-            ']]}}'
+            "]]}}"
         )
         event = _make_event(msg_type="post", content=content)
         text, _ = extract_text_and_images_from_event(event)
@@ -157,7 +155,7 @@ class TestExtractTextAndImagesFromEvent:
         content = (
             '{"zh_cn": {"content": [['
             '{"tag": "a", "text": "click me", "href": "https://example.com"}'
-            ']]}}'
+            "]]}}"
         )
         event = _make_event(msg_type="post", content=content)
         text, _ = extract_text_and_images_from_event(event)
@@ -166,11 +164,7 @@ class TestExtractTextAndImagesFromEvent:
         assert "https://example.com" not in text
 
     def test_extract_post_media_video_cover(self) -> None:
-        content = (
-            '{"zh_cn": {"content": [['
-            '{"tag": "media", "image_key": "cover_img_key"}'
-            ']]}}'
-        )
+        content = '{"zh_cn": {"content": [[{"tag": "media", "image_key": "cover_img_key"}]]}}'
         event = _make_event(msg_type="post", content=content)
         _, images = extract_text_and_images_from_event(event)
         assert images == ["cover_img_key"]

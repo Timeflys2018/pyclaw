@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-import pytest
-
 from pyclaw.core.memory_archive import archive_session_background
-from pyclaw.models import MessageEntry, SessionHeader, SessionTree, now_iso
+from pyclaw.models import MessageEntry, now_iso
 from pyclaw.storage.session.base import InMemorySessionStore
 
 
@@ -19,14 +17,20 @@ async def _populate_session(
     prior: str | None = None
     for i in range(user_msg_count):
         u = MessageEntry(
-            id=f"u{i}", parent_id=prior, timestamp=now_iso(),
-            role="user", content=f"user msg {i}",
+            id=f"u{i}",
+            parent_id=prior,
+            timestamp=now_iso(),
+            role="user",
+            content=f"user msg {i}",
         )
         await store.append_entry(session_id, u, leaf_id=u.id)
         prior = u.id
         a = MessageEntry(
-            id=f"a{i}", parent_id=prior, timestamp=now_iso(),
-            role="assistant", content=f"assistant reply {i}",
+            id=f"a{i}",
+            parent_id=prior,
+            timestamp=now_iso(),
+            role="assistant",
+            content=f"assistant reply {i}",
         )
         await store.append_entry(session_id, a, leaf_id=a.id)
         prior = a.id
@@ -88,7 +92,9 @@ async def test_archive_summary_handles_list_content_with_image() -> None:
     prior: str | None = None
     for i in range(5):
         u = MessageEntry(
-            id=f"u{i}", parent_id=prior, timestamp=now_iso(),
+            id=f"u{i}",
+            parent_id=prior,
+            timestamp=now_iso(),
             role="user",
             content=[
                 ImageBlock(type="image", data="b64", mime_type="image/png"),
@@ -98,8 +104,11 @@ async def test_archive_summary_handles_list_content_with_image() -> None:
         await store.append_entry(session_id, u, leaf_id=u.id)
         prior = u.id
         a = MessageEntry(
-            id=f"a{i}", parent_id=prior, timestamp=now_iso(),
-            role="assistant", content=f"I see image {i}",
+            id=f"a{i}",
+            parent_id=prior,
+            timestamp=now_iso(),
+            role="assistant",
+            content=f"I see image {i}",
         )
         await store.append_entry(session_id, a, leaf_id=a.id)
         prior = a.id
@@ -123,15 +132,20 @@ async def test_archive_summary_pure_image_user_turns_not_silently_dropped() -> N
     prior: str | None = None
     for i in range(5):
         u = MessageEntry(
-            id=f"u{i}", parent_id=prior, timestamp=now_iso(),
+            id=f"u{i}",
+            parent_id=prior,
+            timestamp=now_iso(),
             role="user",
             content=[ImageBlock(type="image", data="b64", mime_type="image/png")],
         )
         await store.append_entry(session_id, u, leaf_id=u.id)
         prior = u.id
         a = MessageEntry(
-            id=f"a{i}", parent_id=prior, timestamp=now_iso(),
-            role="assistant", content=f"assistant {i}",
+            id=f"a{i}",
+            parent_id=prior,
+            timestamp=now_iso(),
+            role="assistant",
+            content=f"assistant {i}",
         )
         await store.append_entry(session_id, a, leaf_id=a.id)
         prior = a.id
@@ -150,14 +164,20 @@ async def test_archive_summary_truncates_long_content() -> None:
     prior: str | None = None
     for i in range(5):
         u = MessageEntry(
-            id=f"u{i}", parent_id=prior, timestamp=now_iso(),
-            role="user", content="X" * 1000,
+            id=f"u{i}",
+            parent_id=prior,
+            timestamp=now_iso(),
+            role="user",
+            content="X" * 1000,
         )
         await store.append_entry(session_id, u, leaf_id=u.id)
         prior = u.id
         a = MessageEntry(
-            id=f"a{i}", parent_id=prior, timestamp=now_iso(),
-            role="assistant", content="Y" * 1000,
+            id=f"a{i}",
+            parent_id=prior,
+            timestamp=now_iso(),
+            role="assistant",
+            content="Y" * 1000,
         )
         await store.append_entry(session_id, a, leaf_id=a.id)
         prior = a.id

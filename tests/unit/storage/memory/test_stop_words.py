@@ -8,19 +8,19 @@ from pyclaw.storage.memory.stop_words import (
 
 
 def test_stop_words_excludes_programming_keywords() -> None:
-    programming_keywords = {'if', 'for', 'in', 'is', 'as', 'or', 'not', 'do', 'go', 'no', 'be'}
+    programming_keywords = {"if", "for", "in", "is", "as", "or", "not", "do", "go", "no", "be"}
     for kw in programming_keywords:
         assert kw not in STOP_WORDS, f"programming keyword '{kw}' should NOT be in STOP_WORDS"
 
 
 def test_stop_words_contains_common_chinese_particles() -> None:
-    must_contain = {'的', '了', '是', '在', '我', '你', '他', '她', '它', '们'}
+    must_contain = {"的", "了", "是", "在", "我", "你", "他", "她", "它", "们"}
     for w in must_contain:
         assert w in STOP_WORDS, f"common Chinese particle '{w}' should be in STOP_WORDS"
 
 
 def test_stop_words_contains_common_english_articles() -> None:
-    must_contain = {'the', 'a', 'an'}
+    must_contain = {"the", "a", "an"}
     for w in must_contain:
         assert w in STOP_WORDS, f"English article '{w}' should be in STOP_WORDS"
 

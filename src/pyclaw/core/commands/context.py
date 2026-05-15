@@ -20,8 +20,8 @@ class CommandContext:
     user_id: str
     channel: str
 
-    deps: "AgentRunnerDeps"
-    session_router: "SessionRouter"
+    deps: AgentRunnerDeps
+    session_router: SessionRouter
     workspace_base: Path
 
     reply: Callable[[str], Awaitable[None]]
@@ -29,14 +29,14 @@ class CommandContext:
 
     raw: dict[str, Any]
 
-    settings: "Settings"
+    settings: Settings
 
     redis_client: Any = None
     memory_store: Any = None
     evolution_settings: Any = None
     nudge_hook: Any = None
     agent_settings: Any = None
-    registry: "CommandRegistry | None" = None
+    registry: CommandRegistry | None = None
     command_timeout: float = 30.0
     queue_registry: Any = None
     session_queue: Any = None

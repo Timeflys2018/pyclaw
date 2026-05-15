@@ -39,9 +39,7 @@ def create_memory_store(
             dimensions=embedding_settings.dimensions,
         )
         naming = (
-            HashOnlyNaming()
-            if memory_settings.naming_policy == "hash"
-            else HumanReadableNaming()
+            HashOnlyNaming() if memory_settings.naming_policy == "hash" else HumanReadableNaming()
         )
         return CompositeMemoryStore(
             l1=RedisL1Index(

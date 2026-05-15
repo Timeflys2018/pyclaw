@@ -1,0 +1,275 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+
+import pytest
+
+from pyclaw.channels.web.chat import SessionQueue
+from pyclaw.channels.web.tool_approval_hook import WebToolApprovalHook
+from pyclaw.infra.audit_logger import AuditLogger
+from pyclaw.infra.settings import WebSettings
+
+
+@pytest.fixture
+def queue() -> SessionQueue:
+    return SessionQueue()
+
+
+@pytest.fixture
+def settings() -> WebSettings:
+    return WebSettings(
+        toolsRequiringApproval=["bash", "write", "edit"],
+        toolApprovalTimeoutSeconds=10,
+    )
+
+
+@pytest.fixture
+def fast_settings() -> WebSettings:
+    return WebSettings(
+        toolsRequiringApproval=["bash", "write", "edit"],
+        toolApprovalTimeoutSeconds=1,
+    )
+
+
+@pytest.fixture
+def audit_logger() -> AuditLogger:
+    return AuditLogger()
+
+
+@pytest.fixture
+def captured(caplog: pytest.LogCaptureFixture) -> pytest.LogCaptureFixture:
+    caplog.set_level(logging.INFO, logger="pyclaw.audit.tool_approval")
+    return caplog
+
+
+def _audit_records(captured: pytest.LogCaptureFixture) -> list[dict]:
+    return [
+        json.loads(r.message) for r in captured.records if r.name == "pyclaw.audit.tool_approval"
+    ]
+
+
+class TestAutoApproveUngatedTools:
+    @pytest.mark.asyncio
+    async def test_read_tool_auto_approves_no_event_emitted(
+        self,
+        queue: SessionQueue,
+        settings: WebSettings,
+        audit_logger: AuditLogger,
+        captured: pytest.LogCaptureFixture,
+    ) -> None:
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+        decisions = await hook.before_tool_execution(
+            [{"id": "c1", "name": "read", "args": {}}],
+            session_id="s1",
+            tier="approval",
+        )
+        assert decisions == ["approve"]
+
+        rec = _audit_records(captured)
+        assert len(rec) == 1
+        assert rec[0]["decision"] == "approve"
+        assert rec[0]["decided_by"] == "auto:not-gated"
+        assert rec[0]["tool_name"] == "read"
+
+    @pytest.mark.asyncio
+    async def test_mixed_calls_only_gates_listed_tools(
+        self,
+        queue: SessionQueue,
+        settings: WebSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+
+        async def respond_later() -> None:
+            await asyncio.sleep(0.01)
+            queue.set_approval_decision("s1", "c2", True)
+
+        gate_task = asyncio.create_task(respond_later())
+        decisions = await hook.before_tool_execution(
+            [
+                {"id": "c1", "name": "read", "args": {}},
+                {"id": "c2", "name": "bash", "args": {"command": "ls"}},
+            ],
+            session_id="s1",
+            tier="approval",
+        )
+        await gate_task
+        assert decisions == ["approve", "approve"]
+
+
+class TestUserApproval:
+    @pytest.mark.asyncio
+    async def test_user_approves_returns_approve(
+        self,
+        queue: SessionQueue,
+        settings: WebSettings,
+        audit_logger: AuditLogger,
+        captured: pytest.LogCaptureFixture,
+    ) -> None:
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+
+        async def respond_later() -> None:
+            await asyncio.sleep(0.01)
+            queue.set_approval_decision("s1", "c1", True)
+
+        gate = asyncio.create_task(respond_later())
+        decisions = await hook.before_tool_execution(
+            [{"id": "c1", "name": "bash", "args": {}}],
+            session_id="s1",
+            tier="approval",
+        )
+        await gate
+
+        assert decisions == ["approve"]
+        rec = _audit_records(captured)[-1]
+        assert rec["decision"] == "approve"
+        assert rec["decided_by"] == "user"
+        assert "elapsed_ms" in rec
+
+    @pytest.mark.asyncio
+    async def test_user_denies_returns_deny(
+        self,
+        queue: SessionQueue,
+        settings: WebSettings,
+        audit_logger: AuditLogger,
+        captured: pytest.LogCaptureFixture,
+    ) -> None:
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+
+        async def respond_later() -> None:
+            await asyncio.sleep(0.01)
+            queue.set_approval_decision("s1", "c1", False)
+
+        gate = asyncio.create_task(respond_later())
+        decisions = await hook.before_tool_execution(
+            [{"id": "c1", "name": "bash", "args": {}}],
+            session_id="s1",
+            tier="approval",
+        )
+        await gate
+
+        assert decisions == ["deny"]
+        rec = _audit_records(captured)[-1]
+        assert rec["decision"] == "deny"
+        assert rec["decided_by"] == "user"
+
+
+class TestTimeout:
+    @pytest.mark.asyncio
+    async def test_timeout_returns_deny_and_logs_auto_timeout(
+        self,
+        queue: SessionQueue,
+        fast_settings: WebSettings,
+        audit_logger: AuditLogger,
+        captured: pytest.LogCaptureFixture,
+    ) -> None:
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=fast_settings,
+            audit_logger=audit_logger,
+        )
+
+        decisions = await hook.before_tool_execution(
+            [{"id": "c1", "name": "bash", "args": {}}],
+            session_id="s1",
+            tier="approval",
+        )
+
+        assert decisions == ["deny"]
+        rec = _audit_records(captured)[-1]
+        assert rec["decision"] == "deny"
+        assert rec["decided_by"] == "auto:timeout"
+        assert rec["elapsed_ms"] >= 1000
+
+    @pytest.mark.asyncio
+    async def test_timeout_cleans_up_pending_entry(
+        self,
+        queue: SessionQueue,
+        fast_settings: WebSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=fast_settings,
+            audit_logger=audit_logger,
+        )
+        await hook.before_tool_execution(
+            [{"id": "c1", "name": "bash", "args": {}}],
+            session_id="s1",
+            tier="approval",
+        )
+        assert queue._approval_pending == {}
+
+
+class TestSessionQueuePendingApi:
+    @pytest.mark.asyncio
+    async def test_set_decision_signals_event(self, queue: SessionQueue) -> None:
+        pending = queue.create_pending("s1", "c1")
+        assert not pending.event.is_set()
+        queue.set_approval_decision("s1", "c1", True)
+        assert pending.event.is_set()
+        assert pending.approved is True
+
+    @pytest.mark.asyncio
+    async def test_set_decision_without_pending_is_safe(self, queue: SessionQueue) -> None:
+        queue.set_approval_decision("s1", "c1", True)
+        assert queue.get_approval_decision("s1", "c1") is True
+
+    @pytest.mark.asyncio
+    async def test_reset_signals_outstanding_pending_with_deny(
+        self,
+        queue: SessionQueue,
+    ) -> None:
+        pending = queue.create_pending("s1", "c1")
+        queue.reset()
+        assert pending.event.is_set()
+        assert pending.approved is False
+
+    @pytest.mark.asyncio
+    async def test_discard_pending_removes_entry(self, queue: SessionQueue) -> None:
+        queue.create_pending("s1", "c1")
+        queue.discard_pending("s1", "c1")
+        assert queue._approval_pending == {}
+
+
+class TestMaybeRecordTierChange:
+    def test_first_call_returns_none(self, queue: SessionQueue) -> None:
+        assert queue.maybe_record_tier_change("c1", "approval") is None
+
+    def test_same_tier_returns_none(self, queue: SessionQueue) -> None:
+        queue.maybe_record_tier_change("c1", "approval")
+        assert queue.maybe_record_tier_change("c1", "approval") is None
+
+    def test_different_tier_returns_previous(self, queue: SessionQueue) -> None:
+        queue.maybe_record_tier_change("c1", "approval")
+        previous = queue.maybe_record_tier_change("c1", "yolo")
+        assert previous == "approval"
+
+    def test_tracks_per_conversation(self, queue: SessionQueue) -> None:
+        queue.maybe_record_tier_change("c1", "approval")
+        queue.maybe_record_tier_change("c2", "yolo")
+        assert queue.maybe_record_tier_change("c1", "yolo") == "approval"
+        assert queue.maybe_record_tier_change("c2", "yolo") is None
+
+    def test_reset_clears_tracking(self, queue: SessionQueue) -> None:
+        queue.maybe_record_tier_change("c1", "approval")
+        queue.reset()
+        assert queue.maybe_record_tier_change("c1", "yolo") is None

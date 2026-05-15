@@ -5,8 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from pyclaw.core.agent.llm import LLMClient, LLMError
-from pyclaw.core.agent.llm import LLMStreamChunk
+from pyclaw.core.agent.llm import LLMClient, LLMError, LLMStreamChunk
 from pyclaw.core.agent.tools.builtin import BashTool
 from pyclaw.core.agent.tools.registry import ToolContext, wrap_tool_with_abort
 from pyclaw.core.context_engine import DefaultContextEngine
@@ -41,9 +40,7 @@ async def test_bash_aborts_running_subprocess() -> None:
         abort.set()
 
     asyncio.create_task(_signal())
-    result = await BashTool().execute(
-        {"command": "sleep 10", "_call_id": "c1"}, ctx
-    )
+    result = await BashTool().execute({"command": "sleep 10", "_call_id": "c1"}, ctx)
     assert result.is_error
     assert "aborted" in result.content[0].text
 

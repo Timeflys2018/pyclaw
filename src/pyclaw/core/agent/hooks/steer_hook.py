@@ -14,9 +14,7 @@ from pyclaw.models import CompactResult
 
 logger = logging.getLogger(__name__)
 
-_SIDEBAR_INSTRUCTION = (
-    "(Please answer the side question(s) briefly, then return to the main task.)"
-)
+_SIDEBAR_INSTRUCTION = "(Please answer the side question(s) briefly, then return to the main task.)"
 
 _STEER_HEADER = (
     "IMPORTANT: The user has issued mid-run steering directives via /steer. "

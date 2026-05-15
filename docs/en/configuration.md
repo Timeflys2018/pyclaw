@@ -121,6 +121,8 @@ One PyClaw container plus one Redis serving tens-to-hundreds of web users:
       "heartbeatInterval": 30,
       "pongTimeout": 10,
       "maxConnectionsPerUser": 3,
+      "defaultPermissionTier": "approval",
+      "toolApprovalTimeoutSeconds": 60,
       "toolsRequiringApproval": ["bash", "write", "edit"],
       "corsOrigins": ["https://chat.example.com"],
       "users": [{ "id": "alice", "password": "$ARGON2_HASH..." }]
@@ -141,8 +143,13 @@ One PyClaw container plus one Redis serving tens-to-hundreds of web users:
   1. Render the template with `envsubst` before launch
   2. Use environment variable overrides directly (see [below](#environment-variable-overrides))
 - `web.maxConnectionsPerUser: 3` — caps concurrent WS connections per account
-- `web.toolsRequiringApproval` — listed tools prompt the user before execution;
-  write-class tools are gated by default
+- `web.defaultPermissionTier` — `"read-only" | "approval" | "yolo"` (default
+  `"approval"`). Read-only auto-denies write-class tools; approval gates the
+  list below; yolo skips the gate. See [permissions guide](./permissions.md).
+- `web.toolApprovalTimeoutSeconds` — auto-deny after this many seconds without
+  a user response (default `60`)
+- `web.toolsRequiringApproval` — listed tools prompt the user before execution
+  (default: `["bash", "write", "edit"]`); write-class tools are gated by default
 - `web.corsOrigins` — strict CORS; list real frontend origins
 
 ---
@@ -419,7 +426,9 @@ Python snake_case), type, default, and purpose.
 | `heartbeatInterval` / `heartbeat_interval` | 30 | WS heartbeat (seconds) |
 | `pongTimeout` / `pong_timeout` | 10 | pong timeout (seconds); past this, the connection is considered dead |
 | `maxConnectionsPerUser` / `max_connections_per_user` | 3 | concurrent WS cap per account |
-| `toolsRequiringApproval` / `tools_requiring_approval` | `["bash", "write"]` | tools that trigger an approval modal |
+| `defaultPermissionTier` / `default_permission_tier` | `"approval"` | Tier governing tool autonomy: `read-only` / `approval` / `yolo` |
+| `toolApprovalTimeoutSeconds` / `tool_approval_timeout_seconds` | `60` | Seconds before auto-denying a pending approval |
+| `toolsRequiringApproval` / `tools_requiring_approval` | `["bash", "write", "edit"]` | tools that trigger an approval modal in `approval` tier |
 | `allowedTools` / `allowed_tools` | `["read"]` | whitelist of tools usable on the web channel |
 | `corsOrigins` / `cors_origins` | `["http://localhost:5173"]` | strict CORS allowlist |
 | `users` | `[]` | `[{id, password}]`; plaintext (use a hash in production) |

@@ -5,7 +5,7 @@ import io
 import json
 import zipfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -21,10 +21,10 @@ from pyclaw.skills.installer import (
 )
 from pyclaw.skills.models import SkillInstallError
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_zip(files: dict[str, str]) -> bytes:
     """Create an in-memory ZIP archive from a dict of {name: content}."""
@@ -38,6 +38,7 @@ def make_zip(files: dict[str, str]) -> bytes:
 # ---------------------------------------------------------------------------
 # 1. zip-slip rejection
 # ---------------------------------------------------------------------------
+
 
 class TestValidateZipEntry:
     def test_rejects_path_traversal(self, tmp_path: Path) -> None:
@@ -90,6 +91,7 @@ class TestExtractZip:
 # 4-7. root resolution
 # ---------------------------------------------------------------------------
 
+
 class TestResolveRoot:
     def test_skill_md_at_root(self, tmp_path: Path) -> None:
         """SKILL.md directly in extract dir → return extract dir."""
@@ -121,6 +123,7 @@ class TestResolveRoot:
 # 8-10. integrity verification
 # ---------------------------------------------------------------------------
 
+
 class TestVerifyIntegrity:
     def test_hash_matches(self) -> None:
         """Correct hash → no error."""
@@ -142,6 +145,7 @@ class TestVerifyIntegrity:
 # ---------------------------------------------------------------------------
 # 11. write_origin_json
 # ---------------------------------------------------------------------------
+
 
 class TestWriteOriginJson:
     def test_writes_correct_schema(self, tmp_path: Path) -> None:
@@ -165,6 +169,7 @@ class TestWriteOriginJson:
 # ---------------------------------------------------------------------------
 # 12-14. update_lock_json
 # ---------------------------------------------------------------------------
+
 
 class TestUpdateLockJson:
     def test_creates_new_lock_file(self, tmp_path: Path) -> None:
@@ -212,6 +217,7 @@ class TestUpdateLockJson:
 # ---------------------------------------------------------------------------
 # 15. install_skill end-to-end
 # ---------------------------------------------------------------------------
+
 
 class TestInstallSkill:
     @pytest.mark.asyncio

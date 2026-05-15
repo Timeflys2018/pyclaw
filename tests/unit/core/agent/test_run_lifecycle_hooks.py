@@ -95,7 +95,9 @@ async def test_on_run_start_fires_once_with_control(tmp_path: Path) -> None:
     deps = _build_deps(llm, hook)
 
     async for _ in run_agent_stream(
-        RunRequest(session_id="s-start", workspace_id="default", agent_id="main", user_message="ping"),
+        RunRequest(
+            session_id="s-start", workspace_id="default", agent_id="main", user_message="ping"
+        ),
         deps,
         tool_workspace_path=tmp_path,
     ):
@@ -114,7 +116,9 @@ async def test_on_run_end_fires_with_done_for_normal_completion(tmp_path: Path) 
     deps = _build_deps(llm, hook)
 
     async for _ in run_agent_stream(
-        RunRequest(session_id="s-done", workspace_id="default", agent_id="main", user_message="ping"),
+        RunRequest(
+            session_id="s-done", workspace_id="default", agent_id="main", user_message="ping"
+        ),
         deps,
         tool_workspace_path=tmp_path,
     ):
@@ -130,7 +134,9 @@ async def test_on_run_end_fires_with_error_code_on_llm_failure(tmp_path: Path) -
     deps = _build_deps(llm, hook)
 
     async for _ in run_agent_stream(
-        RunRequest(session_id="s-err", workspace_id="default", agent_id="main", user_message="ping"),
+        RunRequest(
+            session_id="s-err", workspace_id="default", agent_id="main", user_message="ping"
+        ),
         deps,
         tool_workspace_path=tmp_path,
     ):
@@ -149,7 +155,9 @@ async def test_on_run_end_fires_with_aborted_when_pre_set(tmp_path: Path) -> Non
     control.stop()
 
     async for _ in run_agent_stream(
-        RunRequest(session_id="s-abort", workspace_id="default", agent_id="main", user_message="ping"),
+        RunRequest(
+            session_id="s-abort", workspace_id="default", agent_id="main", user_message="ping"
+        ),
         deps,
         tool_workspace_path=tmp_path,
         control=control,
@@ -166,7 +174,12 @@ async def test_hook_exceptions_do_not_abort_run(tmp_path: Path) -> None:
 
     events = []
     async for ev in run_agent_stream(
-        RunRequest(session_id="s-hook-explode", workspace_id="default", agent_id="main", user_message="ping"),
+        RunRequest(
+            session_id="s-hook-explode",
+            workspace_id="default",
+            agent_id="main",
+            user_message="ping",
+        ),
         deps,
         tool_workspace_path=tmp_path,
     ):
@@ -187,7 +200,9 @@ async def test_hook_does_not_modify_control_active(tmp_path: Path) -> None:
     assert control.active is False
 
     async for _ in run_agent_stream(
-        RunRequest(session_id="s-active", workspace_id="default", agent_id="main", user_message="ping"),
+        RunRequest(
+            session_id="s-active", workspace_id="default", agent_id="main", user_message="ping"
+        ),
         deps,
         tool_workspace_path=tmp_path,
         control=control,
@@ -220,7 +235,9 @@ async def test_legacy_hook_without_lifecycle_methods_is_skipped(tmp_path: Path) 
 
     events = []
     async for ev in run_agent_stream(
-        RunRequest(session_id="s-legacy", workspace_id="default", agent_id="main", user_message="ping"),
+        RunRequest(
+            session_id="s-legacy", workspace_id="default", agent_id="main", user_message="ping"
+        ),
         deps,
         tool_workspace_path=tmp_path,
     ):

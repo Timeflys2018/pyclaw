@@ -1,5 +1,9 @@
 """Skill Hub compatibility - ClawHub client, SKILL.md parsing, discovery."""
 
+from pyclaw.skills.clawhub_client import ClawHubClient, create_client
+from pyclaw.skills.discovery import discover_skills
+from pyclaw.skills.eligibility import filter_eligible, is_eligible
+from pyclaw.skills.installer import install_skill, update_lock_json, write_origin_json
 from pyclaw.skills.models import (
     ClawHubError,
     InstallSpec,
@@ -9,11 +13,7 @@ from pyclaw.skills.models import (
     SkillRequirements,
 )
 from pyclaw.skills.parser import parse_skill_file
-from pyclaw.skills.discovery import discover_skills
-from pyclaw.skills.eligibility import filter_eligible, is_eligible
-from pyclaw.skills.prompt import build_skills_prompt, format_skills_full, format_skills_compact
-from pyclaw.skills.clawhub_client import ClawHubClient, create_client
-from pyclaw.skills.installer import install_skill, write_origin_json, update_lock_json
+from pyclaw.skills.prompt import build_skills_prompt, format_skills_compact, format_skills_full
 
 __all__ = [
     "ClawHubClient",

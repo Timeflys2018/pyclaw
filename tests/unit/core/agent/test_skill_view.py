@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from pyclaw.core.agent.tools.registry import ToolContext
 from pyclaw.core.agent.tools.skill_view import SkillViewTool
 
