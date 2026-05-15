@@ -54,11 +54,12 @@ export default function Chat() {
 
   const currentMessages = activeConvId ? messagesByConv[activeConvId] ?? [] : []
 
+  const handleSelectSessionRef = useRef<(id: string) => void>(() => {})
   useEffect(() => {
     if (conversations.length > 0 && !activeConvId) {
-      setActiveConvId(conversations[0].id)
+      handleSelectSessionRef.current(conversations[0].id)
     }
-  }, [conversations, activeConvId, setActiveConvId])
+  }, [conversations, activeConvId])
 
   const handleSend = useCallback(
     async (text: string) => {
@@ -183,6 +184,10 @@ export default function Chat() {
     handleNewSessionRef.current = handleNewSession
   }, [handleNewSession])
 
+  useEffect(() => {
+    handleSelectSessionRef.current = handleSelectSession
+  }, [handleSelectSession])
+
   const handlePaletteSelect = useCallback(
     (selection: PaletteSelection) => {
       if (selection.kind === 'session') {
@@ -254,7 +259,7 @@ export default function Chat() {
 
   return (
     <div className="h-screen flex flex-col bg-[var(--c-bg)] text-[var(--c-text)]">
-      <header className="flex items-center justify-between h-13 px-4 border-b border-[var(--c-border)] shrink-0 bg-[var(--c-bg)]">
+      <header className="flex items-center justify-between h-13 px-4 shrink-0 bg-[var(--c-bg)]">
         <div className="flex items-center gap-2">
           <span className="text-sm font-display font-semibold tracking-tight">🐾 PyClaw</span>
           {wsIndicator}

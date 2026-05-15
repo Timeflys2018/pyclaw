@@ -228,7 +228,7 @@ export default function ChatArea({
         </button>
       )}
 
-      <div className="shrink-0 border-t border-[var(--c-border)] px-4 py-3 md:px-8 bg-[var(--c-bg)]">
+      <div className="shrink-0 px-4 py-3 md:px-8 bg-[var(--c-bg)]">
         <div className="max-w-3xl mx-auto w-full">
           {isStreaming && (
             <button
