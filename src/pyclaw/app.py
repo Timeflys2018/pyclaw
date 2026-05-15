@@ -369,6 +369,7 @@ async def get_session_store(request: Request) -> SessionStore:
 
 
 def create_app() -> FastAPI:
+    _install_access_log_filter()
     settings = load_settings()
     app = FastAPI(title="PyClaw", version="0.1.0", lifespan=_lifespan)
 
@@ -431,13 +432,22 @@ def _install_access_log_filter() -> None:
 
     HTTP API + WebSocket requests still log; everything served from
     `web/dist/` is hidden so the dev console reflects backend activity only.
+    Idempotent via duck-typing: safe to call from multiple entry points
+    (main() and create_app()) and across uvicorn --reload reimports.
     """
     import logging
     import re
 
+    access_logger = logging.getLogger("uvicorn.access")
+    for existing in access_logger.filters:
+        if getattr(existing, "_pyclaw_static_filter", False):
+            return
+
     silent = re.compile(r' "(GET|HEAD) /(assets/|favicon\.|@vite/|@react-refresh|src/)')
 
     class _DropStaticAssets(logging.Filter):
+        _pyclaw_static_filter = True
+
         def filter(self, record: logging.LogRecord) -> bool:
             try:
                 msg = record.getMessage()
@@ -445,7 +455,7 @@ def _install_access_log_filter() -> None:
                 return True
             return silent.search(msg) is None
 
-    logging.getLogger("uvicorn.access").addFilter(_DropStaticAssets())
+    access_logger.addFilter(_DropStaticAssets())
 
 
 def main() -> None:
