@@ -5,6 +5,7 @@ import { useSessionStore } from '../stores/session'
 import { useApprovalStore } from '../stores/approval'
 import type {
   Message,
+  MessageMetadata,
   ToolCallInfo,
   WSClientMessage,
   WSServerMessage,
@@ -28,6 +29,7 @@ export function useChatSocket(token: string | null): UseChatSocketResult {
   const failedReconnectsRef = useRef(0)
   const failedReconnectsTickRef = useRef(0)
   const lastWsStateRef = useRef<WSState>('disconnected')
+  const streamStartRef = useRef<number | null>(null)
 
   useEffect(() => {
     setConvList(conversations)
@@ -63,6 +65,9 @@ export function useChatSocket(token: string | null): UseChatSocketResult {
 
     switch (msg.type) {
       case 'chat.delta':
+        if (streamStartRef.current === null) {
+          streamStartRef.current = Date.now()
+        }
         chat.appendDelta(msg.data.text)
         break
 
@@ -82,6 +87,10 @@ export function useChatSocket(token: string | null): UseChatSocketResult {
         break
 
       case 'chat.done': {
+        const startedAt = streamStartRef.current
+        streamStartRef.current = null
+        const metadata = buildMetadata(startedAt, msg.data)
+
         if (convId) {
           const aborted = msg.data.aborted === true
           const finalMessage = msg.data.final_message
@@ -99,6 +108,7 @@ export function useChatSocket(token: string | null): UseChatSocketResult {
               content: partial,
               timestamp: Date.now(),
               toolCalls: pendingTools.length > 0 ? pendingTools : undefined,
+              metadata,
             }
             chat.appendMessage(convId, partialMsg)
           } else if (finalText.trim().length > 0) {
@@ -108,6 +118,7 @@ export function useChatSocket(token: string | null): UseChatSocketResult {
               content: finalText,
               timestamp: Date.now(),
               toolCalls: pendingTools.length > 0 ? pendingTools : undefined,
+              metadata,
             }
             chat.appendMessage(convId, finalMsg)
           }
@@ -135,6 +146,7 @@ export function useChatSocket(token: string | null): UseChatSocketResult {
         break
 
       case 'error': {
+        streamStartRef.current = null
         if (convId) {
           const partial = chat.getStreamingText()
           const pendingTools = chat.takePendingToolCalls()
@@ -150,8 +162,8 @@ export function useChatSocket(token: string | null): UseChatSocketResult {
           }
           const errMsg: Message = {
             id: `err_${Date.now()}`,
-            role: 'assistant',
-            content: `⚠️ ${msg.data.message || 'Internal error'}`,
+            role: 'error',
+            content: msg.data.message || 'Internal error',
             timestamp: Date.now(),
           }
           chat.appendMessage(convId, errMsg)
@@ -195,3 +207,31 @@ export function useChatSocket(token: string | null): UseChatSocketResult {
 }
 
 export { FAILED_RECONNECTS_BEFORE_BANNER }
+
+function buildMetadata(
+  startedAt: number | null,
+  data: { usage?: { input?: number; output?: number; cache_read?: number }; model?: string },
+): MessageMetadata | undefined {
+  const meta: MessageMetadata = {}
+  if (startedAt !== null) {
+    meta.durationMs = Math.max(0, Date.now() - startedAt)
+  }
+  if (data.usage) {
+    meta.usage = {
+      input: data.usage.input,
+      output: data.usage.output,
+      cacheRead: data.usage.cache_read,
+    }
+  }
+  if (data.model) {
+    meta.model = data.model
+  }
+  if (
+    meta.durationMs === undefined &&
+    meta.usage === undefined &&
+    meta.model === undefined
+  ) {
+    return undefined
+  }
+  return meta
+}

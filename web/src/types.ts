@@ -2,10 +2,11 @@
 
 export interface Message {
   id: string
-  role: 'user' | 'assistant' | 'system'
+  role: 'user' | 'assistant' | 'system' | 'error'
   content: string
   timestamp: number
   toolCalls?: ToolCallInfo[]
+  metadata?: MessageMetadata
 }
 
 export interface ToolCallInfo {
@@ -14,6 +15,16 @@ export interface ToolCallInfo {
   args: Record<string, unknown>
   result?: string
   status: 'running' | 'done' | 'error'
+}
+
+export interface MessageMetadata {
+  durationMs?: number
+  usage?: {
+    input?: number
+    output?: number
+    cacheRead?: number
+  }
+  model?: string
 }
 
 export interface Conversation {
@@ -98,7 +109,12 @@ export interface WSServerChatToolEnd {
 export interface WSServerChatDone {
   type: 'chat.done'
   conversation_id: string
-  data: { final_message: Message; aborted?: boolean }
+  data: {
+    final_message: Message | string
+    aborted?: boolean
+    usage?: { input?: number; output?: number; cache_read?: number }
+    model?: string
+  }
 }
 
 export interface WSServerChatQueued {

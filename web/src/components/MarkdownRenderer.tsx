@@ -1,21 +1,13 @@
-import { type FC, memo, useState, useCallback } from 'react'
+import { type FC, memo } from 'react'
 import Markdown, { type Components, type ExtraProps } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Copy, Check } from 'lucide-react'
+import HighlightedCodeBlock from './HighlightedCodeBlock'
 
 type CodeProps = React.HTMLAttributes<HTMLElement> & ExtraProps
 
 function CodeBlock({ children, className, node, ...props }: CodeProps) {
-  const [copied, setCopied] = useState(false)
   const match = /language-(\w+)/.exec(className || '')
   const isInline = !match && node?.position?.start.line === node?.position?.end.line
-
-  const handleCopy = useCallback(async () => {
-    const text = String(children).replace(/\n$/, '')
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }, [children])
 
   if (isInline) {
     return (
@@ -28,39 +20,9 @@ function CodeBlock({ children, className, node, ...props }: CodeProps) {
     )
   }
 
-  const language = match?.[1] ?? ''
-
-  return (
-    <div className="relative group my-3 rounded-lg overflow-hidden bg-[var(--c-code-bg)] border border-[var(--c-border)]">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--c-border)]">
-        <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--c-text-secondary)]">
-          {language || 'code'}
-        </span>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1 text-[10px] text-[var(--c-text-secondary)] hover:text-[var(--c-text)]
-                     transition-colors cursor-pointer"
-        >
-          {copied ? (
-            <>
-              <Check size={12} />
-              <span>Copied!</span>
-            </>
-          ) : (
-            <>
-              <Copy size={12} />
-              <span>Copy</span>
-            </>
-          )}
-        </button>
-      </div>
-      <pre className="overflow-x-auto p-3 text-xs leading-relaxed">
-        <code className={className} {...props}>
-          {children}
-        </code>
-      </pre>
-    </div>
-  )
+  const language = match?.[1] ?? null
+  const code = String(children).replace(/\n$/, '')
+  return <HighlightedCodeBlock code={code} rawLang={language} />
 }
 
 const components: Components = {

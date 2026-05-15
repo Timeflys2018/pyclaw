@@ -1,32 +1,57 @@
 import type { Message } from '../types'
-import ToolCallCard from './ToolCall'
 import MarkdownRenderer from './MarkdownRenderer'
+import ExecutionTrace from './ExecutionTrace'
+import SystemMessage from './SystemMessage'
+import ErrorBubble from './ErrorBubble'
 
 interface Props {
   message: Message
   isStreaming?: boolean
+  onRetry?: () => void
 }
 
 function renderPlainText(text: string) {
-  return text.split('\n').map((line, i) => (
+  const lines = text.split('\n')
+  return lines.map((line, i) => (
     <span key={i}>
       {line}
-      {i < text.split('\n').length - 1 && <br />}
+      {i < lines.length - 1 && <br />}
     </span>
   ))
 }
 
-export default function MessageBubble({ message, isStreaming }: Props) {
+export default function MessageBubble({ message, isStreaming, onRetry }: Props) {
+  if (message.role === 'system') {
+    return <SystemMessage message={message} />
+  }
+
+  if (message.role === 'error') {
+    return <ErrorBubble message={message} onRetry={onRetry} />
+  }
+
   const isUser = message.role === 'user'
+  const hasTrace =
+    !isUser &&
+    ((message.toolCalls?.length ?? 0) > 0 ||
+      message.metadata !== undefined ||
+      isStreaming === true)
 
   return (
     <div className={`flex w-full mb-6 ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[80%] ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`max-w-[80%] ${isUser ? 'items-end' : 'items-start'} min-w-0`}>
         <div className={`flex items-center gap-2 mb-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
           <span className="text-xs font-medium text-[var(--c-text-secondary)] uppercase tracking-wide">
             {isUser ? 'You' : '🐾 PyClaw'}
           </span>
         </div>
+
+        {hasTrace && (
+          <ExecutionTrace
+            toolCalls={message.toolCalls}
+            metadata={message.metadata}
+            isStreaming={isStreaming}
+          />
+        )}
 
         <div
           className={
@@ -42,10 +67,6 @@ export default function MessageBubble({ message, isStreaming }: Props) {
           ) : (
             <MarkdownRenderer content={message.content} className="break-words [&_code]:font-mono" />
           )}
-
-          {message.toolCalls?.map((tc) => (
-            <ToolCallCard key={tc.id} tool={tc} />
-          ))}
 
           {isStreaming && (
             <span className="inline-block w-1.5 h-4 bg-[var(--c-text)] opacity-70 animate-pulse ml-0.5 -mb-0.5 rounded-sm" />
