@@ -117,8 +117,8 @@
 |------|-------------|--------|
 | §11.2 | Worker identity + health registry | 1 day |
 | §11.5 | Session affinity gateway (Redis registry + PubSub) | 2 days |
-| §12.5 | Configuration reference documentation | half day |
-| §12.6 | Deployment guide (Docker Compose multi-instance) | half day |
+| §12.5 ✅ | Configuration reference documentation ([configuration.md](./configuration.md)) | half day |
+| §12.6 ✅ | Deployment guide ([deployment.md](./deployment.md) + [deploy/docker-compose.multi.yml](../../deploy/docker-compose.multi.yml)) | half day |
 | §2.4 | File-based lock fallback (dev convenience) | half day |
 | §3.3 | File session store (zero-dependency mode) | 1 day |
 
