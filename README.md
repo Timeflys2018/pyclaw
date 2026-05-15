@@ -31,6 +31,7 @@ OpenClaw is a powerful multi-channel AI assistant — but its TypeScript monolit
 - 🪝 **Hooks-Driven Architecture** — Memory injection, working memory, nudges, tool approval — all built as pluggable hooks. Add your own without touching core.
 - ☁️ **Compute-Storage Separation** — Stateless workers behind any load balancer. Sessions in Redis, memory in SQLite/Redis, embeddings via litellm.
 - 🌐 **Multi-Channel** — Feishu (Lark) WebSocket cluster + Web channel with React SPA + OpenAI-compatible `/v1/chat/completions` SSE.
+- 🚦 **Session Affinity Gateway** — Active-active multi-worker scaling via Redis-backed affinity routing + PubSub forwarding. Same session always handled by the same worker, regardless of how Feishu/LB dispatches messages. Failover via TTL + PUBLISH-subscriber-count detection.
 - 🇨🇳 **Built for Chinese** — FTS5 + jieba tokenizer for Chinese full-text memory search. Stop words. Auto-migration from trigram.
 - 🎯 **Prompt Budget Engineering** — Frozen prefix (cacheable) + per-turn suffix (dynamic). Priority-based truncation. 90%+ prompt cache hit rate.
 
@@ -225,8 +226,8 @@ graph TB
 | **Prompt Engineering** | ✅ | `PromptBudgetConfig`, frozen prefix caching, priority truncation |
 | **TaskManager** | ✅ | Centralized async lifecycle, K8s-grade graceful shutdown |
 | **Self-Evolution** | ✅ | SOP extraction + Curator lifecycle (30d/90d) + ForgetTool + CLI audit |
+| **Session Affinity Gateway** | ✅ | Active-active multi-worker scaling, Redis affinity + PubSub forwarding, failover via PUBLISH-0 fallback |
 | **Dreaming Engine** | 🔲 | Planned: Light/Deep/REM memory consolidation |
-| **Session Affinity Gateway** | 🔲 | Planned: multi-instance message routing |
 
 **Test stats:** 1047 unit/integration tests + 10 real-LLM E2E tests · ~11K lines Python · 105 source files
 
@@ -294,12 +295,32 @@ curl http://localhost:8000/v1/chat/completions \
 # docker-compose.yml
 services:
   pyclaw:
-    deploy: { replicas: 3 }      # 3 stateless workers
+    deploy: { replicas: 3 }       # 3 active-active workers
+    environment:
+      PYCLAW_AFFINITY_ENABLED: "true"
   redis:
-    image: redis:7-alpine        # Shared state
+    image: redis:7-alpine         # Shared state + affinity registry
+  nginx:
+    image: nginx:alpine           # ip_hash + reverse proxy
+    volumes: [./deploy/nginx.conf:/etc/nginx/conf.d/default.conf]
+    ports: ["80:80"]
 ```
 
-Feishu native cluster mode handles message routing across replicas — no sticky sessions needed.
+**Two-layer stickiness for resilience**:
+- **Layer 1 — Nginx `ip_hash`**: Routes same client IP to same worker (reduces forwarding overhead)
+- **Layer 2 — Session Affinity Gateway**: Redis-backed `session_key → worker_id` mapping ensures the same session is always handled by the same worker, regardless of how Nginx (or Feishu cluster mode) dispatches messages. Cross-worker forwarding via Redis PubSub when needed; failover via TTL expiry + `force_claim` on PUBLISH-0.
+
+**Local dev with reverse proxy** (single entry point at `localhost:9000` → 3 workers on `8000/8001/8002`):
+
+```bash
+make worker1     # terminal 1: PORT=8000
+make worker2     # terminal 2: PORT=8001
+make worker3     # terminal 3: PORT=8002
+make nginx-start # reverse proxy on :9000
+make affinity-status   # snapshot Redis state (anytime)
+```
+
+See [`make help`](./Makefile) for all dev shortcuts and [`reports/affinity-gateway-smoke-2026-05-15.md`](./reports/affinity-gateway-smoke-2026-05-15.md) for the full smoke test report.
 
 ---
 
@@ -464,10 +485,10 @@ Chinese docs: [docs/zh/](./docs/zh/)
 - ✅ Skill Hub — ClawHub SKILL.md parsing, progressive disclosure
 - ✅ TaskManager — centralized async task lifecycle
 - ✅ Self-Evolution — SOP extraction + Curator lifecycle + ForgetTool
+- ✅ **Session Affinity Gateway** — Active-active multi-worker via Redis affinity + PubSub forwarding (smoke-verified 2026-05-14)
 - 🔲 **Skill Graduation** — High-frequency SOPs → SKILL.md (progressive disclosure)
 - 🔲 **Dreaming Engine** — Light/Deep/REM memory consolidation (extract → cluster → graph)
-- 🔲 **Session Affinity Gateway** — multi-instance message routing
-- 🔲 **PostgreSQL+pgvector** — production-grade memory backend
+- 🔲 **PostgreSQL+pgvector** — production-grade memory backend (multi-pod K8s deployment)
 
 See [`openspec/`](./openspec/) for active changes and architectural specs.
 
