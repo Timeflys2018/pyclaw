@@ -154,7 +154,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 user_id, exc_info=True,
             )
     else:
-        logger.info("web WS connected but gateway_router is None (affinity disabled)")
+        logger.debug("web WS connected; affinity gateway disabled (single-worker mode)")
 
     task_manager = _get_task_manager(websocket)
     heartbeat_task_id = task_manager.spawn(

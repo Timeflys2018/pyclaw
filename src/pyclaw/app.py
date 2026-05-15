@@ -426,12 +426,35 @@ def create_app() -> FastAPI:
     return app
 
 
+def _install_access_log_filter() -> None:
+    """Filter uvicorn's access log to drop noisy paths (static assets, favicon).
+
+    HTTP API + WebSocket requests still log; everything served from
+    `web/dist/` is hidden so the dev console reflects backend activity only.
+    """
+    import logging
+    import re
+
+    silent = re.compile(r' "(GET|HEAD) /(assets/|favicon\.|@vite/|@react-refresh|src/)')
+
+    class _DropStaticAssets(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            try:
+                msg = record.getMessage()
+            except Exception:
+                return True
+            return silent.search(msg) is None
+
+    logging.getLogger("uvicorn.access").addFilter(_DropStaticAssets())
+
+
 def main() -> None:
     import uvicorn
 
     settings = load_settings()
     port = int(os.environ.get("PORT", settings.server.port))
     host = os.environ.get("HOST", settings.server.host)
+    _install_access_log_filter()
     uvicorn.run("pyclaw.app:create_app", factory=True, host=host, port=port, reload=True)
 
 

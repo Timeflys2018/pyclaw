@@ -27,4 +27,4 @@ else
 fi
 
 echo "🐾 Starting PyClaw on http://localhost:8000"
-exec .venv/bin/uvicorn pyclaw.app:create_app --factory --host 0.0.0.0 --port 8000 --reload
+exec .venv/bin/python -m pyclaw.app
