@@ -73,6 +73,7 @@ export default function ChatArea({
 
   const scrollerRef = useRef<HTMLDivElement>(null)
   const scrollFrameRef = useRef<number | null>(null)
+  const programmaticScrollUntilRef = useRef(0)
 
   const items = useMemo<Message[]>(() => {
     if (!streamingText) return messages
@@ -93,16 +94,19 @@ export default function ChatArea({
     getItemKey: (index) => items[index]?.id ?? index,
   })
 
-  useEffect(() => {
-    if (items.length === 0) return
-    virtualizer.measure()
-  }, [items.length, virtualizer])
-
   const scrollToBottomNow = useCallback(() => {
     const el = scrollerRef.current
     if (!el) return
+    // Programmatic scroll lands two render cycles later because the
+    // virtualizer first paints with estimateSize and then re-measures via
+    // measureElement. We mark a quiet window so handleScroll ignores the
+    // intermediate onScroll events and does not flip stickToBottom off.
+    programmaticScrollUntilRef.current = performance.now() + 350
     el.scrollTop = el.scrollHeight
-  }, [])
+    if (items.length > 0) {
+      virtualizer.scrollToIndex(items.length - 1, { align: 'end' })
+    }
+  }, [items.length, virtualizer])
 
   useLayoutEffect(() => {
     if (!stickToBottom) return
@@ -110,6 +114,9 @@ export default function ChatArea({
     scrollFrameRef.current = requestAnimationFrame(() => {
       scrollFrameRef.current = null
       scrollToBottomNow()
+      // Schedule a second pass after the virtualizer's measureElement
+      // pass settles real heights, so scrollHeight reflects actual content.
+      requestAnimationFrame(() => scrollToBottomNow())
     })
     return () => {
       if (scrollFrameRef.current !== null) {
@@ -120,6 +127,7 @@ export default function ChatArea({
   }, [items.length, streamingText, stickToBottom, scrollToBottomNow])
 
   const handleScroll = useCallback(() => {
+    if (performance.now() < programmaticScrollUntilRef.current) return
     const el = scrollerRef.current
     if (!el) return
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
@@ -133,7 +141,8 @@ export default function ChatArea({
     onSend(trimmed)
     setInput('')
     setStickToBottom(true)
-  }, [input, isStreaming, onSend])
+    requestAnimationFrame(() => scrollToBottomNow())
+  }, [input, isStreaming, onSend, scrollToBottomNow])
 
   const handleJumpToLatest = useCallback(() => {
     setStickToBottom(true)
