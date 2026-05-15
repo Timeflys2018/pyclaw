@@ -21,6 +21,7 @@ interface Props {
   isQueued: boolean
   queuePosition: number
   isLoadingHistory?: boolean
+  prefillInput?: { text: string; nonce: number } | null
   onSend: (text: string) => void
   onAbort: () => void
   onRetryMessage?: (messageId: string) => void
@@ -36,6 +37,7 @@ export default function ChatArea({
   isQueued,
   queuePosition,
   isLoadingHistory,
+  prefillInput,
   onSend,
   onAbort,
   onRetryMessage,
@@ -44,8 +46,7 @@ export default function ChatArea({
   const [stickToBottom, setStickToBottom] = useState(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const handlePickSuggestion = useCallback((prompt: string) => {
-    setInput(prompt)
+  const focusInputAtEnd = useCallback(() => {
     requestAnimationFrame(() => {
       const el = textareaRef.current
       if (el) {
@@ -55,6 +56,20 @@ export default function ChatArea({
       }
     })
   }, [])
+
+  const handlePickSuggestion = useCallback(
+    (prompt: string) => {
+      setInput(prompt)
+      focusInputAtEnd()
+    },
+    [focusInputAtEnd],
+  )
+
+  useEffect(() => {
+    if (!prefillInput) return
+    setInput(prefillInput.text)
+    focusInputAtEnd()
+  }, [prefillInput, focusInputAtEnd])
 
   const scrollerRef = useRef<HTMLDivElement>(null)
   const scrollFrameRef = useRef<number | null>(null)

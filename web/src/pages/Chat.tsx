@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogOut, Wifi, WifiOff } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useChatSocket, FAILED_RECONNECTS_BEFORE_BANNER } from '../hooks/useChatSocket'
 import { useSessionLoader } from '../hooks/useSessionLoader'
+import { useGlobalKeyboard, type ShortcutBinding } from '../hooks/useGlobalKeyboard'
 import {
   useChatStore,
   useSessionStore,
@@ -14,6 +15,8 @@ import ChatArea from '../components/ChatArea'
 import ThemeToggle from '../components/ThemeToggle'
 import ToolApprovalModal from '../components/ToolApproval'
 import ErrorBanner from '../components/ErrorBanner'
+import CommandPalette, { type PaletteSelection } from '../components/CommandPalette'
+import ShortcutsModal from '../components/ShortcutsModal'
 import type { Message } from '../types'
 
 export default function Chat() {
@@ -22,6 +25,11 @@ export default function Chat() {
   const { loadMessagesFor } = useSessionLoader(token, wsState)
   const [loadingHistoryFor, setLoadingHistoryFor] = useState<string | null>(null)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [pendingInputPrefill, setPendingInputPrefill] = useState<{ text: string; nonce: number } | null>(null)
+  const handleNewSessionRef = useRef<() => void>(() => {})
+  const toggleThemeFn = useUiStore((s) => s.toggleTheme)
 
   const messagesByConv = useChatStore((s) => s.messagesByConv)
   const streamingText = useChatStore((s) => s.streamingText)
@@ -171,6 +179,72 @@ export default function Chat() {
     [clearPendingApproval, pendingApproval, send],
   )
 
+  useEffect(() => {
+    handleNewSessionRef.current = handleNewSession
+  }, [handleNewSession])
+
+  const handlePaletteSelect = useCallback(
+    (selection: PaletteSelection) => {
+      if (selection.kind === 'session') {
+        void handleSelectSession(selection.sessionId)
+        return
+      }
+      if (selection.kind === 'slash') {
+        setPendingInputPrefill({ text: `${selection.command} `, nonce: Date.now() })
+        return
+      }
+      switch (selection.action.kind) {
+        case 'new-session':
+          handleNewSessionRef.current()
+          break
+        case 'toggle-theme':
+          toggleThemeFn()
+          break
+        case 'toggle-sidebar':
+          toggleSidebar()
+          break
+        case 'show-shortcuts':
+          setShortcutsOpen(true)
+          break
+      }
+    },
+    [handleSelectSession, toggleSidebar, toggleThemeFn],
+  )
+
+  const shortcutBindings = useMemo<ShortcutBinding[]>(
+    () => [
+      {
+        modifier: 'mod',
+        key: 'k',
+        handler: () => {
+          setShortcutsOpen(false)
+          setCommandPaletteOpen(true)
+        },
+      },
+      {
+        modifier: 'mod',
+        key: 'n',
+        handler: () => handleNewSessionRef.current(),
+      },
+      {
+        modifier: 'mod',
+        key: '\\',
+        handler: () => toggleSidebar(),
+      },
+      {
+        modifier: 'mod',
+        key: '/',
+        handler: () => {
+          setCommandPaletteOpen(false)
+          setShortcutsOpen(true)
+        },
+      },
+    ],
+    [toggleSidebar],
+  )
+
+  useGlobalKeyboard(shortcutBindings)
+
   const wsIndicator =
     wsState === 'ready' ? (
       <Wifi size={14} className="text-[var(--c-success)]" />
@@ -225,6 +299,7 @@ export default function Chat() {
           isQueued={isQueued}
           queuePosition={queuePosition}
           isLoadingHistory={loadingHistoryFor === activeConvId}
+          prefillInput={pendingInputPrefill}
           onSend={handleSend}
           onAbort={handleAbort}
           onRetryMessage={handleRetryMessage}
@@ -238,6 +313,16 @@ export default function Chat() {
           onReject={() => handleApproval(false)}
         />
       )}
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        conversations={conversations}
+        theme={theme}
+        onClose={() => setCommandPaletteOpen(false)}
+        onSelect={handlePaletteSelect}
+      />
+
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   )
 }
