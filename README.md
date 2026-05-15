@@ -60,7 +60,7 @@ python3.12 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 open http://localhost:8000        # Login (default: admin / changeme)
 ```
 
-Web channel ships with: streaming chat, tool approval UI, OpenAI-compatible API for third-party clients.
+Web channel ships with: streaming chat with inline execution trace (tool calls + memory hits + token usage), multimodal input (paste / drop / attach images), `⌘K` command palette, keyboard shortcuts, session rename + delete, dual-theme (light/dark), tool approval modal, OpenAI-compatible API for third-party clients.
 
 ### As a Library
 
@@ -221,7 +221,7 @@ graph TB
 | **Context Engine** | ✅ | Frozen/per-turn split, memory search, L1 snapshot, prompt budget |
 | **Session Store** | ✅ | Redis (production) + InMemory (dev), SessionKey/SessionId rotation, DAG tree |
 | **Feishu Channel** | ✅ | WebSocket cluster (50 workers), CardKit streaming, slash commands |
-| **Web Channel** | ✅ | Multiplexed WebSocket, JWT auth, OpenAI-compat SSE, React SPA, tool approval |
+| **Web Channel** | ✅ | React 19 SPA · Linear/Cursor visual · execution trace · multimodal · ⌘K palette · keyboard shortcuts · session CRUD · OpenAI-compat SSE · JWT auth · tool approval |
 | **Skill Hub** | ✅ | ClawHub-compatible, progressive disclosure, 5-layer discovery, `pyclaw-skill` CLI |
 | **Prompt Engineering** | ✅ | `PromptBudgetConfig`, frozen prefix caching, priority truncation |
 | **TaskManager** | ✅ | Centralized async lifecycle, K8s-grade graceful shutdown |
@@ -229,7 +229,7 @@ graph TB
 | **Session Affinity Gateway** | ✅ | Active-active multi-worker scaling, Redis affinity + PubSub forwarding, failover via PUBLISH-0 fallback |
 | **Dreaming Engine** | 🔲 | Planned: Light/Deep/REM memory consolidation |
 
-**Test stats:** 1047 unit/integration tests + 10 real-LLM E2E tests · ~11K lines Python · 105 source files
+**Test stats:** 1939 unit/integration tests + 10 real-LLM E2E tests · ~11K lines Python · 105 source files
 
 ---
 
@@ -341,41 +341,13 @@ Series codes: **A** (project) · **B** (competitive) · **C** (context) · **D**
 
 ---
 
-## ⚙️ Configuration
+## ⚙️ Configuration & Deployment
 
-```json
-{
-  "server": { "host": "0.0.0.0", "port": 8000 },
-  "storage": { "session_backend": "redis" },
-  "redis": { "host": "localhost", "port": 6379 },
-  "memory": {
-    "enabled": true,
-    "base_dir": "~/.pyclaw/memory",
-    "fts_tokenizer": "jieba",
-    "l1_max_entries": 30,
-    "l1_ttl_days": 30
-  },
-  "embedding": {
-    "model": "text-embedding-3-small",
-    "api_key": "sk-..."
-  },
-  "agent": {
-    "default_model": "anthropic/claude-sonnet-4-20250514",
-    "providers": { "anthropic": { "apiKey": "sk-...", "baseURL": "..." } },
-    "prompt_budget": {
-      "system_zone_tokens": 12000,
-      "dynamic_zone_tokens": 4000,
-      "output_reserve_ratio": 0.15
-    }
-  },
-  "channels": {
-    "feishu": { "enabled": true, "appId": "cli_...", "appSecret": "..." },
-    "web": { "enabled": true, "jwtSecret": "change-me" }
-  }
-}
-```
+PyClaw is configured via a single `pyclaw.json` discovered in `./pyclaw.json`, `configs/pyclaw.json`, or `~/.openclaw/pyclaw.json`. Five common scenarios are documented in the configuration reference: local dev, single-instance production, multi-instance active-active, Feishu bot, memory + self-evolution.
 
-See [`configs/pyclaw.example.json`](./configs/pyclaw.example.json) for all options.
+- **[Configuration reference (EN)](./docs/en/configuration.md)** · **[配置参考 (中文)](./docs/zh/configuration.md)** — every Settings field, env-var override map, scenario-driven examples
+- **[Deployment guide (EN)](./docs/en/deployment.md)** · **[部署指南 (中文)](./docs/zh/deployment.md)** — local dev, single Docker, 3-worker active-active with [`deploy/docker-compose.multi.yml`](./deploy/docker-compose.multi.yml), no-Docker `make worker[1-3]`
+- **[`configs/pyclaw.example.json`](./configs/pyclaw.example.json)** — complete runnable template (167 lines)
 
 ---
 
@@ -467,6 +439,13 @@ See [D26: User Isolation Model](./docs/en/architecture-decisions.md#d26-user-iso
 
 ## 📖 Documentation
 
+**Getting started & operations**
+
+- [Configuration reference](./docs/en/configuration.md) — every Settings field, scenario-driven
+- [Deployment guide](./docs/en/deployment.md) — local dev / single Docker / multi-instance active-active
+
+**Architecture & design**
+
 - [Architecture Decisions (D1–D26)](./docs/en/architecture-decisions.md) — all design choices and rationale
 - [Session System Design](./docs/en/session-design.md) — SessionKey/SessionId, commands, idle reset
 - [Context Engine](./docs/en/context-engine.md) — assemble/ingest/compact Protocol
@@ -486,6 +465,7 @@ Chinese docs: [docs/zh/](./docs/zh/)
 - ✅ TaskManager — centralized async task lifecycle
 - ✅ Self-Evolution — SOP extraction + Curator lifecycle + ForgetTool
 - ✅ **Session Affinity Gateway** — Active-active multi-worker via Redis affinity + PubSub forwarding (smoke-verified 2026-05-14)
+- ✅ **Web UI MVP** — Linear/Cursor visual refactor: Zustand state + virtualized message list + inline execution trace + Shiki code highlighting + multimodal (image paste/drop) + ⌘K command palette + global shortcuts + session CRUD (shipped 2026-05-15, see [report](./reports/optimize-web-ui-mvp-ship-2026-05-15.md))
 - 🔲 **Skill Graduation** — High-frequency SOPs → SKILL.md (progressive disclosure)
 - 🔲 **Dreaming Engine** — Light/Deep/REM memory consolidation (extract → cluster → graph)
 - 🔲 **PostgreSQL+pgvector** — production-grade memory backend (multi-pod K8s deployment)
