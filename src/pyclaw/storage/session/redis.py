@@ -191,6 +191,29 @@ class RedisSessionStore:
             ))
         return result
 
+    async def delete_session(self, session_id: str) -> bool:
+        hdr_raw = await self._client.get(self._hdr_key(session_id))
+        if hdr_raw is None:
+            return False
+        try:
+            header = SessionHeader.model_validate_json(hdr_raw)
+            session_key = header.session_key
+        except Exception:
+            session_key = ""
+        async with self._client.pipeline(transaction=False) as pipe:
+            pipe.delete(self._hdr_key(session_id))
+            pipe.delete(self._entries_key(session_id))
+            pipe.delete(self._order_key(session_id))
+            pipe.delete(self._leaf_key(session_id))
+            if session_key:
+                pipe.zrem(self._skey_history_key(session_key), session_id)
+            await pipe.execute()
+        if session_key:
+            current = await self.get_current_session_id(session_key)
+            if current == session_id:
+                await self._client.delete(self._skey_current_key(session_key))
+        return True
+
 
 def _serialize_entry(entry: SessionEntry) -> str:
     if hasattr(entry, "model_dump_json"):

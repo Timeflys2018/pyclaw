@@ -17,6 +17,8 @@ import ToolApprovalModal from '../components/ToolApproval'
 import ErrorBanner from '../components/ErrorBanner'
 import CommandPalette, { type PaletteSelection } from '../components/CommandPalette'
 import ShortcutsModal from '../components/ShortcutsModal'
+import ConfirmModal from '../components/ConfirmModal'
+import { purgeConversation } from '../stores'
 import type { ContentBlock, ImageBlock, Message } from '../types'
 
 function splitContent(content: string | ContentBlock[]): {
@@ -44,8 +46,10 @@ export default function Chat() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [pendingInputPrefill, setPendingInputPrefill] = useState<{ text: string; nonce: number } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null)
   const handleNewSessionRef = useRef<() => void>(() => {})
   const toggleThemeFn = useUiStore((s) => s.toggleTheme)
+  const updateConversations = useSessionStore((s) => s.updateConversations)
 
   const messagesByConv = useChatStore((s) => s.messagesByConv)
   const streamingText = useChatStore((s) => s.streamingText)
@@ -171,6 +175,65 @@ export default function Chat() {
       setIsCreatingSession(false)
     }
   }, [clearStreamingState, prependConversation, setActiveConvId, token])
+
+  const handleRenameSession = useCallback(
+    async (convId: string, title: string) => {
+      const previous =
+        useSessionStore.getState().conversations.find((c) => c.id === convId)?.title ?? null
+      updateConversations((list) =>
+        list.map((c) => (c.id === convId ? { ...c, title } : c)),
+      )
+      try {
+        const res = await fetch(`/api/sessions/${encodeURIComponent(convId)}`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ title }),
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      } catch {
+        updateConversations((list) =>
+          list.map((c) => (c.id === convId ? { ...c, title: previous ?? c.title } : c)),
+        )
+      }
+    },
+    [token, updateConversations],
+  )
+
+  const handleDeleteRequest = useCallback(
+    (convId: string) => {
+      const conv = useSessionStore.getState().conversations.find((c) => c.id === convId)
+      setPendingDelete({ id: convId, title: conv?.title || 'this session' })
+    },
+    [],
+  )
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!pendingDelete) return
+    const convId = pendingDelete.id
+    setPendingDelete(null)
+    const wasActive = useSessionStore.getState().activeConvId === convId
+    try {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(convId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`)
+    } catch {
+      return
+    }
+    const nextActive = purgeConversation(convId)
+    if (wasActive) {
+      setActiveConvId(nextActive)
+      if (nextActive) {
+        await loadMessagesFor(nextActive)
+      } else {
+        clearStreamingState()
+      }
+    }
+  }, [clearStreamingState, loadMessagesFor, pendingDelete, setActiveConvId, token])
 
   const handleRetryMessage = useCallback(
     (errorMessageId: string) => {
@@ -323,6 +386,8 @@ export default function Chat() {
           activeId={activeConvId}
           onSelect={handleSelectSession}
           onNew={handleNewSession}
+          onRename={handleRenameSession}
+          onDeleteRequest={handleDeleteRequest}
           collapsed={sidebarCollapsed}
           onToggle={toggleSidebar}
           isCreatingSession={isCreatingSession}
@@ -359,6 +424,16 @@ export default function Chat() {
       />
 
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
+      <ConfirmModal
+        open={pendingDelete !== null}
+        title="Delete session?"
+        message={`"${pendingDelete?.title ?? ''}" will be permanently deleted, including its messages. This cannot be undone.`}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   )
 }

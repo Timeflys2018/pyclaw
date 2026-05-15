@@ -26,6 +26,7 @@ class SessionStore(Protocol):
     async def list_session_history(
         self, session_key: str, limit: int = 20
     ) -> list[SessionHistorySummary]: ...
+    async def delete_session(self, session_id: str) -> bool: ...
 
 
 def _generate_session_id(session_key: str) -> str:
@@ -91,6 +92,18 @@ class InMemorySessionStore:
         self._trees[session_id] = tree.model_copy(deep=True)
         await self.set_current_session_id(session_key, session_id)
         return tree
+
+    async def delete_session(self, session_id: str) -> bool:
+        existed = session_id in self._trees
+        self._trees.pop(session_id, None)
+        for skey, current in list(self._skey_current.items()):
+            if current == session_id:
+                self._skey_current.pop(skey)
+        for skey, history in list(self._skey_history.items()):
+            self._skey_history[skey] = [
+                (ts, sid) for ts, sid in history if sid != session_id
+            ]
+        return existed
 
     async def list_session_history(
         self, session_key: str, limit: int = 20

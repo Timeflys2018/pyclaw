@@ -107,12 +107,15 @@ async def list_sessions(
         title: str | None = None
         tree = await store.load(s.session_id)
         if tree is not None:
-            ordered = [tree.entries[eid] for eid in tree.order if eid in tree.entries]
-            for entry in ordered:
-                if isinstance(entry, MessageEntry) and entry.role == "user":
-                    content = entry.content if isinstance(entry.content, str) else ""
-                    title = content[:50] if content else None
-                    break
+            if tree.header.title:
+                title = tree.header.title
+            else:
+                ordered = [tree.entries[eid] for eid in tree.order if eid in tree.entries]
+                for entry in ordered:
+                    if isinstance(entry, MessageEntry) and entry.role == "user":
+                        content = entry.content if isinstance(entry.content, str) else ""
+                        title = content[:50] if content else None
+                        break
         items.append(
             SessionListItem(
                 id=s.session_id,
@@ -182,7 +185,35 @@ async def delete_session(
     user_id: str = Depends(get_current_user),
 ) -> Response:
     await _load_and_verify(session_id, user_id)
+    store = _get_store()
+    deleted = await store.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Session not found")
     return Response(status_code=204)
+
+
+class PatchSessionRequest(BaseModel):
+    title: str | None = None
+
+
+@web_router.patch("/sessions/{session_id}")
+async def patch_session(
+    session_id: str,
+    body: PatchSessionRequest,
+    user_id: str = Depends(get_current_user),
+) -> dict:
+    tree = await _load_and_verify(session_id, user_id)
+    store = _get_store()
+    if body.title is not None:
+        title = body.title.strip()
+        if len(title) > 200:
+            raise HTTPException(status_code=400, detail="Title too long (max 200 chars)")
+        tree.header.title = title or None
+        await store.save_header(tree)
+    return {
+        "id": tree.header.id,
+        "title": tree.header.title,
+    }
 
 
 @web_router.post("/extract", response_model=ExtractResponse)

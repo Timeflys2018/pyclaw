@@ -99,3 +99,37 @@ async def test_set_current_session_id_updates_pointer(store: InMemorySessionStor
     await store.set_current_session_id("key4", "sess-2")
     current = await store.get_current_session_id("key4")
     assert current == "sess-2"
+
+
+@pytest.mark.asyncio
+async def test_delete_session_removes_tree_and_history(store: InMemorySessionStore) -> None:
+    tree = await store.create_new_session("dk", "ws", "default")
+    deleted = await store.delete_session(tree.header.id)
+    assert deleted is True
+    assert await store.load(tree.header.id) is None
+    history = await store.list_session_history("dk")
+    assert all(h.session_id != tree.header.id for h in history)
+
+
+@pytest.mark.asyncio
+async def test_delete_session_unsets_current_when_active(store: InMemorySessionStore) -> None:
+    tree = await store.create_new_session("dk2", "ws", "default")
+    await store.delete_session(tree.header.id)
+    current = await store.get_current_session_id("dk2")
+    assert current is None
+
+
+@pytest.mark.asyncio
+async def test_delete_session_returns_false_for_unknown(store: InMemorySessionStore) -> None:
+    deleted = await store.delete_session("does-not-exist")
+    assert deleted is False
+
+
+@pytest.mark.asyncio
+async def test_delete_session_keeps_other_sessions(store: InMemorySessionStore) -> None:
+    t1 = await store.create_new_session("dk3", "ws", "default")
+    t2 = await store.create_new_session("dk3", "ws", "default")
+    await store.delete_session(t1.header.id)
+    history = await store.list_session_history("dk3")
+    assert any(h.session_id == t2.header.id for h in history)
+    assert all(h.session_id != t1.header.id for h in history)
