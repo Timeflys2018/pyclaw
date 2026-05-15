@@ -107,6 +107,12 @@ code, pre {
   animation: animate-in 200ms ease-out;
 }
 
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 ::-webkit-scrollbar {
   width: 6px;
 }

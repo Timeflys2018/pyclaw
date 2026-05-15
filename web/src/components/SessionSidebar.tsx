@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Plus, MessageSquare, PanelLeftClose } from 'lucide-react'
 import clsx from 'clsx'
 import type { Conversation } from '../types'
+import { SidebarRowSkeleton } from './Skeleton'
 
 interface Props {
   conversations: Conversation[]
@@ -10,6 +11,7 @@ interface Props {
   onNew: () => void
   collapsed: boolean
   onToggle: () => void
+  isCreatingSession?: boolean
 }
 
 type TimeGroup = 'Today' | 'Last 7 days' | 'Earlier'
@@ -54,6 +56,7 @@ export default function SessionSidebar({
   onNew,
   collapsed,
   onToggle,
+  isCreatingSession,
 }: Props) {
   const grouped = useMemo(() => groupAndSort(conversations), [conversations])
 
@@ -79,6 +82,7 @@ export default function SessionSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto py-2 px-2">
+        {isCreatingSession && !collapsed && <SidebarRowSkeleton />}
         {grouped.map(({ group, items }) => (
           <div key={group} className="mb-3">
             {!collapsed && (

@@ -1,7 +1,7 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { LogOut, Wifi, WifiOff } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { useChatSocket } from '../hooks/useChatSocket'
+import { useChatSocket, FAILED_RECONNECTS_BEFORE_BANNER } from '../hooks/useChatSocket'
 import { useSessionLoader } from '../hooks/useSessionLoader'
 import {
   useChatStore,
@@ -13,12 +13,15 @@ import SessionSidebar from '../components/SessionSidebar'
 import ChatArea from '../components/ChatArea'
 import ThemeToggle from '../components/ThemeToggle'
 import ToolApprovalModal from '../components/ToolApproval'
+import ErrorBanner from '../components/ErrorBanner'
 import type { Message } from '../types'
 
 export default function Chat() {
   const { token, userId, logout } = useAuth()
-  const { wsState, send } = useChatSocket(token)
+  const { wsState, send, failedReconnects, forceReconnect } = useChatSocket(token)
   const { loadMessagesFor } = useSessionLoader(token, wsState)
+  const [loadingHistoryFor, setLoadingHistoryFor] = useState<string | null>(null)
+  const [isCreatingSession, setIsCreatingSession] = useState(false)
 
   const messagesByConv = useChatStore((s) => s.messagesByConv)
   const streamingText = useChatStore((s) => s.streamingText)
@@ -96,12 +99,20 @@ export default function Chat() {
   const handleSelectSession = useCallback(
     async (convId: string) => {
       setActiveConvId(convId)
-      await loadMessagesFor(convId)
+      const cached = useChatStore.getState().messagesByConv[convId]
+      if (cached && cached.length > 0) return
+      setLoadingHistoryFor(convId)
+      try {
+        await loadMessagesFor(convId)
+      } finally {
+        setLoadingHistoryFor((current) => (current === convId ? null : current))
+      }
     },
     [loadMessagesFor, setActiveConvId],
   )
 
   const handleNewSession = useCallback(async () => {
+    setIsCreatingSession(true)
     try {
       const res = await fetch('/api/sessions', {
         method: 'POST',
@@ -118,8 +129,33 @@ export default function Chat() {
       })
       setActiveConvId(newId)
       clearStreamingState()
-    } catch {}
+    } catch {} finally {
+      setIsCreatingSession(false)
+    }
   }, [clearStreamingState, prependConversation, setActiveConvId, token])
+
+  const handleRetryMessage = useCallback(
+    (errorMessageId: string) => {
+      if (!activeConvId) return
+      const all = useChatStore.getState().messagesByConv[activeConvId] ?? []
+      const errIdx = all.findIndex((m) => m.id === errorMessageId)
+      if (errIdx < 0) return
+      let lastUser: Message | null = null
+      for (let i = errIdx - 1; i >= 0; i--) {
+        if (all[i].role === 'user') {
+          lastUser = all[i]
+          break
+        }
+      }
+      if (!lastUser) return
+      send({
+        type: 'chat.send',
+        conversation_id: activeConvId,
+        content: lastUser.content,
+      })
+    },
+    [activeConvId, send],
+  )
 
   const handleApproval = useCallback(
     (approved: boolean) => {
@@ -167,7 +203,11 @@ export default function Chat() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
+        <ErrorBanner
+          visible={failedReconnects >= FAILED_RECONNECTS_BEFORE_BANNER}
+          onReconnect={forceReconnect}
+        />
         <SessionSidebar
           conversations={conversations}
           activeId={activeConvId}
@@ -175,6 +215,7 @@ export default function Chat() {
           onNew={handleNewSession}
           collapsed={sidebarCollapsed}
           onToggle={toggleSidebar}
+          isCreatingSession={isCreatingSession}
         />
 
         <ChatArea
@@ -183,8 +224,10 @@ export default function Chat() {
           isStreaming={isStreaming}
           isQueued={isQueued}
           queuePosition={queuePosition}
+          isLoadingHistory={loadingHistoryFor === activeConvId}
           onSend={handleSend}
           onAbort={handleAbort}
+          onRetryMessage={handleRetryMessage}
         />
       </div>
 

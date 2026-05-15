@@ -11,6 +11,8 @@ import { Send, Square, Clock, ArrowDown } from 'lucide-react'
 import type { Message } from '../types'
 import { isProtocolOp } from '../protocol'
 import MessageBubble from './MessageBubble'
+import EmptyStateSuggestions from './EmptyStateSuggestions'
+import { MessageSkeleton } from './Skeleton'
 
 interface Props {
   messages: Message[]
@@ -18,8 +20,10 @@ interface Props {
   isStreaming: boolean
   isQueued: boolean
   queuePosition: number
+  isLoadingHistory?: boolean
   onSend: (text: string) => void
   onAbort: () => void
+  onRetryMessage?: (messageId: string) => void
 }
 
 const STREAMING_ID = '__streaming__'
@@ -31,11 +35,26 @@ export default function ChatArea({
   isStreaming,
   isQueued,
   queuePosition,
+  isLoadingHistory,
   onSend,
   onAbort,
+  onRetryMessage,
 }: Props) {
   const [input, setInput] = useState('')
   const [stickToBottom, setStickToBottom] = useState(true)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const handlePickSuggestion = useCallback((prompt: string) => {
+    setInput(prompt)
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (el) {
+        el.focus()
+        const len = el.value.length
+        el.setSelectionRange(len, len)
+      }
+    })
+  }, [])
 
   const scrollerRef = useRef<HTMLDivElement>(null)
   const scrollFrameRef = useRef<number | null>(null)
@@ -108,7 +127,7 @@ export default function ChatArea({
 
   const totalSize = virtualizer.getTotalSize()
   const virtualItems = virtualizer.getVirtualItems()
-  const showEmptyState = items.length === 0
+  const showEmptyState = items.length === 0 && !isLoadingHistory
 
   return (
     <div className="flex flex-col flex-1 min-w-0 relative">
@@ -118,21 +137,17 @@ export default function ChatArea({
         className="flex-1 overflow-y-auto px-4 py-6 md:px-8"
       >
         <div className="max-w-3xl mx-auto w-full">
-          {showEmptyState && (
-            <div className="h-full flex flex-col items-center justify-center text-center min-h-[60vh]">
-              <div className="p-4 rounded-2xl bg-[var(--c-surface)] border border-[var(--c-border)] mb-4">
-                <span className="text-3xl">🐾</span>
-              </div>
-              <h2 className="text-lg font-display font-semibold text-[var(--c-text)] mb-1">
-                What can I help with?
-              </h2>
-              <p className="text-sm text-[var(--c-text-secondary)] max-w-xs">
-                Send a message to start a conversation with PyClaw.
-              </p>
+          {isLoadingHistory && items.length === 0 && (
+            <div className="pt-4">
+              <MessageSkeleton />
             </div>
           )}
 
-          {!showEmptyState && (
+          {showEmptyState && (
+            <EmptyStateSuggestions onPick={handlePickSuggestion} />
+          )}
+
+          {!showEmptyState && !isLoadingHistory && (
             <div style={{ height: totalSize, position: 'relative', width: '100%' }}>
               {virtualItems.map((vi) => {
                 const item = items[vi.index]
@@ -151,7 +166,15 @@ export default function ChatArea({
                       transform: `translateY(${vi.start}px)`,
                     }}
                   >
-                    <MessageBubble message={item} isStreaming={isStreamingItem} />
+                    <MessageBubble
+                      message={item}
+                      isStreaming={isStreamingItem}
+                      onRetry={
+                        item.role === 'error' && onRetryMessage
+                          ? () => onRetryMessage(item.id)
+                          : undefined
+                      }
+                    />
                   </div>
                 )
               })}
@@ -202,6 +225,7 @@ export default function ChatArea({
             className="flex items-end gap-2"
           >
             <textarea
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
