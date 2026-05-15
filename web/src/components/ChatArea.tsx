@@ -7,12 +7,18 @@ import {
   useState,
 } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Send, Square, Clock, ArrowDown } from 'lucide-react'
-import type { Message } from '../types'
+import { Send, Square, Clock, ArrowDown, Paperclip, X } from 'lucide-react'
+import type { ImageBlock, Message } from '../types'
 import { isProtocolOp } from '../protocol'
 import MessageBubble from './MessageBubble'
 import EmptyStateSuggestions from './EmptyStateSuggestions'
 import { MessageSkeleton } from './Skeleton'
+import {
+  fileToImageBlock,
+  imageBlockToDataUrl,
+  isImageError,
+  MAX_IMAGES_PER_MESSAGE,
+} from '../lib/image'
 
 interface Props {
   messages: Message[]
@@ -22,7 +28,7 @@ interface Props {
   queuePosition: number
   isLoadingHistory?: boolean
   prefillInput?: { text: string; nonce: number } | null
-  onSend: (text: string) => void
+  onSend: (text: string, attachments?: ImageBlock[]) => void
   onAbort: () => void
   onRetryMessage?: (messageId: string) => void
 }
@@ -43,8 +49,98 @@ export default function ChatArea({
   onRetryMessage,
 }: Props) {
   const [input, setInput] = useState('')
+  const [attachments, setAttachments] = useState<ImageBlock[]>([])
+  const [attachmentError, setAttachmentError] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const [stickToBottom, setStickToBottom] = useState(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragCounterRef = useRef(0)
+
+  const addFiles = useCallback(async (files: File[]) => {
+    const images = files.filter((f) => f.type.startsWith('image/'))
+    if (images.length === 0) return false
+    setAttachmentError(null)
+    const results = await Promise.all(images.map(fileToImageBlock))
+    let added = 0
+    setAttachments((prev) => {
+      const next = [...prev]
+      for (const r of results) {
+        if (isImageError(r)) {
+          setAttachmentError(r.message)
+          continue
+        }
+        if (next.length >= MAX_IMAGES_PER_MESSAGE) {
+          setAttachmentError(
+            `Capped at ${MAX_IMAGES_PER_MESSAGE} images per message; extras dropped.`,
+          )
+          break
+        }
+        next.push(r)
+        added += 1
+      }
+      return next
+    })
+    return added > 0
+  }, [])
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index))
+    setAttachmentError(null)
+  }, [])
+
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = event.clipboardData?.items
+      if (!items) return
+      const files: File[] = []
+      for (const item of items) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const f = item.getAsFile()
+          if (f) files.push(f)
+        }
+      }
+      if (files.length === 0) return
+      event.preventDefault()
+      void addFiles(files)
+    },
+    [addFiles],
+  )
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent<Element>) => {
+      event.preventDefault()
+      setIsDragging(false)
+      dragCounterRef.current = 0
+      const files = Array.from(event.dataTransfer?.files ?? []).filter((f) =>
+        f.type.startsWith('image/'),
+      )
+      if (files.length === 0) return
+      void addFiles(files)
+    },
+    [addFiles],
+  )
+
+  const handleDragEnter = useCallback((event: React.DragEvent<Element>) => {
+    if (!Array.from(event.dataTransfer?.types ?? []).includes('Files')) return
+    dragCounterRef.current += 1
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1)
+    if (dragCounterRef.current === 0) setIsDragging(false)
+  }, [])
+
+  const handleFilePicked = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files ?? [])
+      event.target.value = ''
+      if (files.length === 0) return
+      void addFiles(files)
+    },
+    [addFiles],
+  )
 
   const focusInputAtEnd = useCallback(() => {
     requestAnimationFrame(() => {
@@ -136,13 +232,16 @@ export default function ChatArea({
 
   const submit = useCallback(() => {
     const trimmed = input.trim()
-    if (!trimmed) return
+    const hasAttachments = attachments.length > 0
+    if (!trimmed && !hasAttachments) return
     if (isStreaming && !isProtocolOp(trimmed)) return
-    onSend(trimmed)
+    onSend(trimmed, hasAttachments ? attachments : undefined)
     setInput('')
+    setAttachments([])
+    setAttachmentError(null)
     setStickToBottom(true)
     requestAnimationFrame(() => scrollToBottomNow())
-  }, [input, isStreaming, onSend, scrollToBottomNow])
+  }, [attachments, input, isStreaming, onSend, scrollToBottomNow])
 
   const handleJumpToLatest = useCallback(() => {
     setStickToBottom(true)
@@ -246,10 +345,48 @@ export default function ChatArea({
               e.preventDefault()
               submit()
             }}
-            className="rounded-2xl border border-[var(--c-border)] bg-[var(--c-surface)] shadow-sm
-                       transition-shadow focus-within:shadow-md
-                       focus-within:border-[var(--c-text-secondary)]/30"
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={(e) => {
+              if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) {
+                e.preventDefault()
+              }
+            }}
+            onDrop={handleDrop}
+            className={`relative rounded-2xl border bg-[var(--c-surface)] shadow-sm
+                       transition-all focus-within:shadow-md
+                       ${
+                         isDragging
+                           ? 'border-[var(--c-accent)] ring-2 ring-[var(--c-accent)]/30'
+                           : 'border-[var(--c-border)] focus-within:border-[var(--c-text-secondary)]/30'
+                       }`}
           >
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-3 pt-3">
+                {attachments.map((att, i) => (
+                  <div
+                    key={`${att.mime_type}-${i}`}
+                    className="relative w-16 h-16 rounded-md overflow-hidden border border-[var(--c-border)] bg-[var(--c-bg)]"
+                  >
+                    <img
+                      src={imageBlockToDataUrl(att)}
+                      alt={`attachment ${i + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(i)}
+                      className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/60 text-white grid place-items-center
+                                 hover:bg-black/80 transition-colors cursor-pointer"
+                      title="Remove"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <textarea
               ref={textareaRef}
               value={input}
@@ -260,6 +397,7 @@ export default function ChatArea({
                   submit()
                 }
               }}
+              onPaste={handlePaste}
               placeholder="Send a message…"
               rows={2}
               className="block w-full min-h-[60px] max-h-60 px-4 pt-3 pb-1 bg-transparent border-0
@@ -267,10 +405,35 @@ export default function ChatArea({
                          focus:outline-none focus:ring-0 leading-relaxed"
             />
 
-            <div className="flex items-center justify-end px-2 pb-2">
+            <div className="flex items-center justify-between px-2 pb-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={attachments.length >= MAX_IMAGES_PER_MESSAGE}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[var(--c-text-secondary)]
+                           hover:text-[var(--c-text)] hover:bg-[var(--c-bg)]
+                           disabled:opacity-30 disabled:pointer-events-none
+                           transition-colors cursor-pointer"
+                title="Attach image"
+              >
+                <Paperclip size={14} />
+              </button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                multiple
+                onChange={handleFilePicked}
+                className="hidden"
+              />
+
               <button
                 type="submit"
-                disabled={!input.trim() || (isStreaming && !isProtocolOp(input))}
+                disabled={
+                  (!input.trim() && attachments.length === 0) ||
+                  (isStreaming && !isProtocolOp(input))
+                }
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--c-accent)] text-white text-sm font-medium
                            hover:brightness-110 active:scale-[0.98] shadow-sm hover:shadow-md
                            disabled:opacity-40 disabled:pointer-events-none
@@ -280,11 +443,25 @@ export default function ChatArea({
                 <span>Send</span>
               </button>
             </div>
+
+            {isDragging && (
+              <div className="absolute inset-0 rounded-2xl bg-[var(--c-accent)]/10 grid place-items-center pointer-events-none">
+                <span className="text-sm font-medium text-[var(--c-accent)]">
+                  Drop images to attach
+                </span>
+              </div>
+            )}
           </form>
 
-          <p className="mt-1.5 text-[11px] text-[var(--c-text-secondary)]/60 text-center">
-            Press Enter to send · Shift + Enter for newline
-          </p>
+          {attachmentError ? (
+            <p className="mt-1.5 text-[11px] text-[var(--c-error)] text-center">
+              {attachmentError}
+            </p>
+          ) : (
+            <p className="mt-1.5 text-[11px] text-[var(--c-text-secondary)]/60 text-center">
+              Press Enter to send · Shift + Enter for newline · Paste or drop images to attach
+            </p>
+          )}
         </div>
       </div>
     </div>

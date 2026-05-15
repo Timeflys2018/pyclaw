@@ -1,9 +1,22 @@
 /* ─── Domain Models ─── */
 
+export interface TextBlock {
+  type: 'text'
+  text: string
+}
+
+export interface ImageBlock {
+  type: 'image'
+  data: string
+  mime_type: string
+}
+
+export type ContentBlock = TextBlock | ImageBlock
+
 export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system' | 'error'
-  content: string
+  content: string | ContentBlock[]
   timestamp: number
   toolCalls?: ToolCallInfo[]
   metadata?: MessageMetadata
@@ -48,6 +61,7 @@ export interface WSClientChatSend {
   type: 'chat.send'
   conversation_id: string
   content: string
+  attachments?: ImageBlock[]
 }
 
 export interface WSClientChatAbort {

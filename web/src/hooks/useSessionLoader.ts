@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useSessionStore } from '../stores/session'
 import { useChatStore } from '../stores/chat'
-import type { Conversation, Message, WSState } from '../types'
+import type { ContentBlock, Conversation, Message, WSState } from '../types'
 
 interface SessionListResponse {
   id: string
@@ -13,9 +13,30 @@ interface SessionListResponse {
 
 interface MessageHistoryEntry {
   role: string
-  content?: string
+  content?: string | ContentBlock[]
   id?: string
   timestamp?: string
+}
+
+function normalizeContent(raw: unknown): string | ContentBlock[] {
+  if (typeof raw === 'string') return raw
+  if (!Array.isArray(raw)) return ''
+  const blocks: ContentBlock[] = []
+  for (const item of raw) {
+    if (item && typeof item === 'object') {
+      const block = item as Record<string, unknown>
+      if (block.type === 'text' && typeof block.text === 'string') {
+        blocks.push({ type: 'text', text: block.text })
+      } else if (
+        (block.type === 'image' || block.type === 'image_url') &&
+        typeof block.data === 'string' &&
+        typeof block.mime_type === 'string'
+      ) {
+        blocks.push({ type: 'image', data: block.data, mime_type: block.mime_type })
+      }
+    }
+  }
+  return blocks
 }
 
 export function useSessionLoader(token: string | null, wsState: WSState) {
@@ -56,7 +77,7 @@ export function useSessionLoader(token: string | null, wsState: WSState) {
         const serverMsgs: Message[] = entries.map((e) => ({
           id: e.id ?? `msg_${Math.random().toString(36).slice(2)}`,
           role: e.role === 'user' ? 'user' : 'assistant',
-          content: e.content ?? '',
+          content: normalizeContent(e.content),
           timestamp: e.timestamp ? new Date(e.timestamp).getTime() : Date.now(),
         }))
         const local = useChatStore.getState().messagesByConv[convId] ?? []

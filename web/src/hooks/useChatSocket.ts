@@ -94,10 +94,7 @@ export function useChatSocket(token: string | null): UseChatSocketResult {
         if (convId) {
           const aborted = msg.data.aborted === true
           const finalMessage = msg.data.final_message
-          const finalText =
-            typeof finalMessage === 'string'
-              ? finalMessage
-              : finalMessage?.content ?? ''
+          const finalText = extractFinalText(finalMessage)
           const partial = chat.getStreamingText()
           const pendingTools = chat.takePendingToolCalls()
 
@@ -207,6 +204,20 @@ export function useChatSocket(token: string | null): UseChatSocketResult {
 }
 
 export { FAILED_RECONNECTS_BEFORE_BANNER }
+
+function extractFinalText(
+  finalMessage: Message | string | undefined,
+): string {
+  if (!finalMessage) return ''
+  if (typeof finalMessage === 'string') return finalMessage
+  const content = finalMessage.content
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+    .map((b) => b.text)
+    .join('\n')
+}
 
 function buildMetadata(
   startedAt: number | null,

@@ -17,7 +17,23 @@ import ToolApprovalModal from '../components/ToolApproval'
 import ErrorBanner from '../components/ErrorBanner'
 import CommandPalette, { type PaletteSelection } from '../components/CommandPalette'
 import ShortcutsModal from '../components/ShortcutsModal'
-import type { Message } from '../types'
+import type { ContentBlock, ImageBlock, Message } from '../types'
+
+function splitContent(content: string | ContentBlock[]): {
+  text: string
+  attachments: ImageBlock[]
+} {
+  if (typeof content === 'string') {
+    return { text: content, attachments: [] }
+  }
+  let text = ''
+  const attachments: ImageBlock[] = []
+  for (const block of content) {
+    if (block.type === 'text') text += (text ? '\n' : '') + block.text
+    else if (block.type === 'image') attachments.push(block)
+  }
+  return { text, attachments }
+}
 
 export default function Chat() {
   const { token, userId, logout } = useAuth()
@@ -62,7 +78,7 @@ export default function Chat() {
   }, [conversations, activeConvId])
 
   const handleSend = useCallback(
-    async (text: string) => {
+    async (text: string, attachments: ImageBlock[] = []) => {
       let convId = activeConvId
       if (!convId) {
         try {
@@ -81,20 +97,33 @@ export default function Chat() {
         setActiveConvId(convId)
         prependConversation({
           id: convId,
-          title: text.slice(0, 30),
+          title: text.slice(0, 30) || 'New chat',
           updatedAt: Date.now(),
           active: true,
         })
       }
 
+      const userContent: string | ContentBlock[] =
+        attachments.length > 0
+          ? [
+              ...attachments,
+              ...(text.length > 0 ? [{ type: 'text' as const, text }] : []),
+            ]
+          : text
+
       const userMsg: Message = {
         id: `usr_${Date.now()}`,
         role: 'user',
-        content: text,
+        content: userContent,
         timestamp: Date.now(),
       }
       appendMessage(convId, userMsg)
-      send({ type: 'chat.send', conversation_id: convId, content: text })
+      send({
+        type: 'chat.send',
+        conversation_id: convId,
+        content: text,
+        ...(attachments.length > 0 ? { attachments } : {}),
+      })
     },
     [activeConvId, appendMessage, prependConversation, send, setActiveConvId, token],
   )
@@ -157,10 +186,12 @@ export default function Chat() {
         }
       }
       if (!lastUser) return
+      const { text, attachments } = splitContent(lastUser.content)
       send({
         type: 'chat.send',
         conversation_id: activeConvId,
-        content: lastUser.content,
+        content: text,
+        ...(attachments.length > 0 ? { attachments } : {}),
       })
     },
     [activeConvId, send],

@@ -1,9 +1,17 @@
 import { AlertCircle, RotateCcw } from 'lucide-react'
-import type { Message } from '../types'
+import type { ContentBlock, Message } from '../types'
 
 interface Props {
   message: Message
   onRetry?: () => void
+}
+
+function contentToText(content: string | ContentBlock[]): string {
+  if (typeof content === 'string') return content
+  return content
+    .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+    .map((b) => b.text)
+    .join('\n')
 }
 
 export default function ErrorBubble({ message, onRetry }: Props) {
@@ -15,7 +23,7 @@ export default function ErrorBubble({ message, onRetry }: Props) {
           <div className="text-[10px] uppercase tracking-wider text-[var(--c-error)] font-semibold mb-1">
             Error
           </div>
-          <div className="break-words leading-relaxed">{message.content}</div>
+          <div className="break-words leading-relaxed">{contentToText(message.content)}</div>
           {onRetry && (
             <button
               type="button"
