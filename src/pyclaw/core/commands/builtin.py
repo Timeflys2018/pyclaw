@@ -142,7 +142,18 @@ async def cmd_tier(args: str, ctx: CommandContext) -> None:
         getattr(channel_settings, "default_permission_tier", None) or "approval"
     )
 
+    is_web = ctx.channel == "web"
+
     if not arg:
+        if is_web:
+            await ctx.reply(
+                "🛡 **Permission tier (Web)**\n"
+                f"部署默认: `{default_tier}`\n"
+                "_当前生效 tier 由输入框左下角的 dropdown 决定 (per-message)。_\n"
+                "切换请直接点 dropdown 或用 ⌘K 命令面板的 'Switch to ... mode'。"
+            )
+            return
+
         current = await get_session_tier(ctx.redis_client, ctx.session_key)
         effective = current or default_tier
         source = "session override" if current else "deployment default"
@@ -154,6 +165,13 @@ async def cmd_tier(args: str, ctx: CommandContext) -> None:
             "切换: `/tier read-only` | `/tier approval` | `/tier yolo`",
         ]
         await ctx.reply("\n".join(lines))
+        return
+
+    if is_web:
+        await ctx.reply(
+            "ℹ️ Web channel 的 tier 由输入框 dropdown 控制 (per-message),`/tier <name>` 在此处无效。\n"
+            "请直接点输入框左下角的 dropdown,或用 ⌘K → 'Switch to ... mode'。"
+        )
         return
 
     new_tier = parse_tier_arg(arg)
@@ -638,7 +656,7 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             name="/tier",
             handler=cmd_tier,
             category="config",
-            help_text="查看或切换 permission tier (read-only/approval/yolo)",
+            help_text="查看或切换 permission tier (飞书:可切档;Web:仅显示,请用输入框 dropdown 切换)",
             args_hint="[read-only|approval|yolo]",
             channels=ALL_CHANNELS,
         )

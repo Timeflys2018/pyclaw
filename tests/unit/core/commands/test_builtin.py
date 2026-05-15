@@ -367,3 +367,76 @@ async def test_register_builtin_includes_all_commands() -> None:
     assert registry.get("/btw").requires_idle is False
     assert registry.get("/steer").category == "steering"
     assert registry.get("/btw").category == "steering"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /tier — channel-aware behaviour
+# ─────────────────────────────────────────────────────────────────────────────
+
+from pyclaw.core.commands.builtin import cmd_tier
+
+
+@pytest.mark.asyncio
+async def test_cmd_tier_web_no_args_shows_default_and_dropdown_hint() -> None:
+    ctx, reply, _ = _build_ctx(channel="web")
+    await cmd_tier("", ctx)
+    reply.assert_awaited_once()
+    msg = reply.await_args[0][0]
+    assert "Web" in msg
+    assert "dropdown" in msg
+    assert "approval" in msg
+
+
+@pytest.mark.asyncio
+async def test_cmd_tier_web_with_args_refuses_with_pointer() -> None:
+    redis = AsyncMock()
+    redis.setex = AsyncMock()
+    ctx, reply, _ = _build_ctx(channel="web", redis_client=redis)
+    await cmd_tier("yolo", ctx)
+    reply.assert_awaited_once()
+    msg = reply.await_args[0][0]
+    assert "dropdown" in msg.lower() or "无效" not in msg
+    redis.setex.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cmd_tier_feishu_no_args_shows_current_and_default() -> None:
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+    ctx, reply, _ = _build_ctx(channel="feishu", redis_client=redis)
+    await cmd_tier("", ctx)
+    reply.assert_awaited_once()
+    msg = reply.await_args[0][0]
+    assert "/tier read-only" in msg or "/tier yolo" in msg
+
+
+@pytest.mark.asyncio
+async def test_cmd_tier_feishu_with_valid_arg_writes_redis() -> None:
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.setex = AsyncMock()
+    ctx, reply, _ = _build_ctx(channel="feishu", redis_client=redis)
+    await cmd_tier("yolo", ctx)
+    redis.setex.assert_awaited_once()
+    msg = reply.await_args[0][0]
+    assert "yolo" in msg
+
+
+@pytest.mark.asyncio
+async def test_cmd_tier_feishu_with_invalid_arg_replies_error() -> None:
+    redis = AsyncMock()
+    redis.setex = AsyncMock()
+    ctx, reply, _ = _build_ctx(channel="feishu", redis_client=redis)
+    await cmd_tier("bogus", ctx)
+    redis.setex.assert_not_called()
+    msg = reply.await_args[0][0]
+    assert "无效" in msg
+
+
+@pytest.mark.asyncio
+async def test_cmd_tier_feishu_redis_unavailable_replies_warning() -> None:
+    ctx, reply, _ = _build_ctx(channel="feishu", redis_client=None)
+    await cmd_tier("yolo", ctx)
+    reply.assert_awaited_once()
+    msg = reply.await_args[0][0]
+    assert "Redis" in msg or "redis" in msg.lower()
