@@ -22,6 +22,22 @@
 
 ---
 
+## 🎯 定位
+
+**团队级 + 有记忆 + 嵌入企业沟通平台的通用 AI Agent。**
+
+不限于编程 — 日常助理、复杂多步任务、软件工程任务都覆盖。三个开源 agent 普遍没做好的能力组合在 PyClaw 是一等公民:
+
+- **持久化多层记忆** — 跨 session 不丢, 按团队/项目沉淀知识, 从工作记忆一路升级到向量归档
+- **多 channel 一等公民** — 飞书 / Web / (规划中的) TUI / VSCode 插件共用同一个 Agent 内核, 非终端原生用户 (PM、设计师、运营) 能直接对话
+- **Hook 系统** — 合规、审计、审批门、自定义工具链全部以 hook 形式插入, 不需要 fork 核心代码
+
+竞争格局: 通用编程 agent 有 Claude Code / Cursor / OpenCode / Aider, 通用对话 agent 有 ChatGPT / Claude。PyClaw 的独家位置在交集: **能编程、住在你团队沟通平台里、记得你代码风格和架构决策、能按企业审批流程跑的 agent。** 日常助理、调研、写代码、跑运维 — 同一个 agent、同一份记忆、同一条审计链。
+
+> 战略背景见: [规划路线图](./DailyWork/planning/ROADMAP.md) (本地不入版本库) 和 [战略讨论记录](./DailyWork/planning/exploration/2026-05-15-strategic-roadmap-coding-agent.md) (本地不入版本库)。
+
+---
+
 ## ✨ 为什么做 PyClaw？
 
 OpenClaw 是一个优秀的多通道 AI 助手 — 但它的 TypeScript 单体（17,000+ 文件）将计算和存储紧耦合，且缺少生产级的记忆系统。PyClaw 用 Python 从头重写，定位 **记忆优先 · Hook 驱动 · 水平可扩展**：
@@ -430,7 +446,7 @@ src/pyclaw/
 
 ## 🛡 安全与隔离
 
-PyClaw 定位为**个人/小团队助手**，非多租户 SaaS。Session 数据、Redis 键、飞书 Workspace、记忆存储按用户完全隔离。Web 渠道为信任用户设计（Tool Approval Hook 管控高风险操作）。
+PyClaw 当前的隔离模型是**单租户或可信团队** — Session 数据、Redis 键、飞书 Workspace、记忆存储按用户隔离, 但同一份部署内不同团队之间没有租户边界。适用场景: 一个团队跑自己的实例, 或者一份共享实例服务可信内部用户。Web 渠道为信任用户设计（Tool Approval Hook 管控高风险操作）。多租户 SaaS 部署需要走下面的升级路径。
 
 详见 [D26: 用户隔离模型](./docs/zh/architecture-decisions.md) — 隔离边界、已知限制、多租户升级路径。
 

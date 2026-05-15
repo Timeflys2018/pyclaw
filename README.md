@@ -22,6 +22,22 @@
 
 ---
 
+## 🎯 Positioning
+
+**Team-aware AI agent with institutional memory, embedded in your team's communication platform.**
+
+Built for general-purpose use — daily assistance, complex multi-step tasks, software engineering — with three traits no other open-source agent ships well together:
+
+- **Persistent multi-layer memory** that survives sessions, accumulates per-team knowledge, and grades from working memory all the way to vector archives
+- **Multi-channel as first-class** — Feishu (Lark), Web, and (planned) TUI / VSCode extension share the same agent core; non-terminal-native teammates can interact directly
+- **Hooks system for enterprise workflow integration** — compliance, audit, approval gates, custom tooling all plug in without forking core
+
+The competitive landscape has strong general-purpose coding agents (Claude Code, Cursor, OpenCode, Aider) and strong general-purpose chat agents (ChatGPT, Claude). PyClaw's defensible angle is the intersection: **a coding-capable agent that lives where your team already talks, remembers your codebase conventions and architecture decisions across weeks, and respects your enterprise approval flow.** Daily assistance, research, code, ops — same agent, same memory, same audit trail.
+
+> Strategic context: see [planning roadmap](./DailyWork/planning/ROADMAP.md) (private) and the [strategic discussion record](./DailyWork/planning/exploration/2026-05-15-strategic-roadmap-coding-agent.md) (private).
+
+---
+
 ## ✨ Why PyClaw?
 
 OpenClaw is a powerful multi-channel AI assistant — but its TypeScript monolith (17,000+ files) tightly couples compute and storage, and lacks production-grade memory. PyClaw rebuilds it from scratch in Python with a **memory-first, hooks-driven, horizontally scalable** architecture:
@@ -431,7 +447,7 @@ src/pyclaw/
 
 ## 🛡 Security & Isolation
 
-PyClaw is designed as a **personal/small-team assistant**, not a multi-tenant SaaS. Session data, Redis keys, Feishu workspaces, and memory stores are isolated per user. Web channel is for trusted users (Tool Approval Hook gates dangerous operations).
+PyClaw's current isolation model is **single-tenant or trusted-team** — session data, Redis keys, Feishu workspaces, and memory stores are isolated per user, but there is no tenancy boundary between teams sharing one deployment. Suitable for: a team running its own instance, or trusted internal users on a shared instance. Web channel is for trusted users (Tool Approval Hook gates dangerous operations). Multi-tenant SaaS deployment requires the upgrade path documented below.
 
 See [D26: User Isolation Model](./docs/en/architecture-decisions.md#d26-user-isolation-model--personal-assistant-not-multi-tenant-saas) for full isolation boundaries and multi-tenant upgrade path.
 
