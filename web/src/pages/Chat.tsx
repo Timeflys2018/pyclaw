@@ -1,216 +1,53 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useCallback, useEffect } from 'react'
 import { LogOut, Wifi, WifiOff } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { useWebSocket } from '../hooks/useWebSocket'
+import { useChatSocket } from '../hooks/useChatSocket'
+import { useSessionLoader } from '../hooks/useSessionLoader'
+import {
+  useChatStore,
+  useSessionStore,
+  useUiStore,
+  useApprovalStore,
+} from '../stores'
 import SessionSidebar from '../components/SessionSidebar'
 import ChatArea from '../components/ChatArea'
 import ThemeToggle from '../components/ThemeToggle'
 import ToolApprovalModal from '../components/ToolApproval'
-import type {
-  Theme,
-  Message,
-  ToolCallInfo,
-  PendingApproval,
-  WSServerMessage,
-} from '../types'
-
-function loadTheme(): Theme {
-  return (localStorage.getItem('pyclaw-theme') as Theme) ?? 'dark'
-}
+import type { Message } from '../types'
 
 export default function Chat() {
   const { token, userId, logout } = useAuth()
-  const { wsState, send, lastMessage, conversations, setConversations } =
-    useWebSocket(token)
+  const { wsState, send } = useChatSocket(token)
+  const { loadMessagesFor } = useSessionLoader(token, wsState)
 
-  const [theme, setTheme] = useState<Theme>(loadTheme)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [activeConvId, setActiveConvId] = useState<string | null>(null)
+  const messagesByConv = useChatStore((s) => s.messagesByConv)
+  const streamingText = useChatStore((s) => s.streamingText)
+  const isStreaming = useChatStore((s) => s.isStreaming)
+  const isQueued = useChatStore((s) => s.isQueued)
+  const queuePosition = useChatStore((s) => s.queuePosition)
+  const appendMessage = useChatStore((s) => s.appendMessage)
+  const clearStreamingState = useChatStore((s) => s.clearStreaming)
 
-  const [messagesByConv, setMessagesByConv] = useState<Record<string, Message[]>>({})
-  const [streamingText, setStreamingText] = useState('')
-  const [isStreaming, setIsStreaming] = useState(false)
-  const [isQueued, setIsQueued] = useState(false)
-  const [queuePosition, setQueuePosition] = useState(0)
-  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null)
+  const conversations = useSessionStore((s) => s.conversations)
+  const activeConvId = useSessionStore((s) => s.activeConvId)
+  const setActiveConvId = useSessionStore((s) => s.setActiveConvId)
+  const prependConversation = useSessionStore((s) => s.prependConversation)
 
-  const toolCallsRef = useRef<ToolCallInfo[]>([])
-  const streamingTextRef = useRef('')
+  const theme = useUiStore((s) => s.theme)
+  const setTheme = useUiStore((s) => s.setTheme)
+  const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed)
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar)
+
+  const pendingApproval = useApprovalStore((s) => s.pendingApproval)
+  const clearPendingApproval = useApprovalStore((s) => s.clearPendingApproval)
 
   const currentMessages = activeConvId ? messagesByConv[activeConvId] ?? [] : []
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('pyclaw-theme', theme)
-  }, [theme])
-
-  useEffect(() => {
-    if (wsState === 'ready' && token) {
-      fetch('/api/sessions', { headers: { Authorization: `Bearer ${token}` } })
-        .then((r) => r.ok ? r.json() : [])
-        .then((sessions: Array<{ id: string; created_at?: string; message_count?: number; title?: string | null; last_interaction_at?: string | null }>) => {
-          if (sessions.length > 0) {
-            const loaded = sessions.map((s) => ({
-              id: s.id,
-              title: s.title || 'New chat',
-              updatedAt: s.last_interaction_at
-                ? new Date(s.last_interaction_at).getTime()
-                : s.created_at ? new Date(s.created_at).getTime() : Date.now(),
-              active: true,
-            }))
-            setConversations(loaded)
-          }
-        })
-        .catch(() => {})
-    }
-  }, [wsState, token, setConversations])
 
   useEffect(() => {
     if (conversations.length > 0 && !activeConvId) {
       setActiveConvId(conversations[0].id)
     }
-  }, [conversations, activeConvId])
-
-  const appendMessage = useCallback(
-    (convId: string, msg: Message) => {
-      setMessagesByConv((prev) => ({
-        ...prev,
-        [convId]: [...(prev[convId] ?? []), msg],
-      }))
-    },
-    []
-  )
-
-  useEffect(() => {
-    if (!lastMessage) return
-
-    const msg: WSServerMessage = lastMessage
-    const convId = 'conversation_id' in msg ? (msg as { conversation_id: string }).conversation_id : null
-
-    switch (msg.type) {
-      case 'chat.delta':
-        setIsQueued(false)
-        setIsStreaming(true)
-        streamingTextRef.current = streamingTextRef.current + msg.data.text
-        setStreamingText(streamingTextRef.current)
-        break
-
-      case 'chat.tool_start': {
-        const tc: ToolCallInfo = {
-          id: msg.data.tool_call_id,
-          name: msg.data.name,
-          args: msg.data.args,
-          status: 'running',
-        }
-        toolCallsRef.current = [...toolCallsRef.current, tc]
-        break
-      }
-
-      case 'chat.tool_end': {
-        toolCallsRef.current = toolCallsRef.current.map((tc) =>
-          tc.id === msg.data.tool_call_id
-            ? { ...tc, result: msg.data.result, status: 'done' as const }
-            : tc
-        )
-        break
-      }
-
-      case 'chat.done': {
-        if (convId) {
-          const aborted = msg.data.aborted === true
-          const finalText = typeof msg.data.final_message === 'string'
-            ? msg.data.final_message
-            : msg.data.final_message?.content ?? ''
-          const partial = streamingTextRef.current
-
-          if (aborted && partial) {
-            const partialMsg: Message = {
-              id: `asst_partial_${Date.now()}`,
-              role: 'assistant',
-              content: partial,
-              timestamp: Date.now(),
-              toolCalls:
-                toolCallsRef.current.length > 0
-                  ? [...toolCallsRef.current]
-                  : undefined,
-            }
-            appendMessage(convId, partialMsg)
-          }
-
-          const shouldShowFinal = finalText.trim().length > 0
-          if (shouldShowFinal) {
-            const finalMsg: Message = {
-              id: `asst_${Date.now()}`,
-              role: 'assistant',
-              content: finalText,
-              timestamp: Date.now(),
-              toolCalls:
-                !aborted && toolCallsRef.current.length > 0
-                  ? [...toolCallsRef.current]
-                  : undefined,
-            }
-            appendMessage(convId, finalMsg)
-          }
-        }
-        streamingTextRef.current = ''
-        setStreamingText('')
-        setIsStreaming(false)
-        setIsQueued(false)
-        toolCallsRef.current = []
-        break
-      }
-
-      case 'chat.queued':
-        setIsQueued(true)
-        setQueuePosition(msg.data.position)
-        break
-
-      case 'tool.approve_request':
-        if (convId) {
-          setPendingApproval({
-            conversationId: convId,
-            toolCallId: msg.data.tool_call_id,
-            toolName: msg.data.tool_name,
-            args: msg.data.args,
-            reason: msg.data.reason,
-          })
-        }
-        break
-
-      case 'error': {
-        console.error('[ws error]', msg.data.message)
-        if (convId) {
-          const partial = streamingTextRef.current
-          if (partial) {
-            const partialMsg: Message = {
-              id: `asst_partial_${Date.now()}`,
-              role: 'assistant',
-              content: partial,
-              timestamp: Date.now(),
-              toolCalls:
-                toolCallsRef.current.length > 0
-                  ? [...toolCallsRef.current]
-                  : undefined,
-            }
-            appendMessage(convId, partialMsg)
-          }
-          const errMsg: Message = {
-            id: `err_${Date.now()}`,
-            role: 'assistant',
-            content: `⚠️ ${msg.data.message || 'Internal error'}`,
-            timestamp: Date.now(),
-          }
-          appendMessage(convId, errMsg)
-        }
-        streamingTextRef.current = ''
-        setStreamingText('')
-        setIsStreaming(false)
-        setIsQueued(false)
-        toolCallsRef.current = []
-        break
-      }
-    }
-  }, [lastMessage, appendMessage])
+  }, [conversations, activeConvId, setActiveConvId])
 
   const handleSend = useCallback(
     async (text: string) => {
@@ -230,12 +67,11 @@ export default function Chat() {
           convId = `conv_${Date.now()}`
         }
         setActiveConvId(convId)
-        setConversations((prev) => {
-          if (prev.some((c) => c.id === convId)) return prev
-          return [
-            { id: convId!, title: text.slice(0, 30), updatedAt: Date.now(), active: true },
-            ...prev,
-          ]
+        prependConversation({
+          id: convId,
+          title: text.slice(0, 30),
+          updatedAt: Date.now(),
+          active: true,
         })
       }
 
@@ -246,13 +82,9 @@ export default function Chat() {
         timestamp: Date.now(),
       }
       appendMessage(convId, userMsg)
-      send({
-        type: 'chat.send',
-        conversation_id: convId,
-        content: text,
-      })
+      send({ type: 'chat.send', conversation_id: convId, content: text })
     },
-    [activeConvId, appendMessage, send, token]
+    [activeConvId, appendMessage, prependConversation, send, setActiveConvId, token],
   )
 
   const handleAbort = useCallback(() => {
@@ -261,28 +93,13 @@ export default function Chat() {
     }
   }, [activeConvId, send])
 
-  const handleSelectSession = useCallback(async (convId: string) => {
-    setActiveConvId(convId)
-    try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(convId)}/messages?limit=100`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) return
-      const entries = await res.json()
-      if (!Array.isArray(entries)) return
-      const serverMsgs: Message[] = entries.map((e: { role: string; content?: string; id?: string; timestamp?: string }) => ({
-        id: e.id ?? `msg_${Math.random().toString(36).slice(2)}`,
-        role: e.role === 'user' ? 'user' : 'assistant',
-        content: e.content ?? '',
-        timestamp: e.timestamp ? new Date(e.timestamp).getTime() : Date.now(),
-      }))
-      setMessagesByConv((prev) => {
-        const local = prev[convId] ?? []
-        if (serverMsgs.length === 0 && local.length > 0) return prev
-        return { ...prev, [convId]: serverMsgs }
-      })
-    } catch {}
-  }, [token])
+  const handleSelectSession = useCallback(
+    async (convId: string) => {
+      setActiveConvId(convId)
+      await loadMessagesFor(convId)
+    },
+    [loadMessagesFor, setActiveConvId],
+  )
 
   const handleNewSession = useCallback(async () => {
     try {
@@ -293,15 +110,16 @@ export default function Chat() {
       if (!res.ok) return
       const data = await res.json()
       const newId = data.session_id
-      setConversations((prev) => [
-        { id: newId, title: 'New chat', updatedAt: Date.now(), active: true },
-        ...prev,
-      ])
+      prependConversation({
+        id: newId,
+        title: 'New chat',
+        updatedAt: Date.now(),
+        active: true,
+      })
       setActiveConvId(newId)
-      streamingTextRef.current = ''
-      setStreamingText('')
+      clearStreamingState()
     } catch {}
-  }, [token, setConversations])
+  }, [clearStreamingState, prependConversation, setActiveConvId, token])
 
   const handleApproval = useCallback(
     (approved: boolean) => {
@@ -312,22 +130,17 @@ export default function Chat() {
         tool_call_id: pendingApproval.toolCallId,
         approved,
       })
-      setPendingApproval(null)
+      clearPendingApproval()
     },
-    [pendingApproval, send]
+    [clearPendingApproval, pendingApproval, send],
   )
 
-  useEffect(() => {
-    if (!lastMessage || lastMessage.type !== 'ready') return
-    const readyMsg = lastMessage
-    if (readyMsg.type === 'ready') {
-      setConversations(readyMsg.data.conversations)
-    }
-  }, [lastMessage, setConversations])
-
-  const wsIndicator = wsState === 'ready'
-    ? <Wifi size={14} className="text-[var(--c-success)]" />
-    : <WifiOff size={14} className="text-[var(--c-error)]" />
+  const wsIndicator =
+    wsState === 'ready' ? (
+      <Wifi size={14} className="text-[var(--c-success)]" />
+    ) : (
+      <WifiOff size={14} className="text-[var(--c-error)]" />
+    )
 
   return (
     <div className="h-screen flex flex-col bg-[var(--c-bg)] text-[var(--c-text)]">
@@ -361,7 +174,7 @@ export default function Chat() {
           onSelect={handleSelectSession}
           onNew={handleNewSession}
           collapsed={sidebarCollapsed}
-          onToggle={() => setSidebarCollapsed((c) => !c)}
+          onToggle={toggleSidebar}
         />
 
         <ChatArea
