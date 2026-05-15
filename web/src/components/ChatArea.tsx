@@ -246,7 +246,9 @@ export default function ChatArea({
               e.preventDefault()
               submit()
             }}
-            className="flex items-end gap-2"
+            className="rounded-2xl border border-[var(--c-border)] bg-[var(--c-surface)] shadow-sm
+                       transition-shadow focus-within:shadow-md
+                       focus-within:border-[var(--c-text-secondary)]/30"
           >
             <textarea
               ref={textareaRef}
@@ -259,23 +261,30 @@ export default function ChatArea({
                 }
               }}
               placeholder="Send a message…"
-              rows={1}
-              className="flex-1 min-h-[44px] max-h-40 px-4 py-2.5 rounded-xl bg-[var(--c-surface)] border border-[var(--c-border)]
+              rows={2}
+              className="block w-full min-h-[60px] max-h-60 px-4 pt-3 pb-1 bg-transparent border-0
                          text-[var(--c-text)] placeholder:text-[var(--c-text-secondary)]/50 text-sm resize-none
-                         focus:outline-none focus:ring-2 focus:ring-[var(--c-accent)]/40 focus:border-[var(--c-accent)]
-                         transition-all leading-relaxed"
+                         focus:outline-none focus:ring-0 leading-relaxed"
             />
-            <button
-              type="submit"
-              disabled={!input.trim() || (isStreaming && !isProtocolOp(input))}
-              className="shrink-0 w-11 h-11 rounded-xl bg-[var(--c-accent)] text-white grid place-items-center
-                         hover:brightness-110 active:scale-95
-                         disabled:opacity-30 disabled:pointer-events-none
-                         transition-all cursor-pointer"
-            >
-              <Send size={16} />
-            </button>
+
+            <div className="flex items-center justify-end px-2 pb-2">
+              <button
+                type="submit"
+                disabled={!input.trim() || (isStreaming && !isProtocolOp(input))}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--c-accent)] text-white text-sm font-medium
+                           hover:brightness-110 active:scale-[0.98] shadow-sm hover:shadow-md
+                           disabled:opacity-40 disabled:pointer-events-none
+                           transition-all cursor-pointer"
+              >
+                <Send size={14} />
+                <span>Send</span>
+              </button>
+            </div>
           </form>
+
+          <p className="mt-1.5 text-[11px] text-[var(--c-text-secondary)]/60 text-center">
+            Press Enter to send · Shift + Enter for newline
+          </p>
         </div>
       </div>
     </div>
