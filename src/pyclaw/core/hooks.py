@@ -86,7 +86,7 @@ class ToolApprovalHook(Protocol):
 
     async def before_tool_execution(
         self,
-        tool_calls: list[dict],
+        tool_calls: list[dict[str, Any]],
         session_id: str,
         tier: PermissionTier,
     ) -> list[ApprovalDecision]: ...
@@ -94,14 +94,21 @@ class ToolApprovalHook(Protocol):
 
 @runtime_checkable
 class AgentHook(Protocol):
+    """Hook protocol for the agent loop.
+
+    Required: before_prompt_build, after_response, before_compaction,
+    after_compaction.
+
+    Optional (discovered via getattr by HookRegistry): on_run_start,
+    on_run_end.
+    """
+
     async def before_prompt_build(
         self, context: PromptBuildContext
     ) -> PromptBuildResult | None: ...
     async def after_response(self, observation: ResponseObservation) -> None: ...
     async def before_compaction(self, context: CompactionContext) -> None: ...
     async def after_compaction(self, context: CompactionContext, result: CompactResult) -> None: ...
-    async def on_run_start(self, session_id: str, control: RunControl) -> None: ...
-    async def on_run_end(self, session_id: str, terminated_by: str) -> None: ...
 
 
 class HookRegistry:

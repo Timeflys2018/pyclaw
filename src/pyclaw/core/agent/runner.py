@@ -645,7 +645,7 @@ async def run_agent_stream(
                 await _append(deps, tree, guidance_entry)
                 continue
 
-            parsed_calls: list[tuple[dict, str, dict]] = []
+            parsed_calls: list[tuple[dict[str, Any], str, dict[str, Any]]] = []
             for call in response.tool_calls:
                 fn = (call or {}).get("function") or {}
                 raw_args = fn.get("arguments") or {}
@@ -797,7 +797,7 @@ async def _try_compaction(
     deps: AgentRunnerDeps,
     tree: SessionTree,
     request: RunRequest,
-    base_messages: list[dict[str, Any]],
+    base_messages: list[Any],
     history_budget: int,
     abort_event: asyncio.Event,
     *,

@@ -532,8 +532,9 @@ async def _run_chat(
                 if event.result and event.result.content:
                     parts = []
                     for block in event.result.content:
-                        if hasattr(block, "text"):
-                            parts.append(block.text)
+                        text = getattr(block, "text", None)
+                        if text is not None:
+                            parts.append(text)
                         elif isinstance(block, dict) and "text" in block:
                             parts.append(block["text"])
                     result_text = "\n".join(parts)

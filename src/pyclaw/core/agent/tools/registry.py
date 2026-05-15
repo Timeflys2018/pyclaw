@@ -33,7 +33,7 @@ class Tool(Protocol):
     description: str
     parameters: dict[str, Any]
     side_effect: bool
-    tool_class: ToolClass
+    tool_class: str
 
     async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult: ...
 
@@ -57,7 +57,7 @@ def wrap_tool_with_abort(tool: Tool) -> Tool:
         description = tool.description
         parameters = tool.parameters
         side_effect = tool.side_effect
-        tool_class: ToolClass = wrapped_class
+        tool_class: str = wrapped_class
         timeout_seconds = getattr(tool, "timeout_seconds", None)
         max_output_chars = getattr(tool, "max_output_chars", None)
 

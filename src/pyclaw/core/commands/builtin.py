@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC
+from typing import Any
 
 from pyclaw.core.commands._helpers import (
     format_session_status,
@@ -426,7 +427,7 @@ async def cmd_compact(args: str, ctx: CommandContext) -> None:
     await ctx.reply(f"✓ 压缩完成，节省约 {tokens_saved} tokens")
 
 
-def _wrap_context_engine_with_focus(engine: object, focus: str) -> object:
+def _wrap_context_engine_with_focus(engine: Any, focus: str) -> Any:
     class _FocusedEngine:
         def __init__(self) -> None:
             self._inner = engine
@@ -435,7 +436,7 @@ def _wrap_context_engine_with_focus(engine: object, focus: str) -> object:
         def __getattr__(self, name: str) -> object:
             return getattr(self._inner, name)
 
-        async def compact(self, **kwargs: object) -> object:
+        async def compact(self, **kwargs: Any) -> Any:
             messages = kwargs.get("messages") or []
             focus_msg = {
                 "role": "system",
@@ -447,7 +448,7 @@ def _wrap_context_engine_with_focus(engine: object, focus: str) -> object:
     return _FocusedEngine()
 
 
-def _failed_compact_result(error: str) -> object:
+def _failed_compact_result(error: str) -> Any:
     from pyclaw.models import CompactResult
 
     return CompactResult(

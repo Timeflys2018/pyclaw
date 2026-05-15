@@ -37,7 +37,7 @@ class ContextEngine(Protocol):
         self,
         *,
         session_id: str,
-        messages: list[dict[str, Any]],
+        messages: list[Any],
         token_budget: int | None = None,
         prompt: str | None = None,
     ) -> AssembleResult: ...
@@ -48,14 +48,14 @@ class ContextEngine(Protocol):
         self,
         *,
         session_id: str,
-        messages: list[dict[str, Any]],
+        messages: list[Any],
         token_budget: int,
         force: bool = False,
         abort_event: asyncio.Event | None = None,
         model: str | None = None,
     ) -> CompactResult: ...
 
-    async def after_turn(self, session_id: str, messages: list[dict[str, Any]]) -> None: ...
+    async def after_turn(self, session_id: str, messages: list[Any]) -> None: ...
 
 
 class _SummarizerCallable(Protocol):
@@ -141,7 +141,7 @@ class DefaultContextEngine:
         self,
         *,
         session_id: str,
-        messages: list[dict[str, Any]],
+        messages: list[Any],
         token_budget: int | None = None,
         prompt: str | None = None,
     ) -> AssembleResult:
@@ -245,7 +245,7 @@ class DefaultContextEngine:
         self,
         *,
         session_id: str,
-        messages: list[dict[str, Any]],
+        messages: list[Any],
         token_budget: int,
         force: bool = False,
         abort_event: asyncio.Event | None = None,
@@ -392,7 +392,7 @@ class DefaultContextEngine:
         except AgentAbortedError as ae:
             raise _CompactionAborted() from ae
 
-    async def after_turn(self, session_id: str, messages: list[dict[str, Any]]) -> None:
+    async def after_turn(self, session_id: str, messages: list[Any]) -> None:
         self._archive_cache.pop(session_id, None)
 
 

@@ -119,7 +119,7 @@ class EvolutionSettings(BaseSettings):
     max_sops_per_extraction: int = Field(5, alias="maxSopsPerExtraction")
     description_max_chars: int = Field(150, alias="descriptionMaxChars")
     procedure_max_chars: int = Field(5000, alias="procedureMaxChars")
-    curator: CuratorSettings = Field(default_factory=CuratorSettings)
+    curator: CuratorSettings = Field(default_factory=lambda: CuratorSettings())
 
     model_config = SettingsConfigDict(
         env_prefix="PYCLAW_EVOLUTION_",
@@ -223,7 +223,7 @@ class FeishuSettings(BaseSettings):
     group_context: str = Field("recent", alias="groupContext")
     group_context_size: int = Field(20, alias="groupContextSize")
     idle_minutes: int = Field(0, alias="idleMinutes")
-    streaming: FeishuStreamingConfig = Field(default_factory=FeishuStreamingConfig)
+    streaming: FeishuStreamingConfig = Field(default_factory=lambda: FeishuStreamingConfig())
     default_permission_tier: Literal["read-only", "approval", "yolo"] = Field(
         "approval", alias="defaultPermissionTier"
     )
@@ -282,8 +282,8 @@ class WebSettings(BaseSettings):
 
 
 class ChannelsSettings(BaseSettings):
-    feishu: FeishuSettings = Field(default_factory=FeishuSettings)
-    web: WebSettings = Field(default_factory=WebSettings)
+    feishu: FeishuSettings = Field(default_factory=lambda: FeishuSettings())
+    web: WebSettings = Field(default_factory=lambda: WebSettings())
 
     model_config = SettingsConfigDict(extra="ignore")
 
@@ -334,18 +334,18 @@ class AffinitySettings(BaseSettings):
 
 
 class Settings(BaseSettings):
-    server: ServerSettings = Field(default_factory=ServerSettings)
-    redis: RedisSettings = Field(default_factory=RedisSettings)
-    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
-    storage: StorageSettings = Field(default_factory=StorageSettings)
-    memory: MemorySettings = Field(default_factory=MemorySettings)
-    embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
-    agent: AgentSettings = Field(default_factory=AgentSettings)
-    channels: ChannelsSettings = Field(default_factory=ChannelsSettings)
-    workspaces: WorkspaceSettings = Field(default_factory=WorkspaceSettings)
-    skills: SkillSettings = Field(default_factory=SkillSettings)
-    evolution: EvolutionSettings = Field(default_factory=EvolutionSettings)
-    affinity: AffinitySettings = Field(default_factory=AffinitySettings)
+    server: ServerSettings = Field(default_factory=lambda: ServerSettings())
+    redis: RedisSettings = Field(default_factory=lambda: RedisSettings())
+    database: DatabaseSettings = Field(default_factory=lambda: DatabaseSettings())
+    storage: StorageSettings = Field(default_factory=lambda: StorageSettings())
+    memory: MemorySettings = Field(default_factory=lambda: MemorySettings())
+    embedding: EmbeddingSettings = Field(default_factory=lambda: EmbeddingSettings())
+    agent: AgentSettings = Field(default_factory=lambda: AgentSettings())
+    channels: ChannelsSettings = Field(default_factory=lambda: ChannelsSettings())
+    workspaces: WorkspaceSettings = Field(default_factory=lambda: WorkspaceSettings())
+    skills: SkillSettings = Field(default_factory=lambda: SkillSettings())
+    evolution: EvolutionSettings = Field(default_factory=lambda: EvolutionSettings())
+    affinity: AffinitySettings = Field(default_factory=lambda: AffinitySettings())
     admin_user_ids: list[str] = Field(default_factory=list)
     # Graceful shutdown timeout in seconds.  Matches the default K8s
     # SIGTERM→SIGKILL window (30 s) so that TaskManager drain completes

@@ -94,6 +94,7 @@ CompactionReasonCode = Literal[
     "live_context_still_exceeds_target",
     "guard_blocked",
     "summary_failed",
+    "handler_error",
     "timeout",
     "aborted",
     "provider_error_4xx",

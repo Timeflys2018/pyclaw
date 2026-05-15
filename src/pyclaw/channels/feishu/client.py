@@ -187,9 +187,7 @@ class FeishuClient:
             {
                 "sender_id": getattr(getattr(item, "sender", None), "id", None),
                 "msg_type": getattr(item, "msg_type", ""),
-                "content": getattr(item, "body", {}).content
-                if hasattr(getattr(item, "body", None), "content")
-                else "",
+                "content": getattr(getattr(item, "body", None), "content", ""),
             }
             for item in items
         ]
@@ -205,4 +203,7 @@ class FeishuClient:
         resp = await self._client.im.v1.message_resource.aget(req)
         if not resp.success():
             raise RuntimeError(f"download_image failed: {resp.code} {resp.msg}")
-        return resp.raw.content
+        raw = resp.raw
+        if raw is None or raw.content is None:
+            raise RuntimeError("download_image returned empty response")
+        return raw.content

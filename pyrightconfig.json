@@ -1,0 +1,15 @@
+{
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "venvPath": ".",
+  "venv": ".venv",
+  "include": ["src"],
+  "exclude": ["tests", "**/__pycache__"],
+  "reportMissingTypeArgument": false,
+  "reportCallIssue": false,
+  "reportArgumentType": false,
+  "reportOptionalMemberAccess": false,
+  "reportOptionalSubscript": false,
+  "reportIndexIssue": false,
+  "reportGeneralTypeIssues": false
+}
