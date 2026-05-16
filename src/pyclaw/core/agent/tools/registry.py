@@ -28,6 +28,9 @@ class ToolContext:
     session_id: str
     abort: asyncio.Event = field(default_factory=asyncio.Event)
     extras: dict[str, Any] = field(default_factory=dict)
+    user_id: str | None = None
+    role: Literal["admin", "member"] | None = None
+    user_profile: Any = None
 
 
 @runtime_checkable

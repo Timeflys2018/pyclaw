@@ -5,7 +5,7 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from pyclaw.core.agent.compaction import estimate_messages_tokens, take_checkpoint
 from pyclaw.core.agent.incomplete_turn import classify_turn, retry_message_for
@@ -102,6 +102,9 @@ class RunRequest:
     attachments: list[Any] = field(default_factory=list)
     extra_system: str = ""
     permission_tier_override: PermissionTier | None = None
+    user_id: str | None = None
+    role: Literal["admin", "member"] | None = None
+    user_profile: Any = None
 
 
 @dataclass
@@ -282,6 +285,9 @@ async def run_agent_stream(
             session_id=request.session_id,
             abort=abort_event,
             extras=request.tool_context_extras,
+            user_id=request.user_id,
+            role=request.role,
+            user_profile=request.user_profile,
         )
         if deps.task_manager is not None:
             tool_ctx.extras.setdefault("task_manager", deps.task_manager)
@@ -743,7 +749,10 @@ async def run_agent_stream(
                         )
                     elif hook is not None:
                         try:
-                            gate = hook.should_gate(canonical_name)
+                            try:
+                                gate = hook.should_gate(canonical_name, tool_ctx)
+                            except TypeError:
+                                gate = hook.should_gate(canonical_name)
                         except Exception:
                             import logging
                             logging.getLogger(__name__).exception(

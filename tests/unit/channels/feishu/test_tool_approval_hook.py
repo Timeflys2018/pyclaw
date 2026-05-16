@@ -99,6 +99,72 @@ class TestShouldGate:
         assert hook.should_gate("fs:list_directory") is False
 
 
+class TestShouldGateUserProfileReplace:
+    """Sprint 3 4-slot review F2 — Feishu per-user tools_requiring_approval REPLACE."""
+
+    def test_user_override_replaces_channel_default(
+        self,
+        registry: FeishuApprovalRegistry,
+        settings: FeishuSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        from types import SimpleNamespace
+
+        from pyclaw.auth.profile import UserProfile
+
+        hook = FeishuToolApprovalHook(
+            client=_mock_client(),
+            registry=registry,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+        profile = UserProfile(
+            channel="feishu", user_id="ou_alice", tools_requiring_approval=["bash"],
+        )
+        ctx = SimpleNamespace(user_profile=profile)
+
+        assert hook.should_gate("bash", ctx) is True
+        assert hook.should_gate("write", ctx) is False
+        assert hook.should_gate("edit", ctx) is False
+
+    def test_user_empty_list_gates_nothing(
+        self,
+        registry: FeishuApprovalRegistry,
+        settings: FeishuSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        from types import SimpleNamespace
+
+        from pyclaw.auth.profile import UserProfile
+
+        hook = FeishuToolApprovalHook(
+            client=_mock_client(),
+            registry=registry,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+        profile = UserProfile(
+            channel="feishu", user_id="ou_alice", tools_requiring_approval=[],
+        )
+        ctx = SimpleNamespace(user_profile=profile)
+
+        assert hook.should_gate("bash", ctx) is False
+
+    def test_ctx_none_falls_back_to_channel_default(
+        self,
+        registry: FeishuApprovalRegistry,
+        settings: FeishuSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        hook = FeishuToolApprovalHook(
+            client=_mock_client(),
+            registry=registry,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+        assert hook.should_gate("bash", None) is True
+
+
 class TestUserApproval:
     @pytest.mark.asyncio
     async def test_originator_approves_returns_approve(

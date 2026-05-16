@@ -103,6 +103,110 @@ class TestShouldGate:
         assert not inspect.iscoroutinefunction(hook.should_gate)
 
 
+class TestShouldGateUserProfileReplace:
+    """Sprint 3 4-slot review F2 — per-user tools_requiring_approval REPLACE."""
+
+    def test_user_override_replaces_channel_default(
+        self,
+        queue: SessionQueue,
+        settings: WebSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        from types import SimpleNamespace
+
+        from pyclaw.auth.profile import UserProfile
+
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+        profile = UserProfile(
+            channel="web", user_id="alice", tools_requiring_approval=["bash"],
+        )
+        ctx = SimpleNamespace(user_profile=profile)
+
+        assert hook.should_gate("bash", ctx) is True
+        assert hook.should_gate("write", ctx) is False
+        assert hook.should_gate("edit", ctx) is False
+
+    def test_user_none_falls_through_to_channel_default(
+        self,
+        queue: SessionQueue,
+        settings: WebSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        from types import SimpleNamespace
+
+        from pyclaw.auth.profile import UserProfile
+
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+        profile = UserProfile(
+            channel="web", user_id="alice", tools_requiring_approval=None,
+        )
+        ctx = SimpleNamespace(user_profile=profile)
+
+        assert hook.should_gate("bash", ctx) is True
+        assert hook.should_gate("write", ctx) is True
+
+    def test_user_empty_list_gates_nothing(
+        self,
+        queue: SessionQueue,
+        settings: WebSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        from types import SimpleNamespace
+
+        from pyclaw.auth.profile import UserProfile
+
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+        profile = UserProfile(
+            channel="web", user_id="alice", tools_requiring_approval=[],
+        )
+        ctx = SimpleNamespace(user_profile=profile)
+
+        assert hook.should_gate("bash", ctx) is False
+        assert hook.should_gate("write", ctx) is False
+
+    def test_ctx_none_falls_back_to_channel_default(
+        self,
+        queue: SessionQueue,
+        settings: WebSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+        assert hook.should_gate("bash", None) is True
+        assert hook.should_gate("read", None) is False
+
+    def test_ctx_without_user_profile_attr_falls_back(
+        self,
+        queue: SessionQueue,
+        settings: WebSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        from types import SimpleNamespace
+
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+        ctx = SimpleNamespace()
+        assert hook.should_gate("bash", ctx) is True
+
+
 class TestUserApproval:
     @pytest.mark.asyncio
     async def test_user_approves_returns_approve(

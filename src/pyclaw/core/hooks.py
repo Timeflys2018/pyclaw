@@ -92,7 +92,7 @@ class ToolApprovalHook(Protocol):
     where non-gated calls trigger a UI prompt the user cannot influence.
     """
 
-    def should_gate(self, tool_name: str) -> bool:
+    def should_gate(self, tool_name: str, ctx: Any = None) -> bool:
         """Synchronous predicate: should this tool name require user approval?
 
         Called by the runner during per-call tier evaluation, BEFORE emitting
@@ -107,6 +107,13 @@ class ToolApprovalHook(Protocol):
         ``tier_source == "forced-by-server-config"``: forced-tier calls are
         unconditionally gated per Sprint 2 spec invariant, bypassing the
         per-channel ``tools_requiring_approval`` allow-list.
+
+        Sprint 3 amendment (4-slot review F2 — REPLACE semantics): hooks SHOULD
+        accept an optional ``ctx: ToolContext`` and consult
+        ``ctx.user_profile.tools_requiring_approval`` when set (REPLACE
+        channel default). When ``ctx`` is ``None`` or ``ctx.user_profile`` is
+        ``None``, hooks fall back to the channel-level
+        ``tools_requiring_approval`` setting (Sprint 2 behavior).
         """
         ...
 

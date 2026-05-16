@@ -244,12 +244,40 @@ class FeishuSettings(BaseSettings):
     )
     """Tools that trigger Feishu CardKit approval card under ``approval`` tier."""
 
+    users: list["FeishuUserConfig"] = Field(default_factory=list)
+
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
 
 
 class WebUserConfig(BaseModel):
     id: str
     password: str
+    role: Literal["admin", "member"] = "member"
+    tier_default: Literal["read-only", "approval", "yolo"] | None = Field(
+        None, alias="tierDefault"
+    )
+    tools_requiring_approval: list[str] | None = Field(
+        None, alias="toolsRequiringApproval"
+    )
+    env_allowlist: list[str] | None = Field(None, alias="envAllowlist")
+    sandbox_overrides: dict | None = Field(None, alias="sandboxOverrides")
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+
+class FeishuUserConfig(BaseModel):
+    open_id: str = Field(..., alias="openId")
+    role: Literal["admin", "member"] = "member"
+    tier_default: Literal["read-only", "approval", "yolo"] | None = Field(
+        None, alias="tierDefault"
+    )
+    tools_requiring_approval: list[str] | None = Field(
+        None, alias="toolsRequiringApproval"
+    )
+    env_allowlist: list[str] | None = Field(None, alias="envAllowlist")
+    sandbox_overrides: dict | None = Field(None, alias="sandboxOverrides")
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
 
 class WebSettings(BaseSettings):

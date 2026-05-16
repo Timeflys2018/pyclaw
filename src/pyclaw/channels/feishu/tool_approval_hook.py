@@ -5,6 +5,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+from pyclaw.auth.tools_requiring_approval import resolve_tools_requiring_approval
 from pyclaw.channels.feishu.approval_card import (
     build_approval_card,
     build_countdown_card,
@@ -55,8 +56,13 @@ class FeishuToolApprovalHook:
     def set_originator_resolver(self, resolver: Any) -> None:
         self._originator_resolver = resolver
 
-    def should_gate(self, tool_name: str) -> bool:
-        return tool_name in self._settings.tools_requiring_approval
+    def should_gate(self, tool_name: str, ctx: Any = None) -> bool:
+        profile = getattr(ctx, "user_profile", None) if ctx is not None else None
+        effective = resolve_tools_requiring_approval(
+            profile=profile,
+            channel_default=self._settings.tools_requiring_approval,
+        )
+        return tool_name in effective
 
     async def before_tool_execution(
         self,

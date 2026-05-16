@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from pyclaw.auth.tools_requiring_approval import resolve_tools_requiring_approval
 from pyclaw.core.hooks import ApprovalDecision, PermissionTier
 from pyclaw.infra.audit_logger import AuditLogger
 from pyclaw.infra.settings import WebSettings
@@ -46,8 +47,13 @@ class WebToolApprovalHook:
         self._settings = settings
         self._audit = audit_logger
 
-    def should_gate(self, tool_name: str) -> bool:
-        return tool_name in self._settings.tools_requiring_approval
+    def should_gate(self, tool_name: str, ctx: Any = None) -> bool:
+        profile = getattr(ctx, "user_profile", None) if ctx is not None else None
+        effective = resolve_tools_requiring_approval(
+            profile=profile,
+            channel_default=self._settings.tools_requiring_approval,
+        )
+        return tool_name in effective
 
     async def before_tool_execution(
         self,
