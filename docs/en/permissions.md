@@ -227,3 +227,24 @@ respond to clicks. Either:
 Symptoms in the Feishu Developer Console: no `card.action.trigger` events.
 Fix: subscribe to that callback under Events & Callbacks → Subscribed
 Callbacks. WebSocket-mode requires the long-connection setting enabled.
+
+---
+
+## Sprint 3 — 4-Layer Tier Precedence + Channel Differences
+
+Sprint 3 upgraded tier resolution to 4 layers (highest to lowest):
+
+1. **Per-message override** — Web SPA tier pill (localStorage-persisted) / Feishu `/tier <tier> --once`
+2. **Per-sessionKey override** — `/tier <tier>` persisted to Redis (**Feishu-only**, see below)
+3. **Per-user `UserProfile.tier_default`** — Sprint 3 new, configured via `/admin user set`
+4. **Channel deployment default** — `settings.channels.{web,feishu}.default_permission_tier`
+
+First non-None value wins. Per-server `forced_tier` (Sprint 2) layers on top — can only **tighten**, never relax.
+
+### Layer 2 (per-sessionKey) is Feishu-only by design
+
+The Web channel **intentionally does not** use Layer 2 — the Web SPA's tier pill widget (localStorage-persisted, per-message override) covers all the same use cases with better ergonomics. `web/chat.py:445` hardcodes `session_tier=None`.
+
+Feishu has no UI widget, only a `/tier <tier>` slash command. Layer 2 lets a Feishu user send `/tier yolo` once in a chat → writes `pyclaw:feishu:tier:{sessionKey}` Redis key (TTL 7d) → all subsequent messages in that chat use `yolo`, **without leaking** to other chats / other users, and `/new` doesn't reset (Sprint 1 invariant).
+
+If a future iteration adds a `/tier` slash command to Web, `web/chat.py:445` must be updated to read `get_session_tier` simultaneously.

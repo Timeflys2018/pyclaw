@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import atexit
 import json
 import logging
 import os
 import shutil
 import tempfile
+import threading
 from typing import Any, Literal
 
 from pyclaw.infra.settings import SandboxSettings
@@ -16,8 +18,37 @@ ARG_MAX_FALLBACK_THRESHOLD = 100_000
 _DEFAULT_DENY_DOMAINS: tuple[str, ...] = ("169.254.169.254",)
 
 
+_GENERATED_FILES_LOCK = threading.Lock()
+_GENERATED_FILES: set[str] = set()
+
+
+def _cleanup_all_generated_files() -> None:
+    with _GENERATED_FILES_LOCK:
+        paths = list(_GENERATED_FILES)
+        _GENERATED_FILES.clear()
+    for path in paths:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        except Exception:
+            logger.debug("srt: cleanup of %s failed", path, exc_info=True)
+
+
+atexit.register(_cleanup_all_generated_files)
+
+
 class SrtBinaryNotFound(RuntimeError):
     """Raised when ``srt`` is required but missing on $PATH."""
+
+
+class SrtCommandTooLong(RuntimeError):
+    """Raised when a bash command exceeds ``ARG_MAX_FALLBACK_THRESHOLD``.
+
+    4-slot review v2 A3 fix: previously the policy silently fell back to
+    NoSandbox semantics, which an attacker could exploit by padding a
+    payload to bypass isolation. Now refuses fail-closed.
+    """
 
 
 class SrtPolicy:
@@ -61,12 +92,17 @@ class SrtPolicy:
         self, cmd: str, ctx: Any
     ) -> tuple[str, list[str]]:
         if len(cmd) > ARG_MAX_FALLBACK_THRESHOLD:
-            logger.warning(
-                "srt: command length %d exceeds threshold %d; falling back to NoSandbox",
+            logger.error(
+                "srt: command length %d exceeds threshold %d; refusing fail-closed "
+                "(was silent NoSandbox bypass per 4-slot review v2 A3)",
                 len(cmd),
                 ARG_MAX_FALLBACK_THRESHOLD,
             )
-            return ("/bin/sh", ["-c", cmd])
+            raise SrtCommandTooLong(
+                f"sandbox: command length {len(cmd)} exceeds maximum "
+                f"{ARG_MAX_FALLBACK_THRESHOLD} (security: refusing to fall back to "
+                f"unsandboxed execution; shorten the command or use a script file)"
+            )
 
         if self._binary_path is None:
             logger.warning("srt: binary missing at spawn; falling back to NoSandbox")
@@ -126,7 +162,26 @@ class SrtPolicy:
         except Exception:
             os.close(fd) if not f.closed else None  # type: ignore[has-type]
             raise
+        with _GENERATED_FILES_LOCK:
+            _GENERATED_FILES.add(path)
         return path
+
+    @staticmethod
+    def cleanup_settings_file(path: str) -> None:
+        """Delete a generated srt-settings.json file. Idempotent.
+
+        Callers (BashTool post-execution, MCP server stop) invoke this to
+        avoid 4-slot review v2 F1 temp file accumulation. ``atexit`` also
+        sweeps any leftovers at process shutdown.
+        """
+        with _GENERATED_FILES_LOCK:
+            _GENERATED_FILES.discard(path)
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        except Exception:
+            logger.debug("srt: cleanup of %s failed", path, exc_info=True)
 
     def _build_settings_dict(
         self, *, ctx: Any = None, sandbox_config: Any = None

@@ -133,6 +133,33 @@ class TestHardcodedDenyFloor:
         ):
             assert name in HARDCODED_DENY_NAMES, f"{name} missing from deny floor"
 
+    def test_dyld_ld_loader_hijack_vars_blocked(self) -> None:
+        """4-slot review v2 A4 fix — dynamic-linker hijack vectors.
+
+        LD_PRELOAD / DYLD_INSERT_LIBRARIES allow loading arbitrary shared
+        libraries that intercept syscalls — defeating srt's filesystem and
+        network isolation. Must always be stripped, even with allowlist=['*'].
+        """
+        parent = {
+            "PATH": "/usr/bin",
+            "LD_PRELOAD": "/tmp/evil.so",
+            "LD_LIBRARY_PATH": "/tmp",
+            "LD_AUDIT": "/tmp/audit.so",
+            "DYLD_INSERT_LIBRARIES": "/tmp/evil.dylib",
+            "DYLD_LIBRARY_PATH": "/tmp",
+            "DYLD_FALLBACK_LIBRARY_PATH": "/tmp",
+        }
+        env = build_clean_env(allowlist=["*"], parent_env=parent)
+        for name in (
+            "LD_PRELOAD",
+            "LD_LIBRARY_PATH",
+            "LD_AUDIT",
+            "DYLD_INSERT_LIBRARIES",
+            "DYLD_LIBRARY_PATH",
+            "DYLD_FALLBACK_LIBRARY_PATH",
+        ):
+            assert name not in env, f"{name} leaked despite hardcoded deny floor"
+
 
 class TestSpecificAllowlistVsHardcodedDeny:
     """4-slot review F10 — env_allowlist=['AWS_REGION'] passes AWS_REGION

@@ -175,21 +175,36 @@ class TestSettingsJsonGeneration:
         assert "/tmp/alice" in cfg["filesystem"]["allowWrite"]
 
 
-class TestArgTooLongFallback:
-    """Linux ARG_MAX exceeded → fall back to NoSandboxPolicy semantics + audit."""
+class TestArgTooLongFailClosed:
+    """4-slot review v2 A3 fix: refuse oversized commands fail-closed.
 
-    def test_oversized_command_falls_back_to_passthrough(
+    Previously fell back to NoSandbox semantics — exploitable by padding a
+    malicious payload to bypass sandbox isolation.
+    """
+
+    def test_oversized_command_raises_srt_command_too_long(
         self, sandbox_settings: SandboxSettings, ctx: MagicMock
     ) -> None:
-        from pyclaw.sandbox.srt import ARG_MAX_FALLBACK_THRESHOLD
+        from pyclaw.sandbox.srt import ARG_MAX_FALLBACK_THRESHOLD, SrtCommandTooLong
 
         long_cmd = "echo " + "a" * (ARG_MAX_FALLBACK_THRESHOLD + 1)
         with patch("pyclaw.sandbox.srt.shutil.which", return_value="/opt/homebrew/bin/srt"):
             policy = SrtPolicy(settings=sandbox_settings)
-            executable, args = policy.wrap_bash_command(long_cmd, ctx)
+            with pytest.raises(SrtCommandTooLong) as exc_info:
+                policy.wrap_bash_command(long_cmd, ctx)
+            assert "exceeds maximum" in str(exc_info.value)
 
-        assert executable == "/bin/sh"
-        assert args == ["-c", long_cmd]
+    def test_command_at_threshold_succeeds(
+        self, sandbox_settings: SandboxSettings, ctx: MagicMock
+    ) -> None:
+        from pyclaw.sandbox.srt import ARG_MAX_FALLBACK_THRESHOLD
+
+        cmd = "a" * ARG_MAX_FALLBACK_THRESHOLD
+        with patch("pyclaw.sandbox.srt.shutil.which", return_value="/opt/homebrew/bin/srt"):
+            policy = SrtPolicy(settings=sandbox_settings)
+            executable, args = policy.wrap_bash_command(cmd, ctx)
+        assert executable == "/opt/homebrew/bin/srt"
+        assert args[0] == "--settings"
 
 
 class TestWrapMcpStdio:

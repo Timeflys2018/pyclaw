@@ -29,6 +29,12 @@ HARDCODED_DENY_NAMES: frozenset[str] = frozenset(
         "GH_TOKEN",
         "KUBECONFIG",
         "KUBE_TOKEN",
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        "LD_AUDIT",
+        "DYLD_INSERT_LIBRARIES",
+        "DYLD_LIBRARY_PATH",
+        "DYLD_FALLBACK_LIBRARY_PATH",
     }
 )
 

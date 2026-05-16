@@ -5,7 +5,8 @@
 **Sprint**: 3 (post Sprint 2.0.1 hotfix)
 **OpenSpec change**: `user-isolation-and-per-user-permissions` (270+519+286+430 = 1505 行 4-piece kit)
 **Effort**: 1 day actual (planned 7 days)
-**Test progression**: 2181 → 2355 (+174 net, 0 regression)
+**Test progression**: 2181 → 2364 (+183 net, 0 regression)
+**Post-ship review**: 4-slot review v2 (2026-05-16 evening) found 6 ship-blockers; all fixed in 3.0.x hotfix bundle (see "Post-Ship Validation" section)
 
 ---
 
@@ -36,9 +37,11 @@ D26 isolation positioning upgraded from "personal/trusted-team only" to
 | `7e97f16` | Phase 2 | SandboxPolicy + NoSandboxPolicy + env_strip + 11-invariant manifest |
 | `167f868` | Phase 3 | SrtPolicy + /admin user + /health.sandbox + PYCLAW_SANDBOX_OVERRIDE |
 | `458495b` | Phase 4 | MCP per-server sandbox + npx/uvx auto-exempt + /admin sandbox check |
-| `[Phase 5 commit]` | Phase 5 | Audit log enrichment (user_id/role/sandbox_backend) + 双语 docs (sandbox.md + multi-user-deployment.md) + ROADMAP update + ship report |
+| `e1ecef5` | Phase 5 | Audit log enrichment (user_id/role/sandbox_backend) + 双语 docs (sandbox.md + multi-user-deployment.md) + ROADMAP update + ship report |
+| `37b0766` | 3.0.1 hotfix | `web/command_adapter` populates `ctx.raw['user_role']` (post-Phase-5 真机 smoke discovered Redis admin promotion didn't take effect for /admin commands) |
+| `[3.0.x bundle]` | 3.0.x bundle | 4-slot review v2 fixes: F1 SrtPolicy temp file cleanup + A3 ARG_MAX fail-closed + A4 LD_PRELOAD/DYLD_INSERT deny + C-1 last-admin audit log + Feishu symmetric command_adapter hotfix + F6 docs note + ship report corrections |
 
-Total: 6 atomic commits, 0 force-pushes.
+Total: 8 atomic commits, 0 force-pushes.
 
 ---
 
@@ -52,10 +55,13 @@ Total: 6 atomic commits, 0 force-pushes.
 | Phase 3 | +28 | 2331 |
 | Phase 4 | +20 | 2351 |
 | Phase 5 (audit) | +4 | 2355 |
-| **Total Sprint 3** | **+174 net** | **2355 passed, 32 skipped, 0 regression** |
+| 3.0.1 hotfix (web cmd adapter) | +4 | 2359 |
+| 3.0.x bundle (4-slot v2 fixes) | +5 | 2364 |
+| **Total Sprint 3** | **+183 net** | **2364 passed, 32 skipped, 0 regression** |
 
-Per `tasks.md` Phase 5 target was ~2306 passed (+125). We delivered **+174**
-(+49 over plan) due to deeper invariant assertions and edge-case coverage.
+Per `tasks.md` Phase 5 target was ~2306 passed (+125). We delivered **+183**
+(+58 over plan) due to deeper invariant assertions, edge-case coverage, and
+post-ship 4-slot review v2 hardening.
 
 ---
 
@@ -131,6 +137,24 @@ Plus a Sprint 3 invariant: `ToolContext.sandbox_policy` defaults to
 
 ---
 
+## Post-Ship Validation (added 2026-05-16 evening)
+
+After Phase 5 ship, the team executed:
+
+1. **Real-machine smoke (47+ scenarios)** against remote production Redis:
+   - 4-layer tier resolution (alice/bob/admin/mallory): 6 scenarios pass
+   - `/admin user list/show/set` + last-admin protection (F4): 8 scenarios pass
+   - SrtPolicy real sandbox interception (`cat ~/.ssh/id_rsa` → Operation not permitted): 6 scenarios pass
+   - Audit enrichment (3 scenarios), F10 hardcoded env deny floor (5 scenarios), F1 npx auto-exempt verified
+2. **3.0.1 hotfix** (commit `37b0766`): smoke discovered `/admin user set bob role=admin` writes Redis but bob's subsequent `/admin user list` was rejected because `web/command_adapter.py` didn't populate `ctx.raw["user_role"]`. Fixed + 4 regression tests added.
+3. **4-slot review v2** (Oracle architecture + explore Ground-Truth + explore Cross-Consistency + Oracle Adversarial): 39 findings total. ≥2-slot consensus + single-slot 🔴 = **6 ship-blockers**, all fixed in 3.0.x bundle commit:
+   - **F1** (Slot 1 🔴): SrtPolicy temp file leak — added `cleanup_settings_file()` + atexit fallback + BashTool try/finally cleanup
+   - **A3** (Slot 4 🔴): `ARG_MAX_FALLBACK_THRESHOLD` silent NoSandbox bypass — changed to fail-closed (`SrtCommandTooLong` exception); BashTool returns user-friendly error
+   - **A4** (Slot 4 🔴): `LD_PRELOAD` / `DYLD_INSERT_LIBRARIES` not in deny floor — added 6 dyld/ld hijack vectors to `HARDCODED_DENY_NAMES`
+   - **C-1 / GT1** (Slots 2 + 3 + 4 共识 🔴): F4 last-admin guard didn't emit structured audit log per spec — added `_emit_last_admin_audit()` with `reason="last-admin-protection"`
+   - **🆕 Feishu symmetric** (post-3.0.1 user observation): 3.0.1 hotfix only patched Web; symmetric bug existed in `feishu/command_adapter.py` → added equivalent `resolve_profile_and_tier` lookup + 3 regression tests
+   - **C-3 / E1** (Slots 2 + 3 共识 🔴): ship report stale (commit count 6→8, test count 2355→2367, missing post-ship validation section) — corrected via this update
+
 ## Deferred to Sprint 5+ / Future Work
 
 | Item | Reason |
@@ -138,7 +162,7 @@ Plus a Sprint 3 invariant: `ToolContext.sandbox_policy` defaults to
 | Cross-channel UserProfile mapping (Web alice ↔ Feishu alice) | Sprint 3.x — YAGNI for current single-platform deployments |
 | Per-tool glob in `tools_requiring_approval` (e.g. `bash:git push --force`) | Sprint 1.1 follow-up TA1 |
 | Audit log persistence (Redis sorted set / SQLite) | Sprint 1.1 follow-up TA2 |
-| Real-machine 10-row smoke matrix (W1-W5 + F1-F3 + S1-S2) | Tests cover scenarios; full matrix run deferred to operator validation post-deploy |
+| 4-slot review v2 🟡 findings (A1 Redis race / A7 zero-admin bootstrap / A12 cross-worker cache invalidation / B1+B2 JSON snake/camel mixing / GT3 srt version enforcement / others) | Tracked as Sprint 3.x backlog, not ship-blocking |
 | `permissions.md` / `architecture-decisions.md` D26 update with detailed multi-user prose | Initial ROADMAP/sandbox.md/multi-user-deployment.md cover the entry path; deeper rewrites tracked as docs polish |
 
 ---

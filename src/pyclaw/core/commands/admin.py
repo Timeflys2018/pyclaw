@@ -219,6 +219,7 @@ async def _handle_set(
                 ctx.user_id,
                 ctx.channel,
             )
+            _emit_last_admin_audit(ctx, target)
             return
 
     updated = replace(
@@ -302,6 +303,35 @@ async def _handle_sandbox_check(ctx: CommandContext) -> None:
             lines.append(f"    ⚠️ {warn}")
 
     await ctx.reply("\n".join(lines))
+
+
+def _emit_last_admin_audit(ctx: CommandContext, target_user_id: str) -> None:
+    """Emit structured audit line for last-admin-protection denial.
+
+    Spec.md F4 scenario explicitly requires
+    ``decided_by="user", decision="deny", reason="last-admin-protection"``
+    in the audit trail (4-slot review v2 GT1 / C-1 fix). Allows ops
+    `jq 'select(.reason == "last-admin-protection")'` to find these denials.
+    """
+    audit = getattr(ctx.deps, "audit_logger", None)
+    if audit is None:
+        return
+    try:
+        audit.log_decision(
+            conv_id=ctx.session_id,
+            session_id=ctx.session_id,
+            channel=ctx.channel,  # type: ignore[arg-type]
+            tool_name="/admin user set",
+            tool_call_id=f"admin-set-{target_user_id}",
+            tier="approval",
+            decision="deny",
+            decided_by="user",
+            reason="last-admin-protection",
+            user_id=ctx.user_id,
+            role="admin",
+        )
+    except Exception:
+        logger.warning("last-admin audit emission failed", exc_info=True)
 
 
 __all__ = ["cmd_admin"]

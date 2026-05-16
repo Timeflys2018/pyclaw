@@ -45,6 +45,16 @@ def _make_ctx(
     settings.channels.web.users = []
     settings.channels.feishu.users = []
     ctx.settings = settings
+
+    audit_calls: list[dict] = []
+
+    class _FakeAudit:
+        def log_decision(self, **kwargs):
+            audit_calls.append(kwargs)
+
+    ctx.deps = MagicMock()
+    ctx.deps.audit_logger = _FakeAudit()
+    ctx.audit_calls = audit_calls
     return ctx
 
 
@@ -117,6 +127,19 @@ class TestLastAdminProtection:
             "last admin" in r.lower() or "last-admin" in r.lower() for r in ctx.replies
         )
         redis.setex.assert_not_awaited()
+
+        audit_entries = [
+            c for c in ctx.audit_calls
+            if c.get("reason") == "last-admin-protection"
+        ]
+        assert len(audit_entries) == 1, (
+            f"4-slot v2 GT1 fix: expected 1 audit log entry with "
+            f"reason='last-admin-protection', got {len(audit_entries)}"
+        )
+        entry = audit_entries[0]
+        assert entry["decided_by"] == "user"
+        assert entry["decision"] == "deny"
+        assert entry["user_id"] == "alice"
 
     @pytest.mark.asyncio
     async def test_self_demote_allowed_when_other_admins_exist(self) -> None:

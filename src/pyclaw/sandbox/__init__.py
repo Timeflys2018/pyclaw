@@ -6,7 +6,7 @@ from pyclaw.sandbox.env_strip import (
 )
 from pyclaw.sandbox.no_sandbox import NoSandboxPolicy
 from pyclaw.sandbox.policy import SandboxPolicy
-from pyclaw.sandbox.srt import SrtBinaryNotFound, SrtPolicy
+from pyclaw.sandbox.srt import SrtBinaryNotFound, SrtCommandTooLong, SrtPolicy
 from pyclaw.sandbox.state import (
     OVERRIDE_DISABLE_VALUE,
     OVERRIDE_ENV_VAR,
@@ -26,6 +26,7 @@ __all__ = [
     "SandboxStartupError",
     "SandboxState",
     "SrtBinaryNotFound",
+    "SrtCommandTooLong",
     "SrtPolicy",
     "build_clean_env",
     "health_advisory",

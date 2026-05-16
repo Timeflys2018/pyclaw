@@ -44,9 +44,14 @@ class BashTool:
 
         sandbox_policy = getattr(context, "sandbox_policy", None)
         if sandbox_policy is not None:
-            executable, exec_args = sandbox_policy.wrap_bash_command(command, context)
+            try:
+                executable, exec_args = sandbox_policy.wrap_bash_command(command, context)
+            except RuntimeError as exc:
+                return error_result(call_id, f"bash: {exc}")
         else:
             executable, exec_args = ("/bin/sh", ["-c", command])
+
+        srt_settings_path = _extract_srt_settings_path(sandbox_policy, executable, exec_args)
 
         spawn_kwargs: dict[str, Any] = {
             "stdout": asyncio.subprocess.PIPE,
@@ -58,57 +63,89 @@ class BashTool:
             spawn_kwargs["env"] = spawn_env
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                executable,
-                *exec_args,
-                **spawn_kwargs,
-            )
-        except OSError as exc:
-            return error_result(call_id, f"bash: failed to spawn: {exc}")
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    executable,
+                    *exec_args,
+                    **spawn_kwargs,
+                )
+            except OSError as exc:
+                return error_result(call_id, f"bash: failed to spawn: {exc}")
 
-        comm_task = asyncio.ensure_future(proc.communicate())
-        abort_task = asyncio.ensure_future(context.abort.wait())
+            comm_task = asyncio.ensure_future(proc.communicate())
+            abort_task = asyncio.ensure_future(context.abort.wait())
 
+            try:
+                done, _pending = await asyncio.wait(
+                    [comm_task, abort_task],
+                    timeout=timeout,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+            except asyncio.CancelledError:
+                _terminate_proc(proc)
+                comm_task.cancel()
+                abort_task.cancel()
+                raise
+
+            if comm_task in done:
+                abort_task.cancel()
+                stdout_b, stderr_b = comm_task.result()
+            elif abort_task in done:
+                comm_task.cancel()
+                await _abort_proc(proc, BASH_ABORT_GRACE_SECONDS)
+                return error_result(call_id, "bash: aborted")
+            else:
+                abort_task.cancel()
+                comm_task.cancel()
+                await _abort_proc(proc, BASH_ABORT_GRACE_SECONDS)
+                return error_result(call_id, f"bash: command timed out after {timeout}s")
+
+            stdout = stdout_b.decode("utf-8", errors="replace")
+            stderr = stderr_b.decode("utf-8", errors="replace")
+            exit_code = proc.returncode or 0
+
+            parts = []
+            if stdout:
+                parts.append(f"[stdout]\n{stdout}")
+            if stderr:
+                parts.append(f"[stderr]\n{stderr}")
+            parts.append(f"[exit_code={exit_code}]")
+            body = "\n".join(parts)
+
+            if exit_code != 0:
+                return error_result(call_id, body)
+            return text_result(call_id, body)
+        finally:
+            if srt_settings_path is not None:
+                _cleanup_srt_settings(sandbox_policy, srt_settings_path)
+
+
+def _extract_srt_settings_path(
+    sandbox_policy: Any, executable: str, exec_args: list[str]
+) -> str | None:
+    """Detect the per-call srt-settings.json path for cleanup tracking.
+
+    Returns the path when ``sandbox_policy.backend == "srt"`` and exec_args
+    matches the srt convention ``["--settings", <path>, ...]``. Otherwise
+    None — NoSandboxPolicy spawns don't produce settings files.
+    """
+    if getattr(sandbox_policy, "backend", "none") != "srt":
+        return None
+    if len(exec_args) >= 2 and exec_args[0] == "--settings":
+        return exec_args[1]
+    return None
+
+
+def _cleanup_srt_settings(sandbox_policy: Any, path: str) -> None:
+    cleanup = getattr(sandbox_policy, "cleanup_settings_file", None)
+    if callable(cleanup):
         try:
-            done, _pending = await asyncio.wait(
-                [comm_task, abort_task],
-                timeout=timeout,
-                return_when=asyncio.FIRST_COMPLETED,
+            cleanup(path)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).debug(
+                "srt settings cleanup failed for %s", path, exc_info=True
             )
-        except asyncio.CancelledError:
-            _terminate_proc(proc)
-            comm_task.cancel()
-            abort_task.cancel()
-            raise
-
-        if comm_task in done:
-            abort_task.cancel()
-            stdout_b, stderr_b = comm_task.result()
-        elif abort_task in done:
-            comm_task.cancel()
-            await _abort_proc(proc, BASH_ABORT_GRACE_SECONDS)
-            return error_result(call_id, "bash: aborted")
-        else:
-            abort_task.cancel()
-            comm_task.cancel()
-            await _abort_proc(proc, BASH_ABORT_GRACE_SECONDS)
-            return error_result(call_id, f"bash: command timed out after {timeout}s")
-
-        stdout = stdout_b.decode("utf-8", errors="replace")
-        stderr = stderr_b.decode("utf-8", errors="replace")
-        exit_code = proc.returncode or 0
-
-        parts = []
-        if stdout:
-            parts.append(f"[stdout]\n{stdout}")
-        if stderr:
-            parts.append(f"[stderr]\n{stderr}")
-        parts.append(f"[exit_code={exit_code}]")
-        body = "\n".join(parts)
-
-        if exit_code != 0:
-            return error_result(call_id, body)
-        return text_result(call_id, body)
 
 
 def _resolve_spawn_env(
