@@ -161,8 +161,36 @@
       "toolsRequiringApproval": ["bash", "write"],
       "allowedTools": ["read"],
       "corsOrigins": ["http://localhost:5173"],
-      "users": [{"id": "admin", "password": "changeme"}]
+      "users": [
+        {
+          "id": "admin",
+          "password": "changeme",
+          "role": "admin",
+          "tier_default": "yolo"
+        },
+        {
+          "id": "alice",
+          "password": "changeme",
+          "role": "member",
+          "tier_default": "read-only",
+          "tools_requiring_approval": ["bash"]
+        }
+      ]
     }
+  },
+  "sandbox": {
+    "policy": "none",
+    "productionRequireSandbox": false,
+    "defaultFilesystem": {
+      "allowWrite": ["~/.pyclaw/workspaces"],
+      "denyRead": ["~/.ssh", "~/.aws", "~/.config"],
+      "denyWrite": []
+    },
+    "defaultNetwork": {
+      "allowedDomains": ["api.anthropic.com"],
+      "deniedDomains": ["169.254.169.254"]
+    },
+    "defaultEnvAllowlist": []
   },
   "mcp": {
     "enabled": false,

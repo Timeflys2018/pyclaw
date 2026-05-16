@@ -714,6 +714,14 @@ async def run_agent_stream(
                 tuple[dict[str, Any], str, dict[str, Any], str, str | None]
             ] = []
 
+            audit_user_id = request.user_id
+            audit_role = request.role
+            audit_sandbox_backend = (
+                getattr(request.sandbox_policy, "backend", None)
+                if request.sandbox_policy is not None
+                else None
+            )
+
             for call, llm_tool_name, raw_args, canonical_name, call_tier, tier_source, forced_server in per_call_evaluated:
                 cid = call.get("id", "")
                 if call_tier == "yolo":
@@ -722,6 +730,8 @@ async def run_agent_stream(
                         canonical_name, cid, call_tier,
                         decision="approve", decided_by="auto:yolo",
                         tier_source=tier_source, forced_server=forced_server,
+                        user_id=audit_user_id, role=audit_role,
+                        sandbox_backend=audit_sandbox_backend,
                     )
                 elif call_tier == "read-only":
                     tool_obj = deps.tools.get(llm_tool_name) if llm_tool_name else None
@@ -736,6 +746,8 @@ async def run_agent_stream(
                             canonical_name, cid, call_tier,
                             decision="deny", decided_by="auto:read-only",
                             tier_source=tier_source, forced_server=forced_server,
+                            user_id=audit_user_id, role=audit_role,
+                            sandbox_backend=audit_sandbox_backend,
                         )
                     else:
                         _emit_runner_audit(
@@ -743,6 +755,8 @@ async def run_agent_stream(
                             canonical_name, cid, call_tier,
                             decision="approve", decided_by="auto:read-only",
                             tier_source=tier_source, forced_server=forced_server,
+                            user_id=audit_user_id, role=audit_role,
+                            sandbox_backend=audit_sandbox_backend,
                         )
                 else:
                     is_forced = tier_source == "forced-by-server-config"
@@ -774,6 +788,8 @@ async def run_agent_stream(
                                 canonical_name, cid, call_tier,
                                 decision="approve", decided_by="auto:not-gated",
                                 tier_source=tier_source, forced_server=forced_server,
+                                user_id=audit_user_id, role=audit_role,
+                                sandbox_backend=audit_sandbox_backend,
                             )
                     else:
                         _emit_runner_audit(
@@ -781,6 +797,8 @@ async def run_agent_stream(
                             canonical_name, cid, call_tier,
                             decision="approve", decided_by="auto:not-gated",
                             tier_source=tier_source, forced_server=forced_server,
+                            user_id=audit_user_id, role=audit_role,
+                            sandbox_backend=audit_sandbox_backend,
                         )
 
             if actually_gated and deps.tool_approval_hook is None:
@@ -795,6 +813,8 @@ async def run_agent_stream(
                         canonical_name, cid, "approval",
                         decision="deny", decided_by="auto:no-hook",
                         tier_source=tier_source, forced_server=forced_server,
+                        user_id=audit_user_id, role=audit_role,
+                        sandbox_backend=audit_sandbox_backend,
                     )
 
             if actually_gated and deps.tool_approval_hook is not None:
@@ -1075,6 +1095,9 @@ def _emit_runner_audit(
     decided_by: str,
     tier_source: str | None = None,
     forced_server: str | None = None,
+    user_id: str | None = None,
+    role: str | None = None,
+    sandbox_backend: str | None = None,
 ) -> None:
     audit = getattr(deps, "audit_logger", None)
     if audit is None:
@@ -1094,11 +1117,23 @@ def _emit_runner_audit(
             kwargs["tier_source"] = tier_source
         if forced_server is not None:
             kwargs["forced_server"] = forced_server
+        if user_id is not None:
+            kwargs["user_id"] = user_id
+        if role is not None:
+            kwargs["role"] = role
+        if sandbox_backend is not None:
+            kwargs["sandbox_backend"] = sandbox_backend
         try:
             audit.log_decision(**kwargs)
         except TypeError:
-            kwargs.pop("tier_source", None)
-            kwargs.pop("forced_server", None)
+            for new_field in (
+                "tier_source",
+                "forced_server",
+                "user_id",
+                "role",
+                "sandbox_backend",
+            ):
+                kwargs.pop(new_field, None)
             audit.log_decision(**kwargs)
     except Exception:
         logger.warning("audit log emit failed", exc_info=True)

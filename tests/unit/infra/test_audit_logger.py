@@ -250,3 +250,102 @@ class TestTierChangeEvent:
             r for r in captured.records if r.name == "pyclaw.audit.tool_approval"
         )
         assert record.levelno == logging.INFO
+
+
+class TestSprint3LogDecisionEnrichment:
+    """Sprint 3 Phase 5 T5.1 — log_decision accepts user_id/role/sandbox_backend."""
+
+    def test_user_id_role_sandbox_backend_in_payload(
+        self, captured: pytest.LogCaptureFixture
+    ) -> None:
+        AuditLogger().log_decision(
+            conv_id="c1",
+            session_id="s1",
+            channel="web",
+            tool_name="bash",
+            tool_call_id="call_1",
+            tier="approval",
+            decision="approve",
+            decided_by="user_alice",
+            user_id="alice",
+            role="member",
+            sandbox_backend="srt",
+        )
+        rec = _last_record(captured)
+        assert rec["user_id"] == "alice"
+        assert rec["role"] == "member"
+        assert rec["sandbox_backend"] == "srt"
+
+    def test_optional_sprint3_fields_omitted_when_none(
+        self, captured: pytest.LogCaptureFixture
+    ) -> None:
+        AuditLogger().log_decision(
+            conv_id="c1",
+            session_id="s1",
+            channel="web",
+            tool_name="bash",
+            tool_call_id="call_1",
+            tier="approval",
+            decision="approve",
+            decided_by="user_alice",
+        )
+        rec = _last_record(captured)
+        assert "user_id" not in rec
+        assert "role" not in rec
+        assert "sandbox_backend" not in rec
+
+    def test_sprint3_fields_coexist_with_sprint2_tier_source(
+        self, captured: pytest.LogCaptureFixture
+    ) -> None:
+        AuditLogger().log_decision(
+            conv_id="c1",
+            session_id="s1",
+            channel="feishu",
+            tool_name="bash",
+            tool_call_id="call_1",
+            tier="approval",
+            decision="deny",
+            decided_by="auto:read-only",
+            tier_source="forced-by-server-config",
+            forced_server="github",
+            user_id="ou_alice",
+            role="admin",
+            sandbox_backend="none",
+        )
+        rec = _last_record(captured)
+        assert rec["tier_source"] == "forced-by-server-config"
+        assert rec["forced_server"] == "github"
+        assert rec["user_id"] == "ou_alice"
+        assert rec["role"] == "admin"
+        assert rec["sandbox_backend"] == "none"
+
+
+class TestSprint3RunnerFallback:
+    """T5.2 — _emit_runner_audit try/except TypeError still works for old AuditLogger."""
+
+    def test_runner_emit_with_old_signature_audit_logger(self) -> None:
+        from pyclaw.core.agent.runner import _emit_runner_audit
+
+        captured_kwargs: list[dict] = []
+
+        class OldAuditLogger:
+            def log_decision(self, **kwargs):
+                if "user_id" in kwargs or "role" in kwargs or "sandbox_backend" in kwargs:
+                    raise TypeError("unexpected kwargs (old signature)")
+                captured_kwargs.append(kwargs)
+
+        class _Deps:
+            audit_logger = OldAuditLogger()
+
+        _emit_runner_audit(
+            _Deps(),
+            "s1", "web", "bash", "call_1", "approval",
+            decision="approve", decided_by="user",
+            tier_source="per-turn", forced_server=None,
+            user_id="alice", role="member", sandbox_backend="srt",
+        )
+        assert len(captured_kwargs) == 1
+        assert "user_id" not in captured_kwargs[0]
+        assert "role" not in captured_kwargs[0]
+        assert "sandbox_backend" not in captured_kwargs[0]
+        assert captured_kwargs[0]["tool_name"] == "bash"

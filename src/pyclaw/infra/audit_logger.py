@@ -50,9 +50,22 @@ class AuditLogger:
         decided_at: datetime | None = None,
         elapsed_ms: int | None = None,
         user_visible_name: str | None = None,
+        tier_source: str | None = None,
+        forced_server: str | None = None,
+        user_id: str | None = None,
+        role: Literal["admin", "member"] | None = None,
+        sandbox_backend: Literal["srt", "none"] | None = None,
+        reason: str | None = None,
     ) -> None:
         """Emit one audit line. ``decided_by`` is one of :data:`DecidedBy` or
-        a user identifier string (Web ``user_id`` or Feishu ``open_id``)."""
+        a user identifier string (Web ``user_id`` or Feishu ``open_id``).
+
+        Sprint 2 added ``tier_source``/``forced_server`` for the de-escalation
+        path; Sprint 3 adds ``user_id``/``role``/``sandbox_backend`` for the
+        per-user permission model + sandbox enforcement. All new fields are
+        optional and omitted when None to preserve Sprint 1 grep-based
+        consumer compatibility.
+        """
         decided_at = decided_at or datetime.now(UTC)
         payload: dict[str, object] = {
             "event": "tool_approval_decision",
@@ -71,6 +84,18 @@ class AuditLogger:
             payload["elapsed_ms"] = elapsed_ms
         if user_visible_name is not None:
             payload["user_visible_name"] = user_visible_name
+        if tier_source is not None:
+            payload["tier_source"] = tier_source
+        if forced_server is not None:
+            payload["forced_server"] = forced_server
+        if user_id is not None:
+            payload["user_id"] = user_id
+        if role is not None:
+            payload["role"] = role
+        if sandbox_backend is not None:
+            payload["sandbox_backend"] = sandbox_backend
+        if reason is not None:
+            payload["reason"] = reason
 
         self._logger.info(json.dumps(payload, separators=(",", ":"), sort_keys=False))
 
