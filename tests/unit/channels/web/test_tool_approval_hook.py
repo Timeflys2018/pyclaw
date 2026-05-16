@@ -50,35 +50,14 @@ def _audit_records(captured: pytest.LogCaptureFixture) -> list[dict]:
     ]
 
 
-class TestAutoApproveUngatedTools:
-    @pytest.mark.asyncio
-    async def test_read_tool_auto_approves_no_event_emitted(
-        self,
-        queue: SessionQueue,
-        settings: WebSettings,
-        audit_logger: AuditLogger,
-        captured: pytest.LogCaptureFixture,
-    ) -> None:
-        hook = WebToolApprovalHook(
-            session_queue=queue,
-            settings=settings,
-            audit_logger=audit_logger,
-        )
-        decisions = await hook.before_tool_execution(
-            [{"id": "c1", "name": "read", "args": {}}],
-            session_id="s1",
-            tier="approval",
-        )
-        assert decisions == ["approve"]
+class TestShouldGate:
+    """Sprint 2.0.1 hotfix: should_gate is the runner's per-call gating predicate.
 
-        rec = _audit_records(captured)
-        assert len(rec) == 1
-        assert rec[0]["decision"] == "approve"
-        assert rec[0]["decided_by"] == "auto:not-gated"
-        assert rec[0]["tool_name"] == "read"
+    Hook no longer fast-paths non-gated calls itself. The runner uses
+    should_gate(name) before deciding to emit ToolApprovalRequest.
+    """
 
-    @pytest.mark.asyncio
-    async def test_mixed_calls_only_gates_listed_tools(
+    def test_listed_tool_returns_true(
         self,
         queue: SessionQueue,
         settings: WebSettings,
@@ -89,22 +68,39 @@ class TestAutoApproveUngatedTools:
             settings=settings,
             audit_logger=audit_logger,
         )
+        assert hook.should_gate("bash") is True
+        assert hook.should_gate("write") is True
+        assert hook.should_gate("edit") is True
 
-        async def respond_later() -> None:
-            await asyncio.sleep(0.01)
-            queue.set_approval_decision("s1", "c2", True)
-
-        gate_task = asyncio.create_task(respond_later())
-        decisions = await hook.before_tool_execution(
-            [
-                {"id": "c1", "name": "read", "args": {}},
-                {"id": "c2", "name": "bash", "args": {"command": "ls"}},
-            ],
-            session_id="s1",
-            tier="approval",
+    def test_unlisted_tool_returns_false(
+        self,
+        queue: SessionQueue,
+        settings: WebSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=settings,
+            audit_logger=audit_logger,
         )
-        await gate_task
-        assert decisions == ["approve", "approve"]
+        assert hook.should_gate("read") is False
+        assert hook.should_gate("fs:search_files") is False
+        assert hook.should_gate("memorize") is False
+
+    def test_should_gate_is_synchronous(
+        self,
+        queue: SessionQueue,
+        settings: WebSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        import inspect
+
+        hook = WebToolApprovalHook(
+            session_queue=queue,
+            settings=settings,
+            audit_logger=audit_logger,
+        )
+        assert not inspect.iscoroutinefunction(hook.should_gate)
 
 
 class TestUserApproval:

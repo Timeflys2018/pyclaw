@@ -75,14 +75,40 @@ class ToolApprovalHook(Protocol):
     """Per-channel approval gate for tool execution.
 
     The runner invokes ``before_tool_execution`` (when a hook is registered on
-    ``AgentRunnerDeps``) before executing any tool calls in an iteration. Each
-    tool call gets one decision; the runner skips denied calls and appends a
-    denial error message in their place.
+    ``AgentRunnerDeps``) **only for the subset of approval-tier calls that are
+    actually gated**, as determined per-call by the runner using
+    :meth:`should_gate` plus ``tier_source``. Each tool call gets one decision;
+    the runner skips denied calls and appends a denial error message in their
+    place.
 
     The ``tier`` argument carries the active :data:`PermissionTier` for the
-    current turn. Implementations decide gating based on tier + their channel
-    config (e.g. ``WebSettings.tools_requiring_approval``).
+    current turn (always ``"approval"`` when this method is called).
+
+    Sprint 2.0.1 hotfix amendment (event-flow vs decision-flow lockstep):
+    Calls with ``call_tier == "approval"`` but NOT actually gated (i.e. neither
+    ``forced_tier == "approval"`` nor :meth:`should_gate` returns True) are
+    auto-approved by the runner directly, with NO ``ToolApprovalRequest`` event
+    emission and NO call to this hook. This prevents the "phantom modal" bug
+    where non-gated calls trigger a UI prompt the user cannot influence.
     """
+
+    def should_gate(self, tool_name: str) -> bool:
+        """Synchronous predicate: should this tool name require user approval?
+
+        Called by the runner during per-call tier evaluation, BEFORE emitting
+        any user-visible :class:`ToolApprovalRequest` event. Only when this
+        returns ``True`` (or the call is forced-by-server-config) will the
+        runner emit the event and call :meth:`before_tool_execution` for this
+        call.
+
+        MUST be synchronous and read-only on settings (no I/O, no awaits).
+
+        MUST NOT be called by the runner when
+        ``tier_source == "forced-by-server-config"``: forced-tier calls are
+        unconditionally gated per Sprint 2 spec invariant, bypassing the
+        per-channel ``tools_requiring_approval`` allow-list.
+        """
+        ...
 
     async def before_tool_execution(
         self,

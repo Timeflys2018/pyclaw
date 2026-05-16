@@ -55,6 +55,9 @@ class FeishuToolApprovalHook:
     def set_originator_resolver(self, resolver: Any) -> None:
         self._originator_resolver = resolver
 
+    def should_gate(self, tool_name: str) -> bool:
+        return tool_name in self._settings.tools_requiring_approval
+
     async def before_tool_execution(
         self,
         tool_calls: list[dict],
@@ -62,26 +65,11 @@ class FeishuToolApprovalHook:
         tier: PermissionTier,
     ) -> list[ApprovalDecision]:
         decisions: list[ApprovalDecision] = []
-        gated = set(self._settings.tools_requiring_approval)
         originator_open_id = self._resolve_originator(session_id)
 
         for call in tool_calls:
             tool_name = call.get("name", "") or ""
             tool_call_id = call.get("id", "") or ""
-
-            if tool_name not in gated:
-                self._audit.log_decision(
-                    conv_id=session_id,
-                    session_id=session_id,
-                    channel="feishu",
-                    tool_name=tool_name,
-                    tool_call_id=tool_call_id,
-                    tier=tier,
-                    decision="approve",
-                    decided_by="auto:not-gated",
-                )
-                decisions.append("approve")
-                continue
 
             decision = await self._wait_for_user_decision(
                 session_id=session_id,

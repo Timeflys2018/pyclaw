@@ -22,10 +22,12 @@ class WebToolApprovalHook:
     :class:`pyclaw.channels.web.chat.PendingDecision` returned from
     :meth:`SessionQueue.create_pending`.
 
-    Behaviour:
-    - Tools NOT in ``WebSettings.tools_requiring_approval`` auto-approve
-      (no ``tool.approve_request`` event sent).
-    - Tools in the list create a ``PendingDecision``, then wait on it
+    Behaviour (post Sprint 2.0.1 hotfix — runner-side partition):
+    - The runner only calls this hook with the subset of approval-tier calls
+      that ``should_gate(name)`` returned True for, OR that are
+      ``forced-by-server-config``. Non-gated calls are auto-approved by the
+      runner without emitting ``tool.approve_request``.
+    - Each gated call creates a :class:`PendingDecision`, then waits on it
       with ``WebSettings.tool_approval_timeout_seconds`` timeout. The
       ``tool.approve_request`` event is emitted by the runner before this
       hook is invoked, so we just wait for the matching ``tool.approve``.
@@ -44,6 +46,9 @@ class WebToolApprovalHook:
         self._settings = settings
         self._audit = audit_logger
 
+    def should_gate(self, tool_name: str) -> bool:
+        return tool_name in self._settings.tools_requiring_approval
+
     async def before_tool_execution(
         self,
         tool_calls: list[dict],
@@ -51,25 +56,10 @@ class WebToolApprovalHook:
         tier: PermissionTier,
     ) -> list[ApprovalDecision]:
         decisions: list[ApprovalDecision] = []
-        gated = self._settings.tools_requiring_approval
 
         for call in tool_calls:
             tool_name = call.get("name", "") or ""
             tool_call_id = call.get("id", "") or ""
-
-            if tool_name not in gated:
-                self._audit.log_decision(
-                    conv_id=session_id,
-                    session_id=session_id,
-                    channel="web",
-                    tool_name=tool_name,
-                    tool_call_id=tool_call_id,
-                    tier=tier,
-                    decision="approve",
-                    decided_by="auto:not-gated",
-                )
-                decisions.append("approve")
-                continue
 
             decision = await self._wait_for_user_decision(
                 session_id=session_id,

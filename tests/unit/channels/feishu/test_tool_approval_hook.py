@@ -65,14 +65,14 @@ def _mock_client() -> Any:
     return client
 
 
-class TestAutoApproveUngated:
-    @pytest.mark.asyncio
-    async def test_read_tool_auto_approves(
+class TestShouldGate:
+    """Sprint 2.0.1 hotfix: should_gate predicate replaces in-hook fast-path."""
+
+    def test_listed_tool_returns_true(
         self,
         registry: FeishuApprovalRegistry,
         settings: FeishuSettings,
         audit_logger: AuditLogger,
-        captured: pytest.LogCaptureFixture,
     ) -> None:
         hook = FeishuToolApprovalHook(
             client=_mock_client(),
@@ -80,15 +80,23 @@ class TestAutoApproveUngated:
             settings=settings,
             audit_logger=audit_logger,
         )
-        decisions = await hook.before_tool_execution(
-            [{"id": "c1", "name": "read", "args": {}}],
-            session_id="feishu:cli_x:ou_a",
-            tier="approval",
+        assert hook.should_gate("bash") is True
+        assert hook.should_gate("write") is True
+
+    def test_unlisted_tool_returns_false(
+        self,
+        registry: FeishuApprovalRegistry,
+        settings: FeishuSettings,
+        audit_logger: AuditLogger,
+    ) -> None:
+        hook = FeishuToolApprovalHook(
+            client=_mock_client(),
+            registry=registry,
+            settings=settings,
+            audit_logger=audit_logger,
         )
-        assert decisions == ["approve"]
-        rec = _audit_records(captured)[-1]
-        assert rec["channel"] == "feishu"
-        assert rec["decided_by"] == "auto:not-gated"
+        assert hook.should_gate("read") is False
+        assert hook.should_gate("fs:list_directory") is False
 
 
 class TestUserApproval:

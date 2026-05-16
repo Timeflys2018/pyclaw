@@ -700,7 +700,7 @@ async def run_agent_stream(
                 )
 
             denied_ids: dict[str, str] = {}
-            approval_subset: list[
+            actually_gated: list[
                 tuple[dict[str, Any], str, dict[str, Any], str, str | None]
             ] = []
 
@@ -735,10 +735,26 @@ async def run_agent_stream(
                             tier_source=tier_source, forced_server=forced_server,
                         )
                 else:
-                    approval_subset.append((call, canonical_name, raw_args, tier_source, forced_server))
+                    is_forced = tier_source == "forced-by-server-config"
+                    hook = deps.tool_approval_hook
+                    if is_forced:
+                        actually_gated.append(
+                            (call, canonical_name, raw_args, tier_source, forced_server)
+                        )
+                    elif hook is not None and hook.should_gate(canonical_name):
+                        actually_gated.append(
+                            (call, canonical_name, raw_args, tier_source, forced_server)
+                        )
+                    else:
+                        _emit_runner_audit(
+                            deps, request.session_id, deps.channel,
+                            canonical_name, cid, call_tier,
+                            decision="approve", decided_by="auto:not-gated",
+                            tier_source=tier_source, forced_server=forced_server,
+                        )
 
-            if approval_subset and deps.tool_approval_hook is not None:
-                for call, canonical_name, raw_args, _ts, _fs in approval_subset:
+            if actually_gated and deps.tool_approval_hook is not None:
+                for call, canonical_name, raw_args, _ts, _fs in actually_gated:
                     yield ToolApprovalRequest(
                         tool_call_id=call.get("id", ""),
                         tool_name=canonical_name,
@@ -747,13 +763,13 @@ async def run_agent_stream(
                 decisions = await deps.tool_approval_hook.before_tool_execution(
                     [
                         {"id": c.get("id", ""), "name": cn, "args": ra}
-                        for c, cn, ra, _ts, _fs in approval_subset
+                        for c, cn, ra, _ts, _fs in actually_gated
                     ],
                     session_id=request.session_id,
                     tier="approval",
                 )
                 for idx, decision in enumerate(decisions):
-                    call, canonical_name, _ra, _ts, _fs = approval_subset[idx]
+                    call, canonical_name, _ra, _ts, _fs = actually_gated[idx]
                     if decision == "deny":
                         cid = call.get("id", "")
                         denied_ids[cid] = f"Tool '{canonical_name}' was denied by approval hook."

@@ -93,9 +93,13 @@ class _EchoTool:
 
 
 class MockApprovalHook:
-    def __init__(self, decisions: list[str]) -> None:
+    def __init__(self, decisions: list[str], gate_all: bool = True) -> None:
         self.decisions = decisions
         self.called_with: tuple[list[dict], str, str] | None = None
+        self._gate_all = gate_all
+
+    def should_gate(self, tool_name: str) -> bool:
+        return self._gate_all
 
     async def before_tool_execution(
         self,
@@ -486,3 +490,163 @@ class TestPermissionTierApprovalDefault:
         assert hook.called_with is not None
         _, _, tier_arg = hook.called_with
         assert tier_arg == "approval"
+
+
+class TestSprint201HotfixActuallyGatedPartition:
+    """Sprint 2.0.1 hotfix: runner partitions approval-tier calls into
+    actually_gated (hook receives, ToolApprovalRequest emitted) vs
+    auto_approved (audit-logged decided_by="auto:not-gated", NO event,
+    NO hook call). Prevents Web phantom-modal bug.
+    """
+
+    @pytest.mark.asyncio
+    async def test_non_gated_call_skips_hook_and_emits_no_event(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging
+
+        caplog.set_level(logging.INFO, logger="pyclaw.audit.tool_approval")
+        from pyclaw.infra.audit_logger import AuditLogger
+
+        hook = MockApprovalHook(decisions=[], gate_all=False)
+        llm = _FakeLLM([_tool_call_response("echo", "c1"), _text_response()])
+        registry = ToolRegistry()
+        registry.register(_EchoTool())
+        deps = AgentRunnerDeps(
+            llm=llm, tools=registry, tool_approval_hook=hook,
+            audit_logger=AuditLogger(), channel="web",
+        )
+
+        events = []
+        async for event in run_agent_stream(
+            RunRequest(session_id="s-ng", workspace_id="w", agent_id="a", user_message="hi"),
+            deps, tool_workspace_path=tmp_path,
+        ):
+            events.append(event)
+
+        assert hook.called_with is None
+        assert not any(isinstance(e, ToolApprovalRequest) for e in events)
+
+        ends = [e for e in events if isinstance(e, ToolCallEnd)]
+        assert len(ends) == 1
+        assert "echo:hi" in ends[0].result.content[0].text
+
+        import json
+        records = [
+            json.loads(r.message) for r in caplog.records
+            if r.name == "pyclaw.audit.tool_approval"
+        ]
+        not_gated = [r for r in records if r.get("decided_by") == "auto:not-gated"]
+        assert len(not_gated) == 1
+        assert not_gated[0]["tool_name"] == "echo"
+        assert not_gated[0]["tier"] == "approval"
+        assert not_gated[0]["decision"] == "approve"
+        assert not_gated[0]["channel"] == "web"
+
+    @pytest.mark.asyncio
+    async def test_gated_call_invokes_hook_and_emits_event(
+        self, tmp_path: Path
+    ) -> None:
+        hook = MockApprovalHook(decisions=["approve"], gate_all=True)
+        llm = _FakeLLM([_tool_call_response("echo", "c1"), _text_response()])
+        registry = ToolRegistry()
+        registry.register(_EchoTool())
+        deps = AgentRunnerDeps(llm=llm, tools=registry, tool_approval_hook=hook)
+
+        events = []
+        async for event in run_agent_stream(
+            RunRequest(session_id="s-g", workspace_id="w", agent_id="a", user_message="hi"),
+            deps, tool_workspace_path=tmp_path,
+        ):
+            events.append(event)
+
+        assert hook.called_with is not None
+        approval_events = [e for e in events if isinstance(e, ToolApprovalRequest)]
+        assert len(approval_events) == 1
+        assert approval_events[0].tool_name == "echo"
+
+    @pytest.mark.asyncio
+    async def test_forced_tier_approval_bypasses_should_gate_list(
+        self, tmp_path: Path
+    ) -> None:
+        from dataclasses import dataclass, field
+        from pyclaw.integrations.mcp.settings import McpServerConfig
+
+        @dataclass
+        class _MCPTool:
+            name: str = "fs:read_file"
+            description: str = "Read."
+            parameters: dict = field(
+                default_factory=lambda: {
+                    "type": "object",
+                    "properties": {"text": {"type": "string"}},
+                    "required": ["text"],
+                }
+            )
+            side_effect: bool = False
+            tool_class: str = "read"
+            server_name: str = "fs"
+            server_config: Any = None
+
+            async def execute(self, args, context):
+                return text_result(args.get("_call_id", "x"), "ok")
+
+        tool = _MCPTool(server_config=McpServerConfig(command="x", forced_tier="approval"))
+
+        hook = MockApprovalHook(decisions=["approve"], gate_all=False)
+        llm = _FakeLLM(
+            [_tool_call_response("fs:read_file", "c1"), _text_response()]
+        )
+        registry = ToolRegistry()
+        registry.register(tool)
+        deps = AgentRunnerDeps(llm=llm, tools=registry, tool_approval_hook=hook)
+
+        events = []
+        async for event in run_agent_stream(
+            RunRequest(
+                session_id="s-forced", workspace_id="w", agent_id="a",
+                user_message="hi", permission_tier_override="yolo",
+            ),
+            deps, tool_workspace_path=tmp_path,
+        ):
+            events.append(event)
+
+        assert hook.called_with is not None
+        approval_events = [e for e in events if isinstance(e, ToolApprovalRequest)]
+        assert len(approval_events) == 1
+
+    @pytest.mark.asyncio
+    async def test_no_hook_with_non_gated_call_still_auto_approves(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging
+
+        caplog.set_level(logging.INFO, logger="pyclaw.audit.tool_approval")
+        from pyclaw.infra.audit_logger import AuditLogger
+
+        llm = _FakeLLM([_tool_call_response("echo", "c1"), _text_response()])
+        registry = ToolRegistry()
+        registry.register(_EchoTool())
+        deps = AgentRunnerDeps(
+            llm=llm, tools=registry, tool_approval_hook=None,
+            audit_logger=AuditLogger(), channel="web",
+        )
+
+        events = []
+        async for event in run_agent_stream(
+            RunRequest(session_id="s-nohook-ng", workspace_id="w", agent_id="a", user_message="hi"),
+            deps, tool_workspace_path=tmp_path,
+        ):
+            events.append(event)
+
+        assert not any(isinstance(e, ToolApprovalRequest) for e in events)
+        ends = [e for e in events if isinstance(e, ToolCallEnd)]
+        assert len(ends) == 1
+
+        import json
+        records = [
+            json.loads(r.message) for r in caplog.records
+            if r.name == "pyclaw.audit.tool_approval"
+        ]
+        not_gated = [r for r in records if r.get("decided_by") == "auto:not-gated"]
+        assert len(not_gated) == 1
