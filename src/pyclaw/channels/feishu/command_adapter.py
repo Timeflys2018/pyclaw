@@ -89,6 +89,27 @@ class FeishuCommandAdapter:
                 if isinstance(result, dict):
                     last_usage = result
 
+        from pyclaw.auth import resolve_profile_and_tier
+
+        feishu_settings = ctx.settings_full.channels.feishu
+        try:
+            user_profile, _ = await resolve_profile_and_tier(
+                channel="feishu",
+                user_id=open_id,
+                redis_client=ctx.redis_client,
+                user_configs=feishu_settings.users,
+                message_tier=None,
+                session_tier=None,
+                deployment_default=feishu_settings.default_permission_tier,
+                open_id_attr="open_id",
+            )
+        except Exception:
+            logger.warning(
+                "resolve_profile_and_tier failed for feishu /admin command",
+                exc_info=True,
+            )
+            user_profile = None
+
         cmd_ctx = CommandContext(
             session_id=session_id,
             session_key=session_key,
@@ -113,6 +134,7 @@ class FeishuCommandAdapter:
                 "feishu_message_id": message_id,
                 "feishu_queue_registry": ctx.queue_registry,
                 "tool_workspace_path": ctx.workspace_base / workspace_id,
+                "user_role": user_profile.role if user_profile else None,
             },
             queue_registry=ctx.queue_registry,
             admin_user_ids=ctx.admin_user_ids,
