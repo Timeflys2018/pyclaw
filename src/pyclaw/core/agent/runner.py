@@ -741,10 +741,27 @@ async def run_agent_stream(
                         actually_gated.append(
                             (call, canonical_name, raw_args, tier_source, forced_server)
                         )
-                    elif hook is not None and hook.should_gate(canonical_name):
-                        actually_gated.append(
-                            (call, canonical_name, raw_args, tier_source, forced_server)
-                        )
+                    elif hook is not None:
+                        try:
+                            gate = hook.should_gate(canonical_name)
+                        except Exception:
+                            import logging
+                            logging.getLogger(__name__).exception(
+                                "should_gate raised for %s; treating as gated (fail-closed)",
+                                canonical_name,
+                            )
+                            gate = True
+                        if gate:
+                            actually_gated.append(
+                                (call, canonical_name, raw_args, tier_source, forced_server)
+                            )
+                        else:
+                            _emit_runner_audit(
+                                deps, request.session_id, deps.channel,
+                                canonical_name, cid, call_tier,
+                                decision="approve", decided_by="auto:not-gated",
+                                tier_source=tier_source, forced_server=forced_server,
+                            )
                     else:
                         _emit_runner_audit(
                             deps, request.session_id, deps.channel,
@@ -752,6 +769,20 @@ async def run_agent_stream(
                             decision="approve", decided_by="auto:not-gated",
                             tier_source=tier_source, forced_server=forced_server,
                         )
+
+            if actually_gated and deps.tool_approval_hook is None:
+                for call, canonical_name, _raw, tier_source, forced_server in actually_gated:
+                    cid = call.get("id", "")
+                    denied_ids[cid] = (
+                        f"Tool '{canonical_name}' requires approval but no approval hook "
+                        "is configured for this channel."
+                    )
+                    _emit_runner_audit(
+                        deps, request.session_id, deps.channel,
+                        canonical_name, cid, "approval",
+                        decision="deny", decided_by="auto:no-hook",
+                        tier_source=tier_source, forced_server=forced_server,
+                    )
 
             if actually_gated and deps.tool_approval_hook is not None:
                 for call, canonical_name, raw_args, _ts, _fs in actually_gated:

@@ -650,3 +650,105 @@ class TestSprint201HotfixActuallyGatedPartition:
         ]
         not_gated = [r for r in records if r.get("decided_by") == "auto:not-gated"]
         assert len(not_gated) == 1
+
+    @pytest.mark.asyncio
+    async def test_no_hook_with_forced_tier_approval_call_is_denied(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        import logging
+        from dataclasses import dataclass, field
+        from pyclaw.infra.audit_logger import AuditLogger
+        from pyclaw.integrations.mcp.settings import McpServerConfig
+
+        caplog.set_level(logging.INFO, logger="pyclaw.audit.tool_approval")
+
+        @dataclass
+        class _MCPTool:
+            name: str = "fs:write_file"
+            description: str = "Write."
+            parameters: dict = field(
+                default_factory=lambda: {
+                    "type": "object",
+                    "properties": {"text": {"type": "string"}},
+                    "required": ["text"],
+                }
+            )
+            side_effect: bool = True
+            tool_class: str = "write"
+            server_name: str = "fs"
+            server_config: Any = None
+
+            async def execute(self, args, context):
+                raise AssertionError("Tool should NOT execute when no hook + forced approval")
+
+        tool = _MCPTool(server_config=McpServerConfig(command="x", forced_tier="approval"))
+        llm = _FakeLLM([_tool_call_response("fs:write_file", "c1"), _text_response("denied fallback")])
+        registry = ToolRegistry()
+        registry.register(tool)
+        deps = AgentRunnerDeps(
+            llm=llm, tools=registry, tool_approval_hook=None,
+            audit_logger=AuditLogger(), channel="web",
+        )
+
+        events = []
+        async for event in run_agent_stream(
+            RunRequest(
+                session_id="s-nohook-forced", workspace_id="w", agent_id="a",
+                user_message="hi", permission_tier_override="yolo",
+            ),
+            deps, tool_workspace_path=tmp_path,
+        ):
+            events.append(event)
+
+        assert not any(isinstance(e, ToolApprovalRequest) for e in events)
+        ends = [e for e in events if isinstance(e, ToolCallEnd)]
+        assert len(ends) == 1
+        assert ends[0].result.is_error
+        assert "approval" in ends[0].result.content[0].text
+        assert "no approval hook" in ends[0].result.content[0].text
+
+        import json
+        records = [
+            json.loads(r.message) for r in caplog.records
+            if r.name == "pyclaw.audit.tool_approval"
+        ]
+        no_hook = [r for r in records if r.get("decided_by") == "auto:no-hook"]
+        assert len(no_hook) == 1
+        assert no_hook[0]["decision"] == "deny"
+        assert no_hook[0]["tool_name"] == "fs:write_file"
+        assert no_hook[0]["tier"] == "approval"
+
+    @pytest.mark.asyncio
+    async def test_should_gate_exception_falls_back_to_gated_safe(
+        self, tmp_path: Path
+    ) -> None:
+        class _RaisingHook:
+            def __init__(self):
+                self.before_called = False
+
+            def should_gate(self, tool_name: str) -> bool:
+                raise RuntimeError("boom in should_gate")
+
+            async def before_tool_execution(self, tool_calls, session_id, tier):
+                self.before_called = True
+                return ["approve"] * len(tool_calls)
+
+        hook = _RaisingHook()
+        llm = _FakeLLM([_tool_call_response("echo", "c1"), _text_response()])
+        registry = ToolRegistry()
+        registry.register(_EchoTool())
+        deps = AgentRunnerDeps(llm=llm, tools=registry, tool_approval_hook=hook)
+
+        events = []
+        async for event in run_agent_stream(
+            RunRequest(session_id="s-raise", workspace_id="w", agent_id="a", user_message="hi"),
+            deps, tool_workspace_path=tmp_path,
+        ):
+            events.append(event)
+
+        assert hook.before_called is True
+        approval_events = [e for e in events if isinstance(e, ToolApprovalRequest)]
+        assert len(approval_events) == 1
+        ends = [e for e in events if isinstance(e, ToolCallEnd)]
+        assert len(ends) == 1
+        assert "echo:hi" in ends[0].result.content[0].text
