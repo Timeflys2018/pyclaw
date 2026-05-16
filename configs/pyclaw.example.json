@@ -163,5 +163,9 @@
       "corsOrigins": ["http://localhost:5173"],
       "users": [{"id": "admin", "password": "changeme"}]
     }
+  },
+  "mcp": {
+    "enabled": false,
+    "servers": {}
   }
 }

@@ -15,6 +15,12 @@ from pyclaw.models import (
     ToolsConfig,
 )
 
+from pyclaw.integrations.mcp.settings import McpSettings
+
+
+def _default_mcp_settings() -> McpSettings:
+    return McpSettings()
+
 CONFIG_SEARCH_PATHS = [
     "pyclaw.json",
     "configs/pyclaw.json",
@@ -346,6 +352,7 @@ class Settings(BaseSettings):
     skills: SkillSettings = Field(default_factory=lambda: SkillSettings())
     evolution: EvolutionSettings = Field(default_factory=lambda: EvolutionSettings())
     affinity: AffinitySettings = Field(default_factory=lambda: AffinitySettings())
+    mcp: McpSettings = Field(default_factory=_default_mcp_settings)
     admin_user_ids: list[str] = Field(default_factory=list)
     # Graceful shutdown timeout in seconds.  Matches the default K8s
     # SIGTERM→SIGKILL window (30 s) so that TaskManager drain completes

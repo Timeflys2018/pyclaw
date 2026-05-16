@@ -22,7 +22,7 @@ from typing import Literal
 logger = logging.getLogger(__name__)
 
 TaskCategory = Literal[
-    "heartbeat", "consumer", "archive", "nudge", "evolution", "curator", "generic"
+    "heartbeat", "consumer", "archive", "nudge", "evolution", "curator", "mcp", "generic"
 ]
 TaskState = Literal["running", "done", "cancelled", "failed"]
 _PRUNE_AGE_S = 300
