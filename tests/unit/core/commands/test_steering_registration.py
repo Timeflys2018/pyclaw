@@ -35,11 +35,12 @@ def test_btw_registered_with_steering_category():
 
 
 def test_total_registered_count_grows_by_2_with_new_commands():
-    """Original 21 + steering (/steer /btw) + tier (/tier) = 24 specs (with aliases)."""
+    """Original 21 + steering (/steer /btw) + tier (/tier) + Sprint 2 /mcp = 25 specs."""
     registry = CommandRegistry()
     register_builtin_commands(registry)
 
-    assert len(registry._specs) == 24  # noqa: SLF001
+    assert len(registry._specs) == 25  # noqa: SLF001
     assert "/steer" in registry._specs  # noqa: SLF001
     assert "/btw" in registry._specs  # noqa: SLF001
     assert "/tier" in registry._specs  # noqa: SLF001
+    assert "/mcp" in registry._specs  # noqa: SLF001

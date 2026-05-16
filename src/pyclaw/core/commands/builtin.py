@@ -721,6 +721,20 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         )
     )
 
+    from pyclaw.core.commands.mcp import cmd_mcp
+
+    registry.register(
+        CommandSpec(
+            name="/mcp",
+            handler=cmd_mcp,
+            category="config",
+            help_text="MCP server 管理: list / restart <name> / logs <name>",
+            args_hint="list | restart <name> | logs <name>",
+            channels=ALL_CHANNELS,
+            requires_idle=False,
+        )
+    )
+
     from pyclaw.core.commands.memory import cmd_memory
 
     registry.register(

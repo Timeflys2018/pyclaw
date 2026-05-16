@@ -228,6 +228,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             tool_approval_hook=feishu_tool_approval_hook,
             approval_registry=feishu_approval_registry,
             audit_logger=feishu_audit_logger,
+            mcp_manager=mcp_manager,
         )
         app.state.feishu_channel = feishu_channel
         await feishu_channel.start()

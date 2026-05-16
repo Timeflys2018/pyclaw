@@ -44,3 +44,4 @@ class CommandContext:
     last_usage: dict[str, int] | None = None
     worker_registry: Any = None
     gateway_router: Any = None
+    mcp_manager: Any = None

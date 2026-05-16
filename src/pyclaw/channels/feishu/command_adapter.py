@@ -119,6 +119,7 @@ class FeishuCommandAdapter:
             last_usage=last_usage,
             worker_registry=ctx.worker_registry,
             gateway_router=ctx.gateway_router,
+            mcp_manager=getattr(ctx, "mcp_manager", None),
         )
 
         try:

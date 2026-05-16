@@ -343,6 +343,7 @@ async def test_register_builtin_includes_all_commands() -> None:
         "/help",
         "/history",
         "/idle",
+        "/mcp",
         "/memory",
         "/model",
         "/new",

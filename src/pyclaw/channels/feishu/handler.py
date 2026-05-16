@@ -151,6 +151,7 @@ class FeishuContext:
     tool_approval_hook: Any = None
     approval_registry: Any = None
     audit_logger: Any = None
+    mcp_manager: Any = None
 
 
 def _to_jsonable(obj: Any) -> Any:

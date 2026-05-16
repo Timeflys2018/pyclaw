@@ -50,6 +50,7 @@ class WebCommandAdapter:
         admin_user_ids: list[str] | None = None,
         worker_registry: Any = None,
         gateway_router: Any = None,
+        mcp_manager: Any = None,
     ) -> bool:
         if not text or not text.strip().startswith("/"):
             return False
@@ -142,6 +143,7 @@ class WebCommandAdapter:
             last_usage=last_usage,
             worker_registry=worker_registry,
             gateway_router=gateway_router,
+            mcp_manager=mcp_manager,
         )
 
         try:

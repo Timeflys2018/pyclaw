@@ -367,6 +367,7 @@ async def _try_slash_command(
             admin_user_ids=web_deps.admin_user_ids,
             worker_registry=web_deps.worker_registry,
             gateway_router=getattr(state.ws.app.state, "gateway_router", None),
+            mcp_manager=getattr(state.ws.app.state, "mcp_manager", None),
         )
 
     from pyclaw.channels.web.routes import (
