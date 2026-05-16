@@ -24,6 +24,7 @@ _session_router: SessionRouter | None = None
 _workspace_base: Path | None = None
 _web_settings: WebSettings | None = None
 _redis_client: Any = None
+_sandbox_policy: Any = None
 
 
 def set_openai_deps(
@@ -32,13 +33,15 @@ def set_openai_deps(
     workspace_base: Path | None = None,
     web_settings: WebSettings | None = None,
     redis_client: Any = None,
+    sandbox_policy: Any = None,
 ) -> None:
-    global _deps, _session_router, _workspace_base, _web_settings, _redis_client
+    global _deps, _session_router, _workspace_base, _web_settings, _redis_client, _sandbox_policy
     _deps = deps
     _session_router = session_router
     _workspace_base = workspace_base
     _web_settings = web_settings
     _redis_client = redis_client
+    _sandbox_policy = sandbox_policy
 
 
 class ChatMessage(BaseModel):
@@ -97,6 +100,7 @@ async def chat_completions(
         user_id=user_id,
         role=role,
         user_profile=user_profile,
+        sandbox_policy=_sandbox_policy,
     )
 
     if body.stream:

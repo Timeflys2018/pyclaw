@@ -105,6 +105,7 @@ class RunRequest:
     user_id: str | None = None
     role: Literal["admin", "member"] | None = None
     user_profile: Any = None
+    sandbox_policy: Any = None
 
 
 @dataclass
@@ -279,7 +280,7 @@ async def run_agent_stream(
         )
         await _append(deps, tree, user_entry)
 
-        tool_ctx = ToolContext(
+        tool_ctx_kwargs: dict[str, Any] = dict(
             workspace_id=request.workspace_id,
             workspace_path=tool_workspace_path,
             session_id=request.session_id,
@@ -289,6 +290,9 @@ async def run_agent_stream(
             role=request.role,
             user_profile=request.user_profile,
         )
+        if request.sandbox_policy is not None:
+            tool_ctx_kwargs["sandbox_policy"] = request.sandbox_policy
+        tool_ctx = ToolContext(**tool_ctx_kwargs)
         if deps.task_manager is not None:
             tool_ctx.extras.setdefault("task_manager", deps.task_manager)
         if deps.mcp_death_handler is not None:

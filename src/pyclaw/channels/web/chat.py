@@ -462,6 +462,7 @@ async def _run_chat(
             except Exception:
                 logger.warning("audit log_tier_change failed", exc_info=True)
 
+    sandbox_policy = getattr(state.ws.app.state, "sandbox_policy", None)
     request = RunRequest(
         session_id=session_id,
         workspace_id="default",
@@ -472,6 +473,7 @@ async def _run_chat(
         user_id=state.user_id,
         role=user_profile.role,
         user_profile=user_profile,
+        sandbox_policy=sandbox_policy,
     )
 
     try:

@@ -152,6 +152,7 @@ class FeishuContext:
     approval_registry: Any = None
     audit_logger: Any = None
     mcp_manager: Any = None
+    sandbox_policy: Any = None
 
 
 def _to_jsonable(obj: Any) -> Any:
@@ -613,6 +614,7 @@ async def _dispatch_and_reply(
                 user_id=sender_open_id or None,
                 role=user_profile.role if user_profile else None,
                 user_profile=user_profile,
+                sandbox_policy=ctx.sandbox_policy,
             ),
             card=card,
             fallback_fn=_fallback,
@@ -631,6 +633,7 @@ async def _dispatch_and_reply(
             user_id=sender_open_id or None,
             role=user_profile.role if user_profile else None,
             user_profile=user_profile,
+            sandbox_policy=ctx.sandbox_policy,
         ):
             if isinstance(ev, Done):
                 final_text = ev.final_message

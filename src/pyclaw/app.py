@@ -49,6 +49,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.session_store = create_session_store(settings.storage)
         app.state.redis_client = None
 
+    from pyclaw.sandbox import resolve_sandbox_state
+
+    sandbox_state = resolve_sandbox_state(settings.sandbox)
+    app.state.sandbox_state = sandbox_state
+    app.state.sandbox_policy = sandbox_state.policy
+    if sandbox_state.warning:
+        logger.warning("sandbox: %s", sandbox_state.warning)
+
     from pyclaw.core.agent.factory import create_agent_runner_deps
 
     task_manager = TaskManager(
@@ -229,6 +237,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             approval_registry=feishu_approval_registry,
             audit_logger=feishu_audit_logger,
             mcp_manager=mcp_manager,
+            sandbox_policy=app.state.sandbox_policy,
         )
         app.state.feishu_channel = feishu_channel
         await feishu_channel.start()
@@ -299,6 +308,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             workspace_base=workspace_base,
             web_settings=settings.channels.web,
             redis_client=redis_client,
+            sandbox_policy=app.state.sandbox_policy,
         )
 
         set_admin_registry(worker_registry)
@@ -451,6 +461,12 @@ def create_app() -> FastAPI:
                 "n_disabled": summary.n_disabled,
                 "total_tools": summary.total_tools,
             }
+
+        sandbox_state = getattr(request.app.state, "sandbox_state", None)
+        if sandbox_state is not None:
+            from pyclaw.sandbox import health_advisory
+
+            result["sandbox"] = health_advisory(sandbox_state)
 
         worker_registry = getattr(request.app.state, "worker_registry", None)
         if worker_registry is not None:

@@ -334,6 +334,7 @@ async def test_register_builtin_includes_all_commands() -> None:
     register_builtin_commands(registry)
     primary = sorted(s.name for s in registry.list_all())
     assert primary == [
+        "/admin",
         "/btw",
         "/compact",
         "/context",

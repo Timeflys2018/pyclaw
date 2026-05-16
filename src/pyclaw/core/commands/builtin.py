@@ -735,6 +735,20 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
         )
     )
 
+    from pyclaw.core.commands.admin import cmd_admin
+
+    registry.register(
+        CommandSpec(
+            name="/admin",
+            handler=cmd_admin,
+            category="config",
+            help_text="管理用户配置 (admin only): user set / list / show",
+            args_hint="user set <user_id> tier=<tier> [role=...] | user list | user show <user_id>",
+            channels=ALL_CHANNELS,
+            requires_idle=False,
+        )
+    )
+
     from pyclaw.core.commands.memory import cmd_memory
 
     registry.register(

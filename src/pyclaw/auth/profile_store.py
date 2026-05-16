@@ -26,7 +26,9 @@ class UserProfileStore(Protocol):
         self, profile: UserProfile, *, ttl_seconds: int | None = None
     ) -> bool: ...
 
-    async def list_users(self, channel: str) -> list[UserProfile]: ...
+    async def list_users(
+        self, channel: str, *, role_filter: str | None = None
+    ) -> list[UserProfile]: ...
 
     async def discard(self, channel: str, user_id: str) -> bool: ...
 
@@ -133,7 +135,9 @@ class RedisJsonStore:
             logger.warning("UserProfile redis setex failed", exc_info=True)
             return False
 
-    async def list_users(self, channel: str) -> list[UserProfile]:
+    async def list_users(
+        self, channel: str, *, role_filter: str | None = None
+    ) -> list[UserProfile]:
         seen: dict[str, UserProfile] = {}
         if self._redis is not None:
             pattern = f"{_KEY_PREFIX}:{channel}:*"
@@ -156,7 +160,10 @@ class RedisJsonStore:
                 )
         for entry in self._json_source.get(channel, ()):
             seen.setdefault(entry.user_id, entry)
-        return list(seen.values())
+        results = list(seen.values())
+        if role_filter is not None:
+            results = [p for p in results if p.role == role_filter]
+        return results
 
     async def discard(self, channel: str, user_id: str) -> bool:
         if self._redis is None or not user_id:

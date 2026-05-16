@@ -53,6 +53,7 @@ class FeishuChannelPlugin:
         approval_registry: Any = None,  # noqa: ANN401
         audit_logger: Any = None,  # noqa: ANN401
         mcp_manager: Any = None,  # noqa: ANN401
+        sandbox_policy: Any = None,  # noqa: ANN401
     ) -> None:
         self._settings = settings
         self._settings_full = settings_full
@@ -73,6 +74,7 @@ class FeishuChannelPlugin:
         self._approval_registry = approval_registry
         self._audit_logger = audit_logger
         self._mcp_manager = mcp_manager
+        self._sandbox_policy = sandbox_policy
         self._ws_client: lark.ws.Client | None = None
         self._main_loop: asyncio.AbstractEventLoop | None = None
         self._ws_loop: asyncio.AbstractEventLoop | None = None
@@ -184,6 +186,7 @@ class FeishuChannelPlugin:
             approval_registry=self._approval_registry,
             audit_logger=self._audit_logger,
             mcp_manager=self._mcp_manager,
+            sandbox_policy=self._sandbox_policy,
         )
         self._ctx = ctx
 

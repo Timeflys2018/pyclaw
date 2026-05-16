@@ -27,6 +27,7 @@ async def dispatch_message(
     user_id: str | None = None,
     role: str | None = None,
     user_profile: Any = None,
+    sandbox_policy: Any = None,
 ) -> AsyncIterator[AgentEvent]:
     request = RunRequest(
         session_id=inbound.session_id,
@@ -39,6 +40,7 @@ async def dispatch_message(
         user_id=user_id,
         role=role,  # type: ignore[arg-type]
         user_profile=user_profile,
+        sandbox_policy=sandbox_policy,
     )
     if tool_approval_hook is not None or audit_logger is not None:
         if dataclasses.is_dataclass(deps) and not isinstance(deps, type):
