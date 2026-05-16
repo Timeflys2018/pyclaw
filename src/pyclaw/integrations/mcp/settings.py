@@ -17,8 +17,46 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 _ENV_PLACEHOLDER_RE = re.compile(r"^\{env:([A-Z_][A-Z0-9_]*)\}$")
 _FORBIDDEN_KEY_CHARS = (":", "__")
 
+_AUTO_EXEMPT_BASENAMES: frozenset[str] = frozenset({"npx", "uvx"})
+
 
 PermissionTier = Literal["read-only", "approval", "yolo"]
+
+
+def _command_auto_exempts_sandbox(command: str) -> bool:
+    """Whether ``command``'s basename matches the npx/uvx auto-exempt list.
+
+    Path semantics: only the final basename is compared (so
+    ``/usr/local/bin/npx`` matches but ``/Users/alice/npx-tools/bin/server``
+    does not). 4-slot review F1 fix.
+    """
+    if not command:
+        return False
+    last = command.rstrip("/").rsplit("/", 1)[-1]
+    return last in _AUTO_EXEMPT_BASENAMES
+
+
+class McpSandboxConfig(BaseModel):
+    """Per-server sandbox config. Default ``enabled`` is conditional on command.
+
+    See ``McpServerConfig.model_validator`` for the conditional-default rule:
+    npx/uvx → ``enabled=False`` (4-slot F1 auto-exempt); else
+    ``enabled=True``. Operators can always force either value explicitly.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool | None = Field(
+        default=None,
+        description=(
+            "When None, the McpServerConfig validator picks a default based on "
+            "the command basename (npx/uvx → False, else True). Set explicitly "
+            "to override."
+        ),
+    )
+    filesystem: dict = Field(default_factory=dict)
+    network: dict = Field(default_factory=dict)
+    env_allowlist: list[str] | None = Field(default=None)
 
 
 def _substitute_env_placeholder(value: str) -> tuple[str | None, str]:
@@ -104,6 +142,21 @@ class McpServerConfig(BaseModel):
         gt=0,
         description="Maximum seconds to wait for a single tool invocation.",
     )
+    sandbox: McpSandboxConfig = Field(
+        default_factory=McpSandboxConfig,
+        description=(
+            "Per-server sandbox configuration. When ``sandbox.enabled`` is "
+            "None (default), it resolves to False for npx/uvx commands and "
+            "True otherwise (4-slot review F1)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _resolve_sandbox_default(self) -> "McpServerConfig":
+        if self.sandbox.enabled is None:
+            auto_exempt = _command_auto_exempts_sandbox(self.command)
+            object.__setattr__(self.sandbox, "enabled", not auto_exempt)
+        return self
 
 
 class McpSettings(BaseModel):
@@ -150,7 +203,9 @@ class McpSettings(BaseModel):
 
 
 __all__ = [
+    "McpSandboxConfig",
     "McpServerConfig",
     "McpSettings",
+    "_command_auto_exempts_sandbox",
     "_substitute_env_placeholder",
 ]

@@ -158,6 +158,96 @@ class TestListSubcommand:
         assert ctx.replies, "expected at least one reply"
 
 
+class TestSandboxCheck:
+    """Sprint 3 Phase 4 — /admin sandbox check command."""
+
+    @pytest.mark.asyncio
+    async def test_sandbox_check_admin_only(self, admin_store: RedisJsonStore) -> None:
+        ctx = _make_ctx(role="member", user_profile_store=admin_store)
+        await cmd_admin("sandbox check", ctx)
+        assert any("Permission denied" in r for r in ctx.replies)
+
+    @pytest.mark.asyncio
+    async def test_sandbox_check_includes_backend_and_servers(
+        self, admin_store: RedisJsonStore
+    ) -> None:
+        from pyclaw.integrations.mcp.settings import (
+            McpServerConfig,
+            McpSandboxConfig,
+            McpSettings,
+        )
+        from pyclaw.sandbox.state import SandboxState
+        from pyclaw.sandbox.no_sandbox import NoSandboxPolicy
+
+        ctx = _make_ctx(user_profile_store=admin_store)
+        ctx.settings.mcp = McpSettings(
+            enabled=True,
+            servers={
+                "fs": McpServerConfig(
+                    command="/usr/local/bin/mcp-server-fs",
+                    sandbox=McpSandboxConfig(enabled=True),
+                ),
+                "github": McpServerConfig(
+                    command="npx",
+                    args=["-y", "@github/server"],
+                ),
+            },
+        )
+
+        mcp_manager = MagicMock()
+        mcp_manager._servers = {}
+        ctx.mcp_manager = mcp_manager
+
+        ctx.raw["sandbox_state"] = SandboxState(
+            policy=NoSandboxPolicy(),
+            backend="srt",
+            srt_version="1.0.0",
+            warning=None,
+            override_active=False,
+        )
+
+        await cmd_admin("sandbox check", ctx)
+
+        joined = "\n".join(ctx.replies)
+        assert "backend=srt" in joined
+        assert "1.0.0" in joined
+        assert "fs" in joined
+        assert "github" in joined
+
+    @pytest.mark.asyncio
+    async def test_sandbox_check_warns_npx_misconfig(
+        self, admin_store: RedisJsonStore
+    ) -> None:
+        from pyclaw.integrations.mcp.settings import (
+            McpServerConfig,
+            McpSandboxConfig,
+            McpSettings,
+        )
+
+        ctx = _make_ctx(user_profile_store=admin_store)
+        ctx.settings.mcp = McpSettings(
+            enabled=True,
+            servers={
+                "fs": McpServerConfig(
+                    command="npx",
+                    args=["-y", "@mcp/server-fs"],
+                    sandbox=McpSandboxConfig(enabled=True),
+                ),
+            },
+        )
+
+        mcp_manager = MagicMock()
+        mcp_manager._servers = {}
+        ctx.mcp_manager = mcp_manager
+        ctx.raw["sandbox_state"] = None
+
+        await cmd_admin("sandbox check", ctx)
+
+        joined = "\n".join(ctx.replies)
+        assert "⚠️" in joined or "warning" in joined.lower()
+        assert "registry" in joined.lower() or "npm" in joined.lower()
+
+
 class TestShowSubcommand:
     @pytest.mark.asyncio
     async def test_show_returns_profile(self) -> None:

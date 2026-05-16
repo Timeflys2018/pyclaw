@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 _USAGE = (
     "用法: /admin user set <user_id> tier=<tier> [role=admin|member] | "
-    "/admin user list | /admin user show <user_id>"
+    "/admin user list | /admin user show <user_id> | "
+    "/admin sandbox check"
 )
 
 _VALID_TIERS = frozenset({"read-only", "approval", "yolo"})
@@ -94,7 +95,7 @@ async def cmd_admin(args: str, ctx: CommandContext) -> None:
         return
 
     domain = parts[0]
-    if domain != "user":
+    if domain not in ("user", "sandbox"):
         await ctx.reply(f"❌ unknown /admin domain: {domain!r}\n{_USAGE}")
         return
 
@@ -109,6 +110,13 @@ async def cmd_admin(args: str, ctx: CommandContext) -> None:
 
     sub = sub_args[0]
     rest = sub_args[1:]
+
+    if domain == "sandbox":
+        if sub == "check":
+            await _handle_sandbox_check(ctx)
+        else:
+            await ctx.reply(f"❌ unknown sandbox subcommand: {sub!r}\n{_USAGE}")
+        return
 
     store = _resolve_store(ctx)
     if store is None:
@@ -225,6 +233,75 @@ async def _handle_set(
         await ctx.reply(
             f"⚠️ Failed to persist profile for {target} (Redis unavailable?)"
         )
+
+
+async def _handle_sandbox_check(ctx: CommandContext) -> None:
+    from pyclaw.integrations.mcp.settings import _command_auto_exempts_sandbox
+
+    mcp_manager = getattr(ctx, "mcp_manager", None)
+    settings = getattr(ctx, "settings", None)
+    raw = getattr(ctx, "raw", {}) or {}
+    sandbox_state = raw.get("sandbox_state") if isinstance(raw, dict) else None
+
+    lines: list[str] = ["Sandbox check:"]
+
+    if sandbox_state is not None:
+        backend = getattr(sandbox_state, "backend", "?")
+        srt_version = getattr(sandbox_state, "srt_version", None) or "—"
+        warning = getattr(sandbox_state, "warning", None)
+        override_active = getattr(sandbox_state, "override_active", False)
+        lines.append(f"  backend={backend}  srt_version={srt_version}")
+        if override_active:
+            lines.append(f"  ⚠️ PYCLAW_SANDBOX_OVERRIDE active")
+        if warning:
+            lines.append(f"  warning: {warning}")
+    else:
+        lines.append("  (sandbox state unavailable)")
+
+    if mcp_manager is None or settings is None:
+        lines.append("  MCP disabled or settings unavailable.")
+        await ctx.reply("\n".join(lines))
+        return
+
+    mcp_settings = settings.mcp
+    if not mcp_settings.servers:
+        lines.append("  No MCP servers configured.")
+        await ctx.reply("\n".join(lines))
+        return
+
+    lines.append("")
+    lines.append("MCP servers:")
+    for name, server in mcp_settings.servers.items():
+        sandbox_enabled = bool(server.sandbox.enabled)
+        auto_exempt = _command_auto_exempts_sandbox(server.command)
+        misconfig: list[str] = []
+
+        if (
+            auto_exempt
+            and sandbox_enabled
+            and "registry.npmjs.org" not in (server.sandbox.network or {}).get(
+                "allowedDomains", []
+            )
+            and "registry.npmmirror.com" not in (server.sandbox.network or {}).get(
+                "allowedDomains", []
+            )
+        ):
+            misconfig.append(
+                "command=npx/uvx + sandbox.enabled=true but no npm registry "
+                "domain in allowedDomains; consider local binary path or add "
+                "'registry.npmjs.org' to allowedDomains"
+            )
+
+        status = mcp_manager._servers.get(name) if hasattr(mcp_manager, "_servers") else None
+        status_str = getattr(status, "status", "?") if status else "?"
+        lines.append(
+            f"  {name:<20s}  command={server.command!r:<30s}  "
+            f"sandbox={sandbox_enabled}  status={status_str}"
+        )
+        for warn in misconfig:
+            lines.append(f"    ⚠️ {warn}")
+
+    await ctx.reply("\n".join(lines))
 
 
 __all__ = ["cmd_admin"]

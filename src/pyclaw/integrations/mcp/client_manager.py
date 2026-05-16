@@ -42,7 +42,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import anyio
 import mcp.types as mcp_types
@@ -115,8 +115,51 @@ class MCPClientManager:
         self._supervisor_task_id: str | None = None
         self._group: ClientSessionGroup = ClientSessionGroup()
         self._sessions: dict[str, mcp_types.Implementation] = {}
+        self._sandbox_policy: Any = None
+        self._sandbox_advisories_emitted: bool = False
         self.ready: asyncio.Event = asyncio.Event()
         self._initialize_server_statuses()
+
+    def set_sandbox_policy(self, sandbox_policy: Any) -> None:
+        """Inject the resolved ``SandboxPolicy`` from app lifespan.
+
+        Called once before ``start_background``. When ``None`` (or not called),
+        per-server ``sandbox.enabled`` settings are honored but no policy is
+        available to wrap stdio params (servers requiring sandbox will be
+        marked failed).
+        """
+        self._sandbox_policy = sandbox_policy
+
+    @property
+    def sandbox_backend(self) -> str:
+        return getattr(self._sandbox_policy, "backend", "none")
+
+    def _emit_sandbox_startup_advisories(self) -> None:
+        if self._sandbox_advisories_emitted:
+            return
+        self._sandbox_advisories_emitted = True
+
+        from pyclaw.integrations.mcp.settings import _command_auto_exempts_sandbox
+
+        for name, config in self._settings.servers.items():
+            if not config.enabled:
+                continue
+            if not config.sandbox.enabled:
+                if _command_auto_exempts_sandbox(config.command):
+                    logger.info(
+                        "MCP server %r: command=%r auto-exempted from sandbox "
+                        "(npx/uvx registry probe incompatible). For full "
+                        "isolation use a local binary path + sandbox.enabled=true. "
+                        "See docs/zh/sandbox.md.",
+                        name,
+                        config.command,
+                    )
+                continue
+            logger.warning(
+                "MCP server %r: sandbox.enabled=true (Sprint 3 default). "
+                "Verify policy and per-server overrides; see docs/zh/sandbox.md.",
+                name,
+            )
 
     def _initialize_server_statuses(self) -> None:
         for name, config in self._settings.servers.items():
@@ -223,6 +266,43 @@ class MCPClientManager:
                 args=list(config.args),
                 env=resolved_env or None,
             )
+
+            if config.sandbox.enabled:
+                if self._sandbox_policy is None or self.sandbox_backend != "srt":
+                    self._servers[name] = ServerStatus(
+                        name=name,
+                        status="failed",
+                        reason=(
+                            "sandbox.enabled=true but srt unavailable; "
+                            "install via 'npm install -g @anthropic-ai/sandbox-runtime' "
+                            "or set 'sandbox.enabled': false to opt out"
+                        ),
+                    )
+                    logger.error(
+                        "MCP server %r marked failed: sandbox.enabled=true but srt unavailable",
+                        name,
+                    )
+                    return
+                try:
+                    stdio_params = self._sandbox_policy.wrap_mcp_stdio(
+                        stdio_params,
+                        server_name=name,
+                        sandbox_config={
+                            "filesystem": config.sandbox.filesystem,
+                            "network": config.sandbox.network,
+                            "env_allowlist": config.sandbox.env_allowlist,
+                        },
+                    )
+                except Exception as exc:
+                    self._servers[name] = ServerStatus(
+                        name=name,
+                        status="failed",
+                        reason=f"srt-config: {type(exc).__name__}: {exc}",
+                    )
+                    logger.exception(
+                        "MCP server %r failed during sandbox wrap_mcp_stdio", name
+                    )
+                    return
 
             try:
                 async with asyncio.timeout(config.connect_timeout_seconds):

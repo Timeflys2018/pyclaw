@@ -108,6 +108,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         from pyclaw.integrations.mcp.client_manager import MCPClientManager
 
         mcp_manager = MCPClientManager(settings.mcp, task_manager=task_manager)
+        mcp_manager.set_sandbox_policy(app.state.sandbox_policy)
+        mcp_manager._emit_sandbox_startup_advisories()
         mcp_manager.start_background()
         mcp_death_handler = mcp_manager._handle_server_death
         external_tool_registrar = mcp_manager.attach_and_register
