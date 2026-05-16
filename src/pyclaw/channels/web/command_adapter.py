@@ -113,6 +113,23 @@ class WebCommandAdapter:
                 if isinstance(result, dict):
                     last_usage = result
 
+        from pyclaw.auth import resolve_profile_and_tier
+
+        web_settings = settings.channels.web
+        try:
+            user_profile, _ = await resolve_profile_and_tier(
+                channel="web",
+                user_id=user_id,
+                redis_client=redis_client,
+                user_configs=web_settings.users,
+                message_tier=None,
+                session_tier=None,
+                deployment_default=web_settings.default_permission_tier,
+            )
+        except Exception:
+            logger.warning("resolve_profile_and_tier failed for /admin command", exc_info=True)
+            user_profile = None
+
         cmd_ctx = CommandContext(
             session_id=session_id,
             session_key=session_key,
@@ -137,6 +154,8 @@ class WebCommandAdapter:
                 "web_conversation_id": conversation_id,
                 "conversation_id": conversation_id,
                 "tool_workspace_path": workspace_base / f"web_{user_id}",
+                "user_role": user_profile.role if user_profile else None,
+                "user_profile_store": None,
             },
             session_queue=session_queue,
             admin_user_ids=list(admin_user_ids or []),
