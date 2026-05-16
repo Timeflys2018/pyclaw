@@ -742,8 +742,8 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             name="/admin",
             handler=cmd_admin,
             category="config",
-            help_text="管理用户配置 (admin only): user set / list / show",
-            args_hint="user set <user_id> tier=<tier> [role=...] | user list | user show <user_id>",
+            help_text="用户/沙箱管理 (admin only)。子命令: user set/list/show, sandbox check",
+            args_hint="user set|list|show ... | sandbox check",
             channels=ALL_CHANNELS,
             requires_idle=False,
         )
