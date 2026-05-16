@@ -8,7 +8,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776ab.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-1047%20passed-brightgreen.svg?style=flat-square)]()
+[![Tests](https://img.shields.io/badge/tests-2168%20passed-brightgreen.svg?style=flat-square)]()
 [![Memory](https://img.shields.io/badge/memory-4--layer%20%E2%9C%93-blueviolet.svg?style=flat-square)]()
 [![FTS5](https://img.shields.io/badge/FTS5-jieba%20tokenizer-orange.svg?style=flat-square)]()
 [![Channels](https://img.shields.io/badge/channels-Feishu%20%2B%20Web-blue.svg?style=flat-square)]()
@@ -240,6 +240,7 @@ graph TB
 | **Feishu Channel** | ✅ | WebSocket cluster (50 workers), CardKit streaming, slash commands |
 | **Web Channel** | ✅ | React 19 SPA · Linear/Cursor visual · execution trace · multimodal · ⌘K palette · keyboard shortcuts · session CRUD · OpenAI-compat SSE · JWT auth · **tool approval modal + 3-tier permissions (read-only / approval / yolo)** |
 | **Tool Approval** | ✅ | End-to-end: WebToolApprovalHook + Feishu CardKit interactive card (originator-only authorization) · per-turn tier override · structured JSON audit log. See [permissions guide](./docs/en/permissions.md) |
+| **MCP Client** | ✅ | stdio servers · `{server}:{tool}` namespace · trust-tier mapping with operator overrides (de-escalation only) · `/mcp list / restart / logs` · non-blocking startup with `/health` advisory · `{env:VAR}` secret placeholders. See [MCP guide](./docs/en/mcp.md) |
 | **Skill Hub** | ✅ | ClawHub-compatible, progressive disclosure, 5-layer discovery, `pyclaw-skill` CLI |
 | **Prompt Engineering** | ✅ | `PromptBudgetConfig`, frozen prefix caching, priority truncation |
 | **TaskManager** | ✅ | Centralized async lifecycle, K8s-grade graceful shutdown |
@@ -247,7 +248,7 @@ graph TB
 | **Session Affinity Gateway** | ✅ | Active-active multi-worker scaling, Redis affinity + PubSub forwarding, failover via PUBLISH-0 fallback |
 | **Dreaming Engine** | 🔲 | Planned: Light/Deep/REM memory consolidation |
 
-**Test stats:** 1939 unit/integration tests + 10 real-LLM E2E tests · ~11K lines Python · 105 source files
+**Test stats:** 2168 unit/integration tests + 10 real-LLM E2E tests · ~12K lines Python · 110 source files
 
 ---
 
@@ -366,7 +367,8 @@ PyClaw is configured via a single `pyclaw.json` discovered in `./pyclaw.json`, `
 - **[Configuration reference (EN)](./docs/en/configuration.md)** · **[配置参考 (中文)](./docs/zh/configuration.md)** — every Settings field, env-var override map, scenario-driven examples
 - **[Deployment guide (EN)](./docs/en/deployment.md)** · **[部署指南 (中文)](./docs/zh/deployment.md)** — local dev, single Docker, 3-worker active-active with [`deploy/docker-compose.multi.yml`](./deploy/docker-compose.multi.yml), no-Docker `make worker[1-3]`
 - **[Permissions & tool approval (EN)](./docs/en/permissions.md)** · **[权限与工具审批 (中文)](./docs/zh/permissions.md)** — three permission tiers (`read-only` / `approval` / `yolo`), per-channel UX (Web modal vs Feishu CardKit), audit log schema
-- **[`configs/pyclaw.example.json`](./configs/pyclaw.example.json)** — complete runnable template (167 lines)
+- **[MCP servers (EN)](./docs/en/mcp.md)** · **[MCP 服务器 (中文)](./docs/zh/mcp.md)** — Anthropic Model Context Protocol integration: stdio server config, `{env:VAR}` secrets, per-server `forced_tier` (de-escalation only), `/mcp list/restart/logs`, non-blocking startup, security warnings
+- **[`configs/pyclaw.example.json`](./configs/pyclaw.example.json)** — complete runnable template
 
 ---
 
@@ -485,6 +487,7 @@ Chinese docs: [docs/zh/](./docs/zh/)
 - ✅ Self-Evolution — SOP extraction + Curator lifecycle + ForgetTool
 - ✅ **Session Affinity Gateway** — Active-active multi-worker via Redis affinity + PubSub forwarding (smoke-verified 2026-05-14)
 - ✅ **Web UI MVP** — Linear/Cursor visual refactor: Zustand state + virtualized message list + inline execution trace + Shiki code highlighting + multimodal (image paste/drop) + ⌘K command palette + global shortcuts + session CRUD (shipped 2026-05-15, see [report](./reports/optimize-web-ui-mvp-ship-2026-05-15.md))
+- ✅ **MCP Client** — Anthropic Model Context Protocol integration: stdio servers, dual-name adapter pattern, per-server `forced_tier` (de-escalation only), `/mcp list/restart/logs`, non-blocking startup, `/health` advisory `mcp` field, secret redaction in logs (Sprint 2)
 - 🔲 **Skill Graduation** — High-frequency SOPs → SKILL.md (progressive disclosure)
 - 🔲 **Dreaming Engine** — Light/Deep/REM memory consolidation (extract → cluster → graph)
 - 🔲 **PostgreSQL+pgvector** — production-grade memory backend (multi-pod K8s deployment)

@@ -4,6 +4,8 @@
 
 - [configuration.md](./configuration.md) — 配置参考（按场景组织 + 完整字段表）
 - [deployment.md](./deployment.md) — 部署指南（本地 dev / 单实例 / 多实例 / Docker Compose）
+- [permissions.md](./permissions.md) — 权限分级（read-only / approval / yolo）+ 工具审批流程
+- [mcp.md](./mcp.md) — MCP 服务器（Anthropic Model Context Protocol 集成）
 
 ## 架构与设计
 

@@ -4,6 +4,8 @@
 
 - [configuration.md](./configuration.md) — Configuration reference (scenario-driven + complete field table)
 - [deployment.md](./deployment.md) — Deployment guide (local dev / single instance / multi-instance / Docker Compose)
+- [permissions.md](./permissions.md) — Permission tiers (read-only / approval / yolo) + tool approval flow
+- [mcp.md](./mcp.md) — MCP servers (Anthropic Model Context Protocol integration)
 
 ## Architecture & design
 

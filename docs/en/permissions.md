@@ -198,6 +198,15 @@ cross-user approval within a group chat, but cross-tenant isolation
 (multi-team SaaS) still requires the upgrades described in
 [D26: User Isolation Model](./architecture-decisions.md#d26-user-isolation-model--personal-assistant-not-multi-tenant-saas).
 
+## MCP integration (Sprint 2)
+
+MCP-imported tools share the **same** approval gate as builtin tools — no
+fork. Per-server config can override `tool_class` derivation
+(`forced_tool_class`) and force a stricter tier (`forced_tier`,
+**de-escalation only**). See [MCP servers](./mcp.md) for the full integration
+contract including the per-call tier evaluation algorithm and the
+`tier_source="forced-by-server-config"` audit-log marker.
+
 ## Known limitations (tracked in KNOWN-ISSUES.md)
 
 - **TA1** per-tool glob (e.g. `bash:rm -rf *: deny`) — Sprint 1.1 follow-up

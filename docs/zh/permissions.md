@@ -179,6 +179,14 @@ ELK / Loki / Splunk pipeline 过滤建议:`event=tool_approval_decision OR event
 [D26: 用户隔离模型](./architecture-decisions.md#d26-user-isolation-model--personal-assistant-not-multi-tenant-saas)
 描述的升级路径。
 
+## MCP 集成（Sprint 2）
+
+MCP 导入的工具与内置工具**共用同一个**审批 gate——不分叉。Per-server 配置
+可覆盖 `tool_class` 推导（`forced_tool_class`）并强制更严格的 tier
+（`forced_tier`，**仅可降级**）。完整集成契约见 [MCP 服务器](./mcp.md)，
+包含 per-call tier 评估算法和 `tier_source="forced-by-server-config"`
+审计日志标记。
+
 ## 已知限制(KNOWN-ISSUES.md 跟踪)
 
 - **TA1** per-tool glob(如 `bash:rm -rf *: deny`)— Sprint 1.1 follow-up

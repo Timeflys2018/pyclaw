@@ -136,6 +136,7 @@ PyClaw 启动时按以下顺序查找配置文件:
 - `web.toolApprovalTimeoutSeconds` — 用户多少秒不响应自动拒(默认 `60`)
 - `web.toolsRequiringApproval` — 列表里的工具调用前会弹窗等用户确认; 写入类工具默认在列(`["bash", "write", "edit"]`)
 - `web.corsOrigins` — 严格 CORS, 必须列出真实前端域名
+- `mcp.enabled`（顶层） — 默认 `false`。设为 `true` 并在 `mcp.servers` 下加 server 条目，即可把 Anthropic MCP 协议的工具（`@modelcontextprotocol/server-filesystem`、`@modelcontextprotocol/server-github` 等）接入 agent。完整参考见 [MCP 服务器](./mcp.md)。
 
 ---
 

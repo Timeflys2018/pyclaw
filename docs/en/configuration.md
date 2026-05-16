@@ -151,6 +151,10 @@ One PyClaw container plus one Redis serving tens-to-hundreds of web users:
 - `web.toolsRequiringApproval` — listed tools prompt the user before execution
   (default: `["bash", "write", "edit"]`); write-class tools are gated by default
 - `web.corsOrigins` — strict CORS; list real frontend origins
+- `mcp.enabled` (top-level) — `false` by default. Set `true` and add server
+  entries under `mcp.servers` to attach Anthropic MCP-protocol tools (
+  `@modelcontextprotocol/server-filesystem`, `@modelcontextprotocol/server-github`,
+  etc.) to the agent. See [MCP servers](./mcp.md) for the full reference.
 
 ---
 

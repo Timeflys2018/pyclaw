@@ -166,6 +166,27 @@
   },
   "mcp": {
     "enabled": false,
-    "servers": {}
+    "servers": {
+      "filesystem": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/me/projects"],
+        "trust_annotations": true,
+        "connect_timeout_seconds": 30.0,
+        "call_timeout_seconds": 60.0
+      },
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": {"GITHUB_TOKEN": "{env:GITHUB_TOKEN}"},
+        "trust_annotations": true
+      },
+      "untrusted_thing": {
+        "command": "uvx",
+        "args": ["some-community-mcp-server"],
+        "trust_annotations": false,
+        "forced_tool_class": "write",
+        "forced_tier": "approval"
+      }
+    }
   }
 }
