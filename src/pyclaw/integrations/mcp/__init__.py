@@ -32,8 +32,13 @@ Architectural invariant: ``pyclaw.core.*`` MUST NOT import from
 duck-typing in the runner's per-call tier evaluation.
 """
 
+from pyclaw.integrations.mcp.adapter import MCPToolAdapter
 from pyclaw.integrations.mcp.errors import MCPServerDeadError
+from pyclaw.integrations.mcp.settings import McpServerConfig, McpSettings
 
 __all__ = [
     "MCPServerDeadError",
+    "MCPToolAdapter",
+    "McpServerConfig",
+    "McpSettings",
 ]
