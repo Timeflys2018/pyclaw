@@ -24,6 +24,9 @@ async def dispatch_message(
     tool_approval_hook: Any = None,
     permission_tier_override: PermissionTier | None = None,
     audit_logger: Any = None,
+    user_id: str | None = None,
+    role: str | None = None,
+    user_profile: Any = None,
 ) -> AsyncIterator[AgentEvent]:
     request = RunRequest(
         session_id=inbound.session_id,
@@ -33,6 +36,9 @@ async def dispatch_message(
         attachments=inbound.attachments,
         extra_system=extra_system,
         permission_tier_override=permission_tier_override,
+        user_id=user_id,
+        role=role,  # type: ignore[arg-type]
+        user_profile=user_profile,
     )
     if tool_approval_hook is not None or audit_logger is not None:
         if dataclasses.is_dataclass(deps) and not isinstance(deps, type):

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pyclaw.auth import resolve_profile_and_tier
 from pyclaw.channels.web.message_classifier import PROTOCOL_OP_PREFIX_REGEX
 from pyclaw.channels.web.protocol import (
     SERVER_CHAT_DELTA,
@@ -434,7 +435,16 @@ async def _run_chat(
         return
 
     web_deps = getattr(state.ws.app.state, "web_deps", None)
-    tier = msg.tier or settings.default_permission_tier
+    redis_client = getattr(web_deps, "redis_client", None) if web_deps is not None else None
+    user_profile, tier = await resolve_profile_and_tier(
+        channel="web",
+        user_id=state.user_id,
+        redis_client=redis_client,
+        user_configs=settings.users,
+        message_tier=msg.tier,
+        session_tier=None,
+        deployment_default=settings.default_permission_tier,
+    )
 
     session_queue = _get_session_queue(state)
     previous_tier = session_queue.maybe_record_tier_change(msg.conversation_id, tier)
@@ -459,6 +469,9 @@ async def _run_chat(
         user_message=msg.content,
         attachments=msg.attachments,
         permission_tier_override=tier,
+        user_id=state.user_id,
+        role=user_profile.role,
+        user_profile=user_profile,
     )
 
     try:

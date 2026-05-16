@@ -293,7 +293,13 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             evolution_settings=settings.evolution if settings.evolution.enabled else None,
             nudge_hook=web_nudge_hook,
         )
-        set_openai_deps(runner_deps, session_router, workspace_base=workspace_base)
+        set_openai_deps(
+            runner_deps,
+            session_router,
+            workspace_base=workspace_base,
+            web_settings=settings.channels.web,
+            redis_client=redis_client,
+        )
 
         set_admin_registry(worker_registry)
 

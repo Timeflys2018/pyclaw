@@ -505,12 +505,18 @@ async def handle_feishu_message(event: Any, ctx: FeishuContext) -> None:
 
     extra_system = "\n\n".join(extra_system_parts)
 
+    sender = event.event.sender
+    sender_open_id: str = (
+        (sender.sender_id.open_id or "") if sender and sender.sender_id else ""
+    )
+
     inbound = InboundMessage(
         session_id=session_id,
         user_message=text or "",
         workspace_id=workspace_id,
         channel="feishu",
         attachments=attachments,
+        raw={"sender_open_id": sender_open_id},
     )
 
     async def _fallback_reply(reply_text: str) -> None:
@@ -546,6 +552,7 @@ async def _dispatch_and_reply(
     workspace_path: Path,
     extra_system: str,
 ) -> None:
+    from pyclaw.auth import resolve_profile_and_tier
     from pyclaw.channels.feishu.streaming import FeishuStreamingCard, StreamingConfig
     from pyclaw.core.commands.tier_store import get_session_tier
 
@@ -554,7 +561,22 @@ async def _dispatch_and_reply(
 
     session_key_for_tier = inbound.session_id.split(":s:", 1)[0]
     session_tier = await get_session_tier(ctx.redis_client, session_key_for_tier)
-    effective_tier = session_tier or ctx.settings.default_permission_tier
+
+    sender_open_id = (inbound.raw or {}).get("sender_open_id", "") if isinstance(inbound.raw, dict) else ""
+    user_profile = None
+    if sender_open_id:
+        user_profile, effective_tier = await resolve_profile_and_tier(
+            channel="feishu",
+            user_id=sender_open_id,
+            redis_client=ctx.redis_client,
+            user_configs=ctx.settings.users,
+            message_tier=None,
+            session_tier=session_tier,
+            deployment_default=ctx.settings.default_permission_tier,
+            open_id_attr="open_id",
+        )
+    else:
+        effective_tier = session_tier or ctx.settings.default_permission_tier
 
     sc = ctx.settings.streaming
     streaming_config = StreamingConfig(
@@ -588,6 +610,9 @@ async def _dispatch_and_reply(
                 tool_approval_hook=ctx.tool_approval_hook,
                 permission_tier_override=effective_tier,
                 audit_logger=ctx.audit_logger,
+                user_id=sender_open_id or None,
+                role=user_profile.role if user_profile else None,
+                user_profile=user_profile,
             ),
             card=card,
             fallback_fn=_fallback,
@@ -603,6 +628,9 @@ async def _dispatch_and_reply(
             tool_approval_hook=ctx.tool_approval_hook,
             permission_tier_override=effective_tier,
             audit_logger=ctx.audit_logger,
+            user_id=sender_open_id or None,
+            role=user_profile.role if user_profile else None,
+            user_profile=user_profile,
         ):
             if isinstance(ev, Done):
                 final_text = ev.final_message

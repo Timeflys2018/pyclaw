@@ -10,9 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from pyclaw.auth import resolve_profile_and_tier
 from pyclaw.channels.session_router import SessionRouter
 from pyclaw.channels.web.auth import get_current_user
 from pyclaw.core.agent.runner import AgentRunnerDeps, RunRequest, run_agent_stream
+from pyclaw.infra.settings import WebSettings
 from pyclaw.models.agent import Done, TextChunk
 
 openai_router = APIRouter(prefix="/v1", tags=["openai"])
@@ -20,17 +22,23 @@ openai_router = APIRouter(prefix="/v1", tags=["openai"])
 _deps: AgentRunnerDeps | None = None
 _session_router: SessionRouter | None = None
 _workspace_base: Path | None = None
+_web_settings: WebSettings | None = None
+_redis_client: Any = None
 
 
 def set_openai_deps(
     deps: AgentRunnerDeps,
     session_router: SessionRouter,
     workspace_base: Path | None = None,
+    web_settings: WebSettings | None = None,
+    redis_client: Any = None,
 ) -> None:
-    global _deps, _session_router, _workspace_base
+    global _deps, _session_router, _workspace_base, _web_settings, _redis_client
     _deps = deps
     _session_router = session_router
     _workspace_base = workspace_base
+    _web_settings = web_settings
+    _redis_client = redis_client
 
 
 class ChatMessage(BaseModel):
@@ -65,11 +73,30 @@ async def chat_completions(
 
     session_id, _tree = await _session_router.resolve_or_create(session_key, "default")
 
+    user_profile = None
+    permission_tier_override = None
+    role = None
+    if _web_settings is not None:
+        user_profile, permission_tier_override = await resolve_profile_and_tier(
+            channel="web",
+            user_id=user_id,
+            redis_client=_redis_client,
+            user_configs=_web_settings.users,
+            message_tier=None,
+            session_tier=None,
+            deployment_default=_web_settings.default_permission_tier,
+        )
+        role = user_profile.role
+
     request = RunRequest(
         session_id=session_id,
         workspace_id="default",
         agent_id="default",
         user_message=last_msg,
+        permission_tier_override=permission_tier_override,
+        user_id=user_id,
+        role=role,
+        user_profile=user_profile,
     )
 
     if body.stream:
