@@ -420,34 +420,6 @@ def create_app() -> FastAPI:
     settings = load_settings()
     app = FastAPI(title="PyClaw", version="0.1.0", lifespan=_lifespan)
 
-    if settings.channels.web.enabled:
-        from starlette.middleware.cors import CORSMiddleware
-
-        from pyclaw.channels.web.admin import admin_router
-        from pyclaw.channels.web.auth_routes import auth_router
-        from pyclaw.channels.web.openai_compat import openai_router
-        from pyclaw.channels.web.routes import web_router
-        from pyclaw.channels.web.websocket import ws_router
-
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=settings.channels.web.cors_origins,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-
-        app.include_router(auth_router)
-        app.include_router(web_router)
-        app.include_router(ws_router)
-        app.include_router(openai_router)
-        app.include_router(admin_router)
-
-        spa_dir = Path(__file__).resolve().parent.parent.parent / "web" / "dist"
-        if spa_dir.is_dir():
-            from pyclaw.channels.web.spa import SPAStaticFiles
-
-            app.mount("/", SPAStaticFiles(directory=str(spa_dir), html=True), name="spa")
-
     @app.get("/health")
     async def health(request: Request) -> dict:
         backend = getattr(request.app.state, "session_store", None)
@@ -482,6 +454,34 @@ def create_app() -> FastAPI:
                 result["cluster_size"] = sum(1 for w in workers if w["status"] == "healthy")
 
         return result
+
+    if settings.channels.web.enabled:
+        from starlette.middleware.cors import CORSMiddleware
+
+        from pyclaw.channels.web.admin import admin_router
+        from pyclaw.channels.web.auth_routes import auth_router
+        from pyclaw.channels.web.openai_compat import openai_router
+        from pyclaw.channels.web.routes import web_router
+        from pyclaw.channels.web.websocket import ws_router
+
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.channels.web.cors_origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+        app.include_router(auth_router)
+        app.include_router(web_router)
+        app.include_router(ws_router)
+        app.include_router(openai_router)
+        app.include_router(admin_router)
+
+        spa_dir = Path(__file__).resolve().parent.parent.parent / "web" / "dist"
+        if spa_dir.is_dir():
+            from pyclaw.channels.web.spa import SPAStaticFiles
+
+            app.mount("/", SPAStaticFiles(directory=str(spa_dir), html=True), name="spa")
 
     return app
 
