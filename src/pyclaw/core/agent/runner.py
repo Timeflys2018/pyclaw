@@ -87,6 +87,7 @@ class AgentRunnerDeps:
     task_manager: TaskManager | None = field(default=None)
     lock_manager: Any = field(default=None)
     audit_logger: Any = field(default=None)
+    mcp_death_handler: Any = field(default=None)
     channel: str = "web"
 
 
@@ -282,6 +283,10 @@ async def run_agent_stream(
             abort=abort_event,
             extras=request.tool_context_extras,
         )
+        if deps.task_manager is not None:
+            tool_ctx.extras.setdefault("task_manager", deps.task_manager)
+        if deps.mcp_death_handler is not None:
+            tool_ctx.extras.setdefault("mcp_death_handler", deps.mcp_death_handler)
 
         skills_prompt_str: str | None = None
         if tool_workspace_path and deps.skill_provider:
@@ -663,59 +668,95 @@ async def run_agent_stream(
                     arguments=raw_args,
                 )
 
-            effective_tier: PermissionTier = request.permission_tier_override or "approval"
+            per_turn_tier: PermissionTier = request.permission_tier_override or "approval"
+            per_turn_source = (
+                "per-turn" if request.permission_tier_override is not None else "channel-default"
+            )
+
+            _RANK = {"read-only": 2, "approval": 1, "yolo": 0}
+
+            per_call_evaluated: list[
+                tuple[dict[str, Any], str, dict[str, Any], str, PermissionTier, str, str | None]
+            ] = []
+            for call, llm_tool_name, raw_args in parsed_calls:
+                tool_obj = deps.tools.get(llm_tool_name) if llm_tool_name else None
+                canonical_name = (
+                    getattr(tool_obj, "name", llm_tool_name) if tool_obj is not None else llm_tool_name
+                )
+                forced = None
+                cfg = getattr(tool_obj, "server_config", None) if tool_obj is not None else None
+                if cfg is not None:
+                    forced = getattr(cfg, "forced_tier", None)
+                if forced is not None and _RANK[forced] > _RANK[per_turn_tier]:
+                    call_tier: PermissionTier = forced
+                    tier_source = "forced-by-server-config"
+                    forced_server = getattr(tool_obj, "server_name", None)
+                else:
+                    call_tier = per_turn_tier
+                    tier_source = per_turn_source
+                    forced_server = None
+                per_call_evaluated.append(
+                    (call, llm_tool_name, raw_args, canonical_name, call_tier, tier_source, forced_server)
+                )
 
             denied_ids: dict[str, str] = {}
+            approval_subset: list[
+                tuple[dict[str, Any], str, dict[str, Any], str, str | None]
+            ] = []
 
-            if effective_tier == "read-only":
-                for call, tool_name, _ in parsed_calls:
-                    tool_obj = deps.tools.get(tool_name) if tool_name else None
+            for call, llm_tool_name, raw_args, canonical_name, call_tier, tier_source, forced_server in per_call_evaluated:
+                cid = call.get("id", "")
+                if call_tier == "yolo":
+                    _emit_runner_audit(
+                        deps, request.session_id, deps.channel,
+                        canonical_name, cid, call_tier,
+                        decision="approve", decided_by="auto:yolo",
+                        tier_source=tier_source, forced_server=forced_server,
+                    )
+                elif call_tier == "read-only":
+                    tool_obj = deps.tools.get(llm_tool_name) if llm_tool_name else None
                     cls = getattr(tool_obj, "tool_class", "write")
-                    cid = call.get("id", "")
                     if cls == "write":
                         denied_ids[cid] = (
-                            f"Tool '{tool_name}' is not available in read-only mode. "
+                            f"Tool '{canonical_name}' is not available in read-only mode. "
                             "(Mode can be changed in the input footer.)"
                         )
                         _emit_runner_audit(
                             deps, request.session_id, deps.channel,
-                            tool_name, cid, effective_tier,
+                            canonical_name, cid, call_tier,
                             decision="deny", decided_by="auto:read-only",
+                            tier_source=tier_source, forced_server=forced_server,
                         )
                     else:
                         _emit_runner_audit(
                             deps, request.session_id, deps.channel,
-                            tool_name, cid, effective_tier,
+                            canonical_name, cid, call_tier,
                             decision="approve", decided_by="auto:read-only",
+                            tier_source=tier_source, forced_server=forced_server,
                         )
+                else:
+                    approval_subset.append((call, canonical_name, raw_args, tier_source, forced_server))
 
-            elif effective_tier == "yolo":
-                for call, tool_name, _ in parsed_calls:
-                    _emit_runner_audit(
-                        deps, request.session_id, deps.channel,
-                        tool_name, call.get("id", ""), effective_tier,
-                        decision="approve", decided_by="auto:yolo",
-                    )
-
-            elif effective_tier == "approval" and deps.tool_approval_hook is not None:
-                for call, tool_name, raw_args in parsed_calls:
+            if approval_subset and deps.tool_approval_hook is not None:
+                for call, canonical_name, raw_args, _ts, _fs in approval_subset:
                     yield ToolApprovalRequest(
                         tool_call_id=call.get("id", ""),
-                        tool_name=tool_name,
+                        tool_name=canonical_name,
                         args=raw_args,
                     )
-
                 decisions = await deps.tool_approval_hook.before_tool_execution(
-                    [{"id": c.get("id", ""), "name": tn, "args": ra} for c, tn, ra in parsed_calls],
+                    [
+                        {"id": c.get("id", ""), "name": cn, "args": ra}
+                        for c, cn, ra, _ts, _fs in approval_subset
+                    ],
                     session_id=request.session_id,
-                    tier=effective_tier,
+                    tier="approval",
                 )
-
                 for idx, decision in enumerate(decisions):
+                    call, canonical_name, _ra, _ts, _fs = approval_subset[idx]
                     if decision == "deny":
-                        cid = parsed_calls[idx][0].get("id", "")
-                        tname = parsed_calls[idx][1]
-                        denied_ids[cid] = f"Tool '{tname}' was denied by approval hook."
+                        cid = call.get("id", "")
+                        denied_ids[cid] = f"Tool '{canonical_name}' was denied by approval hook."
 
             if denied_ids:
                 response.tool_calls = [
@@ -972,12 +1013,14 @@ def _emit_runner_audit(
     *,
     decision: str,
     decided_by: str,
+    tier_source: str | None = None,
+    forced_server: str | None = None,
 ) -> None:
     audit = getattr(deps, "audit_logger", None)
     if audit is None:
         return
     try:
-        audit.log_decision(
+        kwargs: dict[str, Any] = dict(
             conv_id=session_id,
             session_id=session_id,
             channel=channel,
@@ -987,6 +1030,16 @@ def _emit_runner_audit(
             decision=decision,
             decided_by=decided_by,
         )
+        if tier_source is not None:
+            kwargs["tier_source"] = tier_source
+        if forced_server is not None:
+            kwargs["forced_server"] = forced_server
+        try:
+            audit.log_decision(**kwargs)
+        except TypeError:
+            kwargs.pop("tier_source", None)
+            kwargs.pop("forced_server", None)
+            audit.log_decision(**kwargs)
     except Exception:
         logger.warning("audit log emit failed", exc_info=True)
 

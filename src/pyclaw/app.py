@@ -93,6 +93,18 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             memory_store = None
     app.state.memory_store = memory_store
 
+    mcp_manager = None
+    mcp_death_handler = None
+    external_tool_registrar = None
+    if settings.mcp.enabled:
+        from pyclaw.integrations.mcp.client_manager import MCPClientManager
+
+        mcp_manager = MCPClientManager(settings.mcp, task_manager=task_manager)
+        mcp_manager.start_background()
+        mcp_death_handler = mcp_manager._handle_server_death
+        external_tool_registrar = mcp_manager.attach_and_register
+    app.state.mcp_manager = mcp_manager
+
     runner_deps = await create_agent_runner_deps(
         settings,
         app.state.session_store,
@@ -101,6 +113,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         memory_store=memory_store,
         redis_client=redis_client,
         lock_manager=lock_manager,
+        mcp_death_handler=mcp_death_handler,
+        external_tool_registrar=external_tool_registrar,
     )
     app.state.runner_deps = runner_deps
 
@@ -354,6 +368,12 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     if app.state.feishu_channel is not None:
         await app.state.feishu_channel.stop()
 
+    if getattr(app.state, "mcp_manager", None) is not None:
+        try:
+            await app.state.mcp_manager.shutdown()
+        except Exception:
+            logger.exception("mcp_manager.shutdown failed")
+
     # Phase 2: Drain background tasks
     report = await task_manager.shutdown()
     logger.info(
@@ -440,6 +460,18 @@ def create_app() -> FastAPI:
             result["feishu"] = "disabled"
         else:
             result["feishu"] = feishu_channel.status
+
+        mcp_manager = getattr(request.app.state, "mcp_manager", None)
+        if mcp_manager is not None:
+            summary = mcp_manager.connection_summary()
+            result["mcp"] = {
+                "ready": mcp_manager.is_ready(),
+                "n_connected": summary.n_connected,
+                "n_failed": summary.n_failed,
+                "n_pending": summary.n_pending,
+                "n_disabled": summary.n_disabled,
+                "total_tools": summary.total_tools,
+            }
 
         worker_registry = getattr(request.app.state, "worker_registry", None)
         if worker_registry is not None:

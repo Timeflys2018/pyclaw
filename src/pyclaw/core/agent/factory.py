@@ -26,6 +26,8 @@ async def create_agent_runner_deps(
     redis_client=None,
     lock_manager=None,
     tool_approval_hook: ToolApprovalHook | None = None,
+    mcp_death_handler=None,
+    external_tool_registrar=None,
 ) -> AgentRunnerDeps:
     llm = LLMClient(
         default_model=settings.agent.default_model,
@@ -132,6 +134,9 @@ async def create_agent_runner_deps(
 
     hooks.register(SteerHook())
 
+    if external_tool_registrar is not None:
+        external_tool_registrar(tools)
+
     return AgentRunnerDeps(
         llm=llm,
         tools=tools,
@@ -144,4 +149,5 @@ async def create_agent_runner_deps(
         task_manager=task_manager,
         lock_manager=lock_manager,
         tool_approval_hook=tool_approval_hook,
+        mcp_death_handler=mcp_death_handler,
     )
