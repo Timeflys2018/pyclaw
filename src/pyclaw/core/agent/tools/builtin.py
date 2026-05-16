@@ -42,12 +42,26 @@ class BashTool:
 
         timeout = float(args.get("timeout_seconds") or BASH_DEFAULT_TIMEOUT_SECONDS)
 
+        sandbox_policy = getattr(context, "sandbox_policy", None)
+        if sandbox_policy is not None:
+            executable, exec_args = sandbox_policy.wrap_bash_command(command, context)
+        else:
+            executable, exec_args = ("/bin/sh", ["-c", command])
+
+        spawn_kwargs: dict[str, Any] = {
+            "stdout": asyncio.subprocess.PIPE,
+            "stderr": asyncio.subprocess.PIPE,
+            "cwd": str(context.workspace_path),
+        }
+        spawn_env = _resolve_spawn_env(context, sandbox_policy)
+        if spawn_env is not None:
+            spawn_kwargs["env"] = spawn_env
+
         try:
-            proc = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(context.workspace_path),
+            proc = await asyncio.create_subprocess_exec(
+                executable,
+                *exec_args,
+                **spawn_kwargs,
             )
         except OSError as exc:
             return error_result(call_id, f"bash: failed to spawn: {exc}")
@@ -95,6 +109,27 @@ class BashTool:
         if exit_code != 0:
             return error_result(call_id, body)
         return text_result(call_id, body)
+
+
+def _resolve_spawn_env(
+    context: ToolContext, sandbox_policy: Any
+) -> dict[str, str] | None:
+    """Return env dict when explicit allowlist or non-passthrough sandbox; else None.
+
+    Returning None preserves Sprint 2.0.1 byte-identical behavior (parent env
+    inherited). Strict env stripping activates only when an explicit allowlist
+    is present on the user profile or the sandbox is non-passthrough.
+    """
+    backend = getattr(sandbox_policy, "backend", "none")
+    profile = getattr(context, "user_profile", None)
+    user_allowlist = getattr(profile, "env_allowlist", None) if profile is not None else None
+
+    if backend == "none" and user_allowlist is None:
+        return None
+
+    from pyclaw.sandbox.env_strip import build_clean_env
+
+    return build_clean_env(allowlist=user_allowlist or [])
 
 
 def _terminate_proc(proc: asyncio.subprocess.Process) -> None:

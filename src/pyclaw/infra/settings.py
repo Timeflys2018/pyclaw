@@ -367,6 +367,56 @@ class AffinitySettings(BaseSettings):
     )
 
 
+class SandboxFilesystemConfig(BaseModel):
+    allow_write: list[str] = Field(default_factory=list, alias="allowWrite")
+    deny_read: list[str] = Field(default_factory=list, alias="denyRead")
+    deny_write: list[str] = Field(default_factory=list, alias="denyWrite")
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+
+class SandboxNetworkConfig(BaseModel):
+    allowed_domains: list[str] = Field(default_factory=list, alias="allowedDomains")
+    denied_domains: list[str] = Field(
+        default_factory=lambda: ["169.254.169.254"],
+        alias="deniedDomains",
+    )
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+
+class SandboxSettings(BaseSettings):
+    policy: Literal["none", "srt"] = "none"
+    production_require_sandbox: bool = Field(
+        False, alias="productionRequireSandbox"
+    )
+    default_filesystem: SandboxFilesystemConfig = Field(
+        default_factory=lambda: SandboxFilesystemConfig(),
+        alias="defaultFilesystem",
+    )
+    default_network: SandboxNetworkConfig = Field(
+        default_factory=lambda: SandboxNetworkConfig(),
+        alias="defaultNetwork",
+    )
+    default_env_allowlist: list[str] = Field(
+        default_factory=list, alias="defaultEnvAllowlist"
+    )
+
+    @field_validator("default_env_allowlist")
+    @classmethod
+    def _reject_glob_in_default_allowlist(cls, value: list[str]) -> list[str]:
+        from pyclaw.sandbox.env_strip import validate_env_allowlist
+
+        validate_env_allowlist(value)
+        return value
+
+    model_config = SettingsConfigDict(
+        env_prefix="PYCLAW_SANDBOX_",
+        populate_by_name=True,
+        extra="ignore",
+    )
+
+
 class Settings(BaseSettings):
     server: ServerSettings = Field(default_factory=lambda: ServerSettings())
     redis: RedisSettings = Field(default_factory=lambda: RedisSettings())
@@ -380,6 +430,7 @@ class Settings(BaseSettings):
     skills: SkillSettings = Field(default_factory=lambda: SkillSettings())
     evolution: EvolutionSettings = Field(default_factory=lambda: EvolutionSettings())
     affinity: AffinitySettings = Field(default_factory=lambda: AffinitySettings())
+    sandbox: SandboxSettings = Field(default_factory=lambda: SandboxSettings())
     mcp: McpSettings = Field(default_factory=_default_mcp_settings)
     admin_user_ids: list[str] = Field(default_factory=list)
     # Graceful shutdown timeout in seconds.  Matches the default K8s

@@ -21,6 +21,12 @@ ToolClass = Literal["read", "memory-write-safe", "write"]
 """
 
 
+def _default_sandbox_policy() -> Any:
+    from pyclaw.sandbox.no_sandbox import NoSandboxPolicy
+
+    return NoSandboxPolicy()
+
+
 @dataclass
 class ToolContext:
     workspace_id: str
@@ -31,6 +37,7 @@ class ToolContext:
     user_id: str | None = None
     role: Literal["admin", "member"] | None = None
     user_profile: Any = None
+    sandbox_policy: Any = field(default_factory=_default_sandbox_policy)
 
 
 @runtime_checkable
